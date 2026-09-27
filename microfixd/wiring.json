@@ -1,0 +1,348 @@
+{
+  "version": "1.2.0",
+  "boot": "server/index.ts -> initOrgans",
+  "controlPath": [
+    "request",
+    "rbac",
+    "security",
+    "orchestration",
+    "paragon",
+    "organ",
+    "telemetry"
+  ],
+  "repairPath": [
+    "overwatch",
+    "paragon",
+    "sandbox",
+    "verification",
+    "hitl",
+    "promotion"
+  ],
+  "persistence": {
+    "provider": "supabase",
+    "serverVariables": [
+      "SUPABASE_URL",
+      "SUPABASE_ANON_KEY"
+    ],
+    "browserVariables": [
+      "VITE_SUPABASE_URL",
+      "VITE_SUPABASE_ANON_KEY"
+    ]
+  },
+  "health": [
+    "/api/health",
+    "/api/health/deep"
+  ],
+  "connections": [
+    {
+      "source": "classifier",
+      "target": "brain",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "memory",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "playwright",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "github_connector",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "voice",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "security_spine",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "evolution_engine",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "self_repair",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "reflex",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "scheduler",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "overwatch",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "paragon",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "federation",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "emotion_engine",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "mission_state",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "agent_router",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "cognitive_feedback",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "mcp_client",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "health_monitor",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "constitution",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "governance",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "sandbox",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.model",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.tools",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.memory",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.legal",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.web",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.deployment",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.router",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.scheduler",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.loop",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.repair",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.autoDeploy",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.mission",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.feedback",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.paragon",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.federation",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.emotion",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.reflex",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.voice",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.voiceOut",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.voiceEmotion",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.voiceGrammar",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "core.wiring",
+      "relation": "resolves",
+      "node": "microfixd/langgraph/index.ts"
+    }
+  ],
+  "classificationRoutes": {
+    "brain": "server/organs/organs/brainOrgan.ts",
+    "memory": "server/organs/organs/memoryOrgan.ts",
+    "playwright": "server/organs/organs/playwrightOrgan.ts",
+    "github_connector": "server/organs/organs/githubOrgan.ts",
+    "voice": "server/organs/organs/voiceOrgan.ts",
+    "security_spine": "server/organs/organs/securityOrgan.ts",
+    "evolution_engine": "server/organs/organs/evolutionOrgan.ts",
+    "self_repair": "server/organs/organRegistry.ts",
+    "reflex": "server/organs/organs/reflexOrgan.ts",
+    "scheduler": "server/organs/organs/schedulerOrgan.ts",
+    "overwatch": "server/organs/organRegistry.ts",
+    "paragon": "server/organs/organRegistry.ts",
+    "federation": "server/organs/organRegistry.ts",
+    "emotion_engine": "server/organs/organRegistry.ts",
+    "mission_state": "server/organs/organRegistry.ts",
+    "agent_router": "server/organs/organRegistry.ts",
+    "cognitive_feedback": "server/organs/organRegistry.ts",
+    "mcp_client": "server/organs/organRegistry.ts",
+    "health_monitor": "server/organs/organRegistry.ts",
+    "constitution": "server/organs/organRegistry.ts",
+    "governance": "server/organs/organRegistry.ts",
+    "sandbox": "server/organs/organRegistry.ts",
+    "core.model": "microfixd/langgraph/organs.ts",
+    "core.tools": "microfixd/langgraph/organs.ts",
+    "core.memory": "microfixd/core/memory/memory.ts",
+    "core.legal": "microfixd/langgraph/organs.ts",
+    "core.web": "microfixd/core/execution/webExecution.ts",
+    "core.deployment": "microfixd/langgraph/organs.ts",
+    "core.router": "microfixd/core/agents/agentRouter.ts",
+    "core.scheduler": "microfixd/core/autonomy/scheduler.ts",
+    "core.loop": "microfixd/core/autonomy/backgroundLoop.ts",
+    "core.repair": "microfixd/core/autonomy/selfRepair.ts",
+    "core.autoDeploy": "microfixd/core/autonomy/autoDeployment.ts",
+    "core.mission": "microfixd/core/autonomy/missionStateMachine.ts",
+    "core.feedback": "microfixd/core/autonomy/cognitiveFeedbackLoop.ts",
+    "core.paragon": "microfixd/core/governance/paragonDissector.ts",
+    "core.federation": "microfixd/core/federation/federationLayer.ts",
+    "core.emotion": "microfixd/core/autonomy/syntheticEmotionEngine.ts",
+    "core.reflex": "microfixd/core/autonomy/syntheticReflexEngine.ts",
+    "core.voice": "microfixd/core/voice/voiceOrgan.ts",
+    "core.voiceOut": "microfixd/core/voice/voiceOutputOrgan.ts",
+    "core.voiceEmotion": "microfixd/core/voice/voiceEmotionOrgan.ts",
+    "core.voiceGrammar": "microfixd/core/voice/voiceCommandGrammarEngine.ts",
+    "core.wiring": "microfixd/core/wiring/unifiedWiring.ts"
+  }
+}

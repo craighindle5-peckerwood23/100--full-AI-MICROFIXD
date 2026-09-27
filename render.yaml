@@ -8,16 +8,26 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.14.0
+      - key: NODE_ENV
+        value: production
       # Add these in the Render dashboard (Environment tab) rather than
       # committing real values here:
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
-      - key: VITE_GROQ_API_KEY
+      - key: SUPABASE_URL
         sync: false
-      - key: VITE_DEEPSEEK_API_KEY
+      - key: SUPABASE_ANON_KEY
         sync: false
-      - key: VITE_GEMINI_API_KEY
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: OPERATOR_TOKEN
+        sync: false
+      - key: SYSTEM_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
         sync: false
     healthCheckPath: /api/health

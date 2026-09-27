@@ -5,15 +5,25 @@
  */
 
 const BASE = "/api";
+const OPERATOR_TOKEN_KEY = "microfixd_operator_token";
 
 export async function api<T = unknown>(
   method:  "GET" | "POST" | "DELETE" | "PUT",
   path:    string,
   body?:   unknown,
 ): Promise<T> {
+  // The operator supplies the server-side token in Settings. Keep it in
+  // sessionStorage so it is not committed, persisted across browser sessions,
+  // or injected into the production bundle.
+  const token = typeof window !== "undefined"
+    ? window.sessionStorage.getItem(OPERATOR_TOKEN_KEY)
+    : null;
   const resp = await fetch(`${BASE}${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body:    body ? JSON.stringify(body) : undefined,
   });
   if (!resp.ok) {

@@ -141,6 +141,3 @@ class BrowserManager {
 }
 
 export const browserManager = new BrowserManager();
-
-// Auto-start browser when server boots
-browserManager.start().catch(console.error);

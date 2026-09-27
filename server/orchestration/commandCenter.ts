@@ -23,6 +23,8 @@ import { executeBrainOrgan }     from "../organs/organs/brainOrgan";
 import { executeEvolutionOrgan } from "../organs/organs/evolutionOrgan";
 import { broadcast }             from "../index";
 import { feedbackLoop }          from "./feedbackLoop";
+import { resolveExecutableOrgans } from "../classification";
+import { EXECUTORS } from "../organs/executors";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY ?? "" });
 
@@ -88,30 +90,32 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       temperature: 0.1,
     });
 
-    let routing: { intent: string; complexity: string; organs: string[]; priority: string } = {
-      intent: "query", complexity: "low", organs: ["brain"], priority: "normal",
-    };
-    try {
-      const raw   = classification.choices[0]?.message?.content ?? "{}";
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) routing = JSON.parse(match[0]);
-    } catch {}
+    const raw = classification.choices[0]?.message?.content ?? "";
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("Classifier returned no JSON object");
+    const routing = JSON.parse(match[0]) as { intent: string; complexity: string; organs: unknown; priority: string };
+    const selectedOrgans = resolveExecutableOrgans(routing.organs);
+    // A task prompt alone cannot safely supply an action for a tool organ.
+    const organActions = req.context?.organActions as Record<string, { action: string; payload?: unknown }> | undefined;
+    for (const organId of selectedOrgans) {
+      if (organId !== "brain" && !organActions?.[organId]?.action) {
+        throw new Error(`Organ '${organId}' requires a declared action in context.organActions`);
+      }
+    }
 
-    broadcast("command:routed", { cmdId, intent: routing.intent, complexity: routing.complexity, organs: routing.organs });
+    broadcast("command:routed", { cmdId, intent: routing.intent, complexity: routing.complexity, organs: selectedOrgans });
 
     // ── Step 4: Parallel organ execution ──────────────────────────────
     const organResults: Record<string, unknown> = {};
     await Promise.allSettled(
-      routing.organs.map(async (organId) => {
+      selectedOrgans.map(async (organId) => {
         if (organRegistry.get(organId)?.isolated) return;
         try {
           const t1  = Date.now();
           organRegistry.setStatus(organId as Parameters<typeof organRegistry.setStatus>[0], "busy");
-          const res = await executeBrainOrgan("complete", {
-            messages: [
-              { role: "system", content: `You are the ${organId} agent within Microfixd. Execute your specific role for this task.` },
-              { role: "user",   content: req.task },
-            ],
+          const declared = organActions?.[organId];
+          const res = await EXECUTORS[organId](declared?.action ?? "complete", declared?.payload ?? {
+            messages: [{ role: "user", content: req.task }],
           });
           const lat = Date.now() - t1;
           organRegistry.recordExec(organId, true, lat, routing.intent);
@@ -126,6 +130,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
         }
       })
     );
+    if (Object.keys(organResults).length === 0) throw new Error("No classified organ completed execution");
 
     // ── Step 5: Final synthesis via Groq ──────────────────────────────
     const organSummary = Object.entries(organResults)
@@ -150,7 +155,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
 
     // ── Step 7: Evolution proposal (async, non-blocking) ──────────────
     if (routing.complexity === "high") {
-      executeEvolutionOrgan("propose", { task: req.task, organs: routing.organs }).catch(() => {});
+      executeEvolutionOrgan("propose", { task: req.task, organs: selectedOrgans }).catch(() => {});
     }
 
     broadcast("command:complete", { cmdId, session_id: req.session_id, success: true });

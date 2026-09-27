@@ -1,0 +1,711 @@
+{
+  "version": "1.2.0",
+  "entrypoint": "server/index.ts",
+  "layers": [
+    "core",
+    "agents",
+    "autonomy",
+    "governance",
+    "memory",
+    "metacognition",
+    "execution",
+    "server"
+  ],
+  "criticalOrgans": [
+    "paragon",
+    "governance",
+    "memory",
+    "overwatch",
+    "hitl",
+    "sandbox",
+    "wiring"
+  ],
+  "humanApprovalRequiredFor": [
+    "self_modification",
+    "production_deployment",
+    "protected_external_effect",
+    "critical_repair"
+  ],
+  "objectTypes": [
+    "agent",
+    "organ",
+    "node",
+    "runtime",
+    "server"
+  ],
+  "organs": [
+    {
+      "id": "brain",
+      "name": "Brain (LLM Orchestrator)",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/brainOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "memory",
+      "name": "Memory (Supabase Vector)",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/memoryOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "playwright",
+      "name": "Playwright (Browser)",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/playwrightOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "github_connector",
+      "name": "GitHub Connector",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/githubOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "voice",
+      "name": "Voice (STT/TTS)",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/voiceOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "security_spine",
+      "name": "Security Spine",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/securityOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "evolution_engine",
+      "name": "Evolution Engine",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/evolutionOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "self_repair",
+      "name": "Self-Repair",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "reflex",
+      "name": "Reflex Engine",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/reflexOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "scheduler",
+      "name": "Autonomous Scheduler",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/schedulerOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
+    },
+    {
+      "id": "overwatch",
+      "name": "Metacognitive Overwatch",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "paragon",
+      "name": "Paragon Dissector",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "federation",
+      "name": "Federation Layer",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "emotion_engine",
+      "name": "Synthetic Emotion Engine",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "mission_state",
+      "name": "Mission State Machine",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "agent_router",
+      "name": "Agent Router",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "cognitive_feedback",
+      "name": "Cognitive Feedback Loop",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "mcp_client",
+      "name": "MCP Client",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "health_monitor",
+      "name": "Health Monitor",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "constitution",
+      "name": "Constitution Engine",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "governance",
+      "name": "Governance Engine",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "sandbox",
+      "name": "Sandbox Chamber",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organRegistry.ts",
+      "node": "server/organs/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.model",
+      "name": "ModelOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/langgraph/organs.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.tools",
+      "name": "ToolOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/langgraph/organs.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.memory",
+      "name": "MemoryOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/memory/memory.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.legal",
+      "name": "LegalSchema",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/langgraph/organs.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.web",
+      "name": "WebExecutionOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/execution/webExecution.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.deployment",
+      "name": "DeploymentOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/langgraph/organs.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.router",
+      "name": "AgentRouterOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/agents/agentRouter.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.scheduler",
+      "name": "AutonomousSchedulerOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/scheduler.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.loop",
+      "name": "BackgroundLoopEngine",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/backgroundLoop.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.repair",
+      "name": "SelfRepairOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/selfRepair.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.autoDeploy",
+      "name": "AutoDeploymentOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/autoDeployment.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.mission",
+      "name": "MissionStateMachine",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/missionStateMachine.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.feedback",
+      "name": "CognitiveFeedbackLoop",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/cognitiveFeedbackLoop.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.paragon",
+      "name": "ParagonDissectorOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/governance/paragonDissector.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.federation",
+      "name": "FederationLayer",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/federation/federationLayer.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.emotion",
+      "name": "SyntheticEmotionEngine",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/syntheticEmotionEngine.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.reflex",
+      "name": "SyntheticReflexEngine",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/autonomy/syntheticReflexEngine.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.voice",
+      "name": "VoiceOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/voice/voiceOrgan.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.voiceOut",
+      "name": "VoiceOutputOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/voice/voiceOutputOrgan.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.voiceEmotion",
+      "name": "VoiceEmotionOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/voice/voiceEmotionOrgan.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.voiceGrammar",
+      "name": "VoiceCommandGrammarEngine",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/voice/voiceCommandGrammarEngine.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    },
+    {
+      "id": "core.wiring",
+      "name": "UnifiedWiringOrgan",
+      "kind": "organ",
+      "layer": "core",
+      "source": "microfixd/core/wiring/unifiedWiring.ts",
+      "node": "microfixd/langgraph/index.ts",
+      "executable": false
+    }
+  ],
+  "objects": [
+    {
+      "id": "microfixd/core/agents/index.ts",
+      "kind": "agent",
+      "source": "microfixd/core/agents/index.ts"
+    },
+    {
+      "id": "microfixd/backend/core/agents/index.ts",
+      "kind": "agent",
+      "source": "microfixd/backend/core/agents/index.ts"
+    },
+    {
+      "id": "microfyxd/core/agents/index.ts",
+      "kind": "agent",
+      "source": "microfyxd/core/agents/index.ts"
+    },
+    {
+      "id": "src/agents/agentRegistry.ts",
+      "kind": "agent",
+      "source": "src/agents/agentRegistry.ts"
+    },
+    {
+      "id": "microfixd/core/index.ts",
+      "kind": "node",
+      "source": "microfixd/core/index.ts"
+    },
+    {
+      "id": "microfixd/backend/core/index.ts",
+      "kind": "node",
+      "source": "microfixd/backend/core/index.ts"
+    },
+    {
+      "id": "microfixd/langgraph/index.ts",
+      "kind": "node",
+      "source": "microfixd/langgraph/index.ts"
+    },
+    {
+      "id": "server/organs/index.ts",
+      "kind": "node",
+      "source": "server/organs/index.ts"
+    },
+    {
+      "id": "microfixd/langgraph/organs.ts",
+      "kind": "runtime",
+      "source": "microfixd/langgraph/organs.ts"
+    },
+    {
+      "id": "server/execution/executionSpine.ts",
+      "kind": "runtime",
+      "source": "server/execution/executionSpine.ts"
+    },
+    {
+      "id": "server/index.ts",
+      "kind": "server",
+      "source": "server/index.ts"
+    },
+    {
+      "id": "brain",
+      "kind": "organ",
+      "source": "server/organs/organs/brainOrgan.ts"
+    },
+    {
+      "id": "memory",
+      "kind": "organ",
+      "source": "server/organs/organs/memoryOrgan.ts"
+    },
+    {
+      "id": "playwright",
+      "kind": "organ",
+      "source": "server/organs/organs/playwrightOrgan.ts"
+    },
+    {
+      "id": "github_connector",
+      "kind": "organ",
+      "source": "server/organs/organs/githubOrgan.ts"
+    },
+    {
+      "id": "voice",
+      "kind": "organ",
+      "source": "server/organs/organs/voiceOrgan.ts"
+    },
+    {
+      "id": "security_spine",
+      "kind": "organ",
+      "source": "server/organs/organs/securityOrgan.ts"
+    },
+    {
+      "id": "evolution_engine",
+      "kind": "organ",
+      "source": "server/organs/organs/evolutionOrgan.ts"
+    },
+    {
+      "id": "self_repair",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "reflex",
+      "kind": "organ",
+      "source": "server/organs/organs/reflexOrgan.ts"
+    },
+    {
+      "id": "scheduler",
+      "kind": "organ",
+      "source": "server/organs/organs/schedulerOrgan.ts"
+    },
+    {
+      "id": "overwatch",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "paragon",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "federation",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "emotion_engine",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "mission_state",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "agent_router",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "cognitive_feedback",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "mcp_client",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "health_monitor",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "constitution",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "governance",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "sandbox",
+      "kind": "organ",
+      "source": "server/organs/organRegistry.ts"
+    },
+    {
+      "id": "core.model",
+      "kind": "organ",
+      "source": "microfixd/langgraph/organs.ts"
+    },
+    {
+      "id": "core.tools",
+      "kind": "organ",
+      "source": "microfixd/langgraph/organs.ts"
+    },
+    {
+      "id": "core.memory",
+      "kind": "organ",
+      "source": "microfixd/core/memory/memory.ts"
+    },
+    {
+      "id": "core.legal",
+      "kind": "organ",
+      "source": "microfixd/langgraph/organs.ts"
+    },
+    {
+      "id": "core.web",
+      "kind": "organ",
+      "source": "microfixd/core/execution/webExecution.ts"
+    },
+    {
+      "id": "core.deployment",
+      "kind": "organ",
+      "source": "microfixd/langgraph/organs.ts"
+    },
+    {
+      "id": "core.router",
+      "kind": "organ",
+      "source": "microfixd/core/agents/agentRouter.ts"
+    },
+    {
+      "id": "core.scheduler",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/scheduler.ts"
+    },
+    {
+      "id": "core.loop",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/backgroundLoop.ts"
+    },
+    {
+      "id": "core.repair",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/selfRepair.ts"
+    },
+    {
+      "id": "core.autoDeploy",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/autoDeployment.ts"
+    },
+    {
+      "id": "core.mission",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/missionStateMachine.ts"
+    },
+    {
+      "id": "core.feedback",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/cognitiveFeedbackLoop.ts"
+    },
+    {
+      "id": "core.paragon",
+      "kind": "organ",
+      "source": "microfixd/core/governance/paragonDissector.ts"
+    },
+    {
+      "id": "core.federation",
+      "kind": "organ",
+      "source": "microfixd/core/federation/federationLayer.ts"
+    },
+    {
+      "id": "core.emotion",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/syntheticEmotionEngine.ts"
+    },
+    {
+      "id": "core.reflex",
+      "kind": "organ",
+      "source": "microfixd/core/autonomy/syntheticReflexEngine.ts"
+    },
+    {
+      "id": "core.voice",
+      "kind": "organ",
+      "source": "microfixd/core/voice/voiceOrgan.ts"
+    },
+    {
+      "id": "core.voiceOut",
+      "kind": "organ",
+      "source": "microfixd/core/voice/voiceOutputOrgan.ts"
+    },
+    {
+      "id": "core.voiceEmotion",
+      "kind": "organ",
+      "source": "microfixd/core/voice/voiceEmotionOrgan.ts"
+    },
+    {
+      "id": "core.voiceGrammar",
+      "kind": "organ",
+      "source": "microfixd/core/voice/voiceCommandGrammarEngine.ts"
+    },
+    {
+      "id": "core.wiring",
+      "kind": "organ",
+      "source": "microfixd/core/wiring/unifiedWiring.ts"
+    }
+  ]
+}

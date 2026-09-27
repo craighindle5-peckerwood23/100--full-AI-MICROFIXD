@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "server": "tsx server/index.ts",
+    "server": "node --import tsx server/index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "start": "tsx server/index.ts",
+    "start": "node --import tsx server/index.ts",
+    "health": "node --import tsx healthscript.ts",
+    "generate:entrypoints": "node scripts/generate-entrypoints.mjs",
+    "validate:classification": "node --import tsx scripts/validate-classification.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },

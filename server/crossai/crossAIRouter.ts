@@ -17,9 +17,6 @@ import Anthropic  from "@anthropic-ai/sdk";
 import OpenAI     from "openai";
 
 export const crossAIRouter = Router();
-const groq      = new Groq({ apiKey: process.env.GROQ_API_KEY ?? "" });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
-const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
 
 const auditLog: unknown[] = [];
 
@@ -30,12 +27,16 @@ async function callProvider(to: string, messages: {role: string; content: string
     let model   = "";
     switch (to) {
       case "groq": {
+        if (!process.env.GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
         const r = await groq.chat.completions.create({ model: "llama-3.1-70b-versatile", messages: messages as Parameters<typeof groq.chat.completions.create>[0]["messages"], max_tokens: opts.max_tokens ?? 1024 });
         content = r.choices[0]?.message?.content ?? "";
         model   = r.model;
         break;
       }
       case "claude": {
+        if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
         const userMsgs = messages.filter(m => m.role !== "system");
         const sys      = messages.find(m => m.role === "system")?.content ?? "You are a helpful assistant.";
         const r = await anthropic.messages.create({ model: "claude-3-5-sonnet-20241022", max_tokens: opts.max_tokens ?? 1024, system: sys, messages: userMsgs as Parameters<typeof anthropic.messages.create>[0]["messages"] });
@@ -44,6 +45,8 @@ async function callProvider(to: string, messages: {role: string; content: string
         break;
       }
       case "openai": {
+        if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const r = await openai.chat.completions.create({ model: "gpt-4o", messages: messages as Parameters<typeof openai.chat.completions.create>[0]["messages"], max_tokens: opts.max_tokens ?? 1024 });
         content = r.choices[0]?.message?.content ?? "";
         model   = r.model;

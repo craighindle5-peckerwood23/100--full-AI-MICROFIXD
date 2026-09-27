@@ -8,37 +8,9 @@
 import { Router }        from "express";
 import { organRegistry } from "./organRegistry";
 import { getSystemSnapshot } from "./organMetrics";
-import { executeBrainOrgan }      from "./organs/brainOrgan";
-import { executeMemoryOrgan }     from "./organs/memoryOrgan";
-import { executePlaywrightOrgan } from "./organs/playwrightOrgan";
-import { executeGithubOrgan }     from "./organs/githubOrgan";
-import { executeVoiceOrgan }      from "./organs/voiceOrgan";
-import { executeSecurityOrgan }   from "./organs/securityOrgan";
-import { executeEvolutionOrgan }  from "./organs/evolutionOrgan";
-import { executeReflexOrgan }     from "./organs/reflexOrgan";
-import { executeSchedulerOrgan }  from "./organs/schedulerOrgan";
+import { EXECUTORS } from "./executors";
 
 export const organRouter = Router();
-
-// Organ executor map — routes execute calls to the right handler
-type ExecutorFn = (action: string, payload: unknown) => Promise<unknown>;
-
-const EXECUTORS: Record<string, ExecutorFn> = {
-  brain:              executeBrainOrgan,
-  memory:             executeMemoryOrgan,
-  playwright:         executePlaywrightOrgan,
-  github_connector:   executeGithubOrgan,
-  voice:              executeVoiceOrgan,
-  security_spine:     executeSecurityOrgan,
-  evolution_engine:   executeEvolutionOrgan,
-  reflex:             executeReflexOrgan,
-  scheduler:          executeSchedulerOrgan,
-};
-
-// Generic executor for organs without specific handlers
-async function genericExecutor(id: string, action: string, payload: unknown): Promise<unknown> {
-  return { organ: id, action, payload, result: "executed", ts: new Date().toISOString() };
-}
 
 // ── GET /api/organs — list all ────────────────────────────────────────────
 organRouter.get("/", (req, res) => {
@@ -81,13 +53,14 @@ organRouter.post("/:id/execute", async (req, res) => {
   const { action = "default", payload = {} } = req.body;
   const organ = organRegistry.get(id);
   if (!organ) return res.status(404).json({ error: `Organ '${id}' not found` });
+  if (!EXECUTORS[id]) return res.status(422).json({ error: `Organ '${id}' has no executable node` });
   if (organ.isolated) return res.status(503).json({ error: `Organ '${id}' is isolated` });
 
   const t0 = Date.now();
   organRegistry.setStatus(id, "busy");
 
   try {
-    const executor = EXECUTORS[id] ?? ((a, p) => genericExecutor(id, a, p));
+    const executor = EXECUTORS[id];
     const result   = await executor(action, payload);
     const latency  = Date.now() - t0;
     organRegistry.recordExec(id, true, latency, action);
@@ -123,9 +96,9 @@ organRouter.post("/broadcast", async (req, res) => {
     organ_ids.map(async (id: string) => {
       const t0       = Date.now();
       const organ    = organRegistry.get(id);
-      if (!organ || organ.isolated) return { id, skipped: true };
+      if (!organ || organ.isolated || !EXECUTORS[id]) return { id, skipped: true, error: !EXECUTORS[id] ? "No executable node" : undefined };
       organRegistry.setStatus(id, "busy");
-      const executor = EXECUTORS[id] ?? ((a, p) => genericExecutor(id, a, p));
+      const executor = EXECUTORS[id];
       const result   = await executor(action, payload);
       const latency  = Date.now() - t0;
       organRegistry.recordExec(id, true, latency, action);
