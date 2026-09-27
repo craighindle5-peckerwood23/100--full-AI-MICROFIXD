@@ -1,0 +1,824 @@
+From ffa2153a5c5133ee7ba119e6c204841a9d1eadc6 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sun, 27 Sep 2026 13:10:05 +0900
+Subject: [PATCH] Harden production boot and complete runtime wiring
+
+---
+ microfixd/backend/core/agents/index.ts     |  7 +++
+ microfixd/backend/core/governance/index.ts |  1 +
+ microfixd/backend/core/index.ts            |  5 ++
+ microfixd/backend/core/memory/index.ts     |  1 +
+ microfixd/backend/core/mission/index.ts    |  1 +
+ microfixd/backend/core/telemetry/index.ts  |  1 +
+ microfixd/backend/routes/agents/index.ts   |  1 +
+ microfixd/backend/routes/index.ts          |  1 +
+ microfixd/core/agents/index.ts             |  8 +++
+ microfixd/core/autonomy/index.ts           | 11 ++++
+ microfixd/core/crossai/index.ts            |  4 ++
+ microfixd/core/crossai/providers/index.ts  |  6 +++
+ microfixd/core/episodes/index.ts           |  1 +
+ microfixd/core/execution/index.ts          |  1 +
+ microfixd/core/federation/index.ts         |  1 +
+ microfixd/core/governance/index.ts         |  1 +
+ microfixd/core/index.ts                    | 12 +++++
+ microfixd/core/interpretation/index.ts     |  1 +
+ microfixd/core/memory/index.ts             |  2 +
+ microfixd/core/metacognition/index.ts      |  2 +
+ microfixd/core/voice/index.ts              |  5 ++
+ microfixd/core/wiring/index.ts             |  1 +
+ microfixd/topology.json                    | 29 ++++++++++
+ microfixd/wiring.json                      | 27 ++++++++++
+ microfyxd/core/agents/index.ts             |  1 +
+ microfyxd/core/index.ts                    |  2 +
+ microfyxd/core/interpretation/index.ts     |  1 +
+ package.json                               |  6 ++-
+ render.yaml                                | 16 ++++--
+ scripts/generate-entrypoints.mjs           | 62 ++++++++++++++++++++++
+ server/crawl/index.ts                      |  4 ++
+ server/crossai/crossAIRouter.ts            |  9 ++--
+ server/crossai/index.ts                    |  1 +
+ server/evolution/index.ts                  |  2 +
+ server/execution/index.ts                  |  3 ++
+ server/github/index.ts                     |  1 +
+ server/hitl/index.ts                       |  2 +
+ server/index.ts                            | 60 +++++++++++++++++----
+ server/mcp/index.ts                        |  1 +
+ server/orchestration/index.ts              |  3 ++
+ server/organs/index.ts                     |  4 ++
+ server/organs/organs/index.ts              | 10 ++++
+ server/playwright/browserManager.ts        |  3 --
+ server/playwright/index.ts                 |  3 ++
+ server/sandbox/index.ts                    |  2 +
+ server/security/index.ts                   |  6 +++
+ server/security/rbac.ts                    | 10 ++--
+ server/skin/index.ts                       |  4 ++
+ server/tools/index.ts                      |  3 ++
+ 49 files changed, 322 insertions(+), 27 deletions(-)
+ create mode 100644 microfixd/backend/core/agents/index.ts
+ create mode 100644 microfixd/backend/core/governance/index.ts
+ create mode 100644 microfixd/backend/core/index.ts
+ create mode 100644 microfixd/backend/core/memory/index.ts
+ create mode 100644 microfixd/backend/core/mission/index.ts
+ create mode 100644 microfixd/backend/core/telemetry/index.ts
+ create mode 100644 microfixd/backend/routes/agents/index.ts
+ create mode 100644 microfixd/backend/routes/index.ts
+ create mode 100644 microfixd/core/agents/index.ts
+ create mode 100644 microfixd/core/autonomy/index.ts
+ create mode 100644 microfixd/core/crossai/index.ts
+ create mode 100644 microfixd/core/crossai/providers/index.ts
+ create mode 100644 microfixd/core/episodes/index.ts
+ create mode 100644 microfixd/core/execution/index.ts
+ create mode 100644 microfixd/core/federation/index.ts
+ create mode 100644 microfixd/core/governance/index.ts
+ create mode 100644 microfixd/core/index.ts
+ create mode 100644 microfixd/core/interpretation/index.ts
+ create mode 100644 microfixd/core/memory/index.ts
+ create mode 100644 microfixd/core/metacognition/index.ts
+ create mode 100644 microfixd/core/voice/index.ts
+ create mode 100644 microfixd/core/wiring/index.ts
+ create mode 100644 microfixd/topology.json
+ create mode 100644 microfixd/wiring.json
+ create mode 100644 microfyxd/core/agents/index.ts
+ create mode 100644 microfyxd/core/index.ts
+ create mode 100644 microfyxd/core/interpretation/index.ts
+ create mode 100644 scripts/generate-entrypoints.mjs
+ create mode 100644 server/crawl/index.ts
+ create mode 100644 server/crossai/index.ts
+ create mode 100644 server/evolution/index.ts
+ create mode 100644 server/execution/index.ts
+ create mode 100644 server/github/index.ts
+ create mode 100644 server/hitl/index.ts
+ create mode 100644 server/mcp/index.ts
+ create mode 100644 server/orchestration/index.ts
+ create mode 100644 server/organs/index.ts
+ create mode 100644 server/organs/organs/index.ts
+ create mode 100644 server/playwright/index.ts
+ create mode 100644 server/sandbox/index.ts
+ create mode 100644 server/security/index.ts
+ create mode 100644 server/skin/index.ts
+ create mode 100644 server/tools/index.ts
+
+diff --git a/microfixd/backend/core/agents/index.ts b/microfixd/backend/core/agents/index.ts
+new file mode 100644
+index 0000000..095220f
+--- /dev/null
++++ b/microfixd/backend/core/agents/index.ts
+@@ -0,0 +1,7 @@
++export * as executionEngine from "./executionEngine";
++export * as optimization from "./optimization";
++export * as registry from "./registry";
++export * as repair from "./repair";
++export * as security from "./security";
++export * as sync from "./sync";
++export * as watching from "./watching";
+diff --git a/microfixd/backend/core/governance/index.ts b/microfixd/backend/core/governance/index.ts
+new file mode 100644
+index 0000000..2fc5362
+--- /dev/null
++++ b/microfixd/backend/core/governance/index.ts
+@@ -0,0 +1 @@
++export * as engine from "./engine";
+diff --git a/microfixd/backend/core/index.ts b/microfixd/backend/core/index.ts
+new file mode 100644
+index 0000000..feedec9
+--- /dev/null
++++ b/microfixd/backend/core/index.ts
+@@ -0,0 +1,5 @@
++export * as agents from "./agents";
++export * as governance from "./governance";
++export * as memory from "./memory";
++export * as mission from "./mission";
++export * as telemetry from "./telemetry";
+diff --git a/microfixd/backend/core/memory/index.ts b/microfixd/backend/core/memory/index.ts
+new file mode 100644
+index 0000000..1bd4fb3
+--- /dev/null
++++ b/microfixd/backend/core/memory/index.ts
+@@ -0,0 +1 @@
++export * as state from "./state";
+diff --git a/microfixd/backend/core/mission/index.ts b/microfixd/backend/core/mission/index.ts
+new file mode 100644
+index 0000000..2fc5362
+--- /dev/null
++++ b/microfixd/backend/core/mission/index.ts
+@@ -0,0 +1 @@
++export * as engine from "./engine";
+diff --git a/microfixd/backend/core/telemetry/index.ts b/microfixd/backend/core/telemetry/index.ts
+new file mode 100644
+index 0000000..bf66e95
+--- /dev/null
++++ b/microfixd/backend/core/telemetry/index.ts
+@@ -0,0 +1 @@
++export * as grid from "./grid";
+diff --git a/microfixd/backend/routes/agents/index.ts b/microfixd/backend/routes/agents/index.ts
+new file mode 100644
+index 0000000..a7ac80c
+--- /dev/null
++++ b/microfixd/backend/routes/agents/index.ts
+@@ -0,0 +1 @@
++export * as dispatch from "./dispatch";
+diff --git a/microfixd/backend/routes/index.ts b/microfixd/backend/routes/index.ts
+new file mode 100644
+index 0000000..30f071b
+--- /dev/null
++++ b/microfixd/backend/routes/index.ts
+@@ -0,0 +1 @@
++export * as agents from "./agents";
+diff --git a/microfixd/core/agents/index.ts b/microfixd/core/agents/index.ts
+new file mode 100644
+index 0000000..010770f
+--- /dev/null
++++ b/microfixd/core/agents/index.ts
+@@ -0,0 +1,8 @@
++export * as agentRouter from "./agentRouter";
++export * as executionEngine from "./executionEngine";
++export * as optimization from "./optimization";
++export * as registry from "./registry";
++export * as repair from "./repair";
++export * as security from "./security";
++export * as sync from "./sync";
++export * as watching from "./watching";
+diff --git a/microfixd/core/autonomy/index.ts b/microfixd/core/autonomy/index.ts
+new file mode 100644
+index 0000000..9032792
+--- /dev/null
++++ b/microfixd/core/autonomy/index.ts
+@@ -0,0 +1,11 @@
++export * as autoDeployment from "./autoDeployment";
++export * as backgroundLoop from "./backgroundLoop";
++export * as cognitiveFeedbackLoop from "./cognitiveFeedbackLoop";
++export * as evolutionEngine from "./evolutionEngine";
++export * as missionStateMachine from "./missionStateMachine";
++export * as scheduler from "./scheduler";
++export * as selfCorrectionLoop from "./selfCorrectionLoop";
++export * as selfRepair from "./selfRepair";
++export * as selfScheduler from "./selfScheduler";
++export * as syntheticEmotionEngine from "./syntheticEmotionEngine";
++export * as syntheticReflexEngine from "./syntheticReflexEngine";
+diff --git a/microfixd/core/crossai/index.ts b/microfixd/core/crossai/index.ts
+new file mode 100644
+index 0000000..ea70e4b
+--- /dev/null
++++ b/microfixd/core/crossai/index.ts
+@@ -0,0 +1,4 @@
++export * as consensus from "./consensus";
++export * as crossAIBridge from "./crossAIBridge";
++export * as protocol from "./protocol";
++export * as providers from "./providers";
+diff --git a/microfixd/core/crossai/providers/index.ts b/microfixd/core/crossai/providers/index.ts
+new file mode 100644
+index 0000000..e2ab59e
+--- /dev/null
++++ b/microfixd/core/crossai/providers/index.ts
+@@ -0,0 +1,6 @@
++export * as claudeProvider from "./claudeProvider";
++export * as copilotProvider from "./copilotProvider";
++export * as devinProvider from "./devinProvider";
++export * as geminiProvider from "./geminiProvider";
++export * as groqProvider from "./groqProvider";
++export * as openAIProvider from "./openAIProvider";
+diff --git a/microfixd/core/episodes/index.ts b/microfixd/core/episodes/index.ts
+new file mode 100644
+index 0000000..ecb51f6
+--- /dev/null
++++ b/microfixd/core/episodes/index.ts
+@@ -0,0 +1 @@
++export * as episodeStore from "./episodeStore";
+diff --git a/microfixd/core/execution/index.ts b/microfixd/core/execution/index.ts
+new file mode 100644
+index 0000000..79fc896
+--- /dev/null
++++ b/microfixd/core/execution/index.ts
+@@ -0,0 +1 @@
++export * as webExecution from "./webExecution";
+diff --git a/microfixd/core/federation/index.ts b/microfixd/core/federation/index.ts
+new file mode 100644
+index 0000000..ca3a0a8
+--- /dev/null
++++ b/microfixd/core/federation/index.ts
+@@ -0,0 +1 @@
++export * as federationLayer from "./federationLayer";
+diff --git a/microfixd/core/governance/index.ts b/microfixd/core/governance/index.ts
+new file mode 100644
+index 0000000..5ab73ef
+--- /dev/null
++++ b/microfixd/core/governance/index.ts
+@@ -0,0 +1 @@
++export * as paragonDissector from "./paragonDissector";
+diff --git a/microfixd/core/index.ts b/microfixd/core/index.ts
+new file mode 100644
+index 0000000..8acabf9
+--- /dev/null
++++ b/microfixd/core/index.ts
+@@ -0,0 +1,12 @@
++export * as agents from "./agents";
++export * as autonomy from "./autonomy";
++export * as crossai from "./crossai";
++export * as episodes from "./episodes";
++export * as execution from "./execution";
++export * as federation from "./federation";
++export * as governance from "./governance";
++export * as interpretation from "./interpretation";
++export * as memory from "./memory";
++export * as metacognition from "./metacognition";
++export * as voice from "./voice";
++export * as wiring from "./wiring";
+diff --git a/microfixd/core/interpretation/index.ts b/microfixd/core/interpretation/index.ts
+new file mode 100644
+index 0000000..9e93744
+--- /dev/null
++++ b/microfixd/core/interpretation/index.ts
+@@ -0,0 +1 @@
++export * as schema from "./schema";
+diff --git a/microfixd/core/memory/index.ts b/microfixd/core/memory/index.ts
+new file mode 100644
+index 0000000..064afab
+--- /dev/null
++++ b/microfixd/core/memory/index.ts
+@@ -0,0 +1,2 @@
++export * as memory from "./memory";
++export * as supabaseMemory from "./supabaseMemory";
+diff --git a/microfixd/core/metacognition/index.ts b/microfixd/core/metacognition/index.ts
+new file mode 100644
+index 0000000..0746ba6
+--- /dev/null
++++ b/microfixd/core/metacognition/index.ts
+@@ -0,0 +1,2 @@
++export * as hitlEscalation from "./hitlEscalation";
++export * as overwatchEngine from "./overwatchEngine";
+diff --git a/microfixd/core/voice/index.ts b/microfixd/core/voice/index.ts
+new file mode 100644
+index 0000000..7753c92
+--- /dev/null
++++ b/microfixd/core/voice/index.ts
+@@ -0,0 +1,5 @@
++export * as voiceCommandGrammarEngine from "./voiceCommandGrammarEngine";
++export * as voiceCortexBridge from "./voiceCortexBridge";
++export * as voiceEmotionOrgan from "./voiceEmotionOrgan";
++export * as voiceOrgan from "./voiceOrgan";
++export * as voiceOutputOrgan from "./voiceOutputOrgan";
+diff --git a/microfixd/core/wiring/index.ts b/microfixd/core/wiring/index.ts
+new file mode 100644
+index 0000000..3004f89
+--- /dev/null
++++ b/microfixd/core/wiring/index.ts
+@@ -0,0 +1 @@
++export * as unifiedWiring from "./unifiedWiring";
+diff --git a/microfixd/topology.json b/microfixd/topology.json
+new file mode 100644
+index 0000000..6346766
+--- /dev/null
++++ b/microfixd/topology.json
+@@ -0,0 +1,29 @@
++{
++  "version": "1.1.0",
++  "entrypoint": "server/index.ts",
++  "layers": [
++    "core",
++    "agents",
++    "autonomy",
++    "governance",
++    "memory",
++    "metacognition",
++    "execution",
++    "server"
++  ],
++  "criticalOrgans": [
++    "paragon",
++    "governance",
++    "memory",
++    "overwatch",
++    "hitl",
++    "sandbox",
++    "wiring"
++  ],
++  "humanApprovalRequiredFor": [
++    "self_modification",
++    "production_deployment",
++    "protected_external_effect",
++    "critical_repair"
++  ]
++}
+diff --git a/microfixd/wiring.json b/microfixd/wiring.json
+new file mode 100644
+index 0000000..e04d5c7
+--- /dev/null
++++ b/microfixd/wiring.json
+@@ -0,0 +1,27 @@
++{
++  "version": "1.1.0",
++  "boot": "server/index.ts -> initOrgans",
++  "controlPath": [
++    "request",
++    "rbac",
++    "security",
++    "orchestration",
++    "paragon",
++    "organ",
++    "telemetry"
++  ],
++  "repairPath": [
++    "overwatch",
++    "paragon",
++    "sandbox",
++    "verification",
++    "hitl",
++    "promotion"
++  ],
++  "persistence": {
++    "provider": "supabase",
++    "serverVariables": ["SUPABASE_URL", "SUPABASE_ANON_KEY"],
++    "browserVariables": ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
++  },
++  "health": ["/api/health", "/api/health/deep"]
++}
+diff --git a/microfyxd/core/agents/index.ts b/microfyxd/core/agents/index.ts
+new file mode 100644
+index 0000000..8940f6d
+--- /dev/null
++++ b/microfyxd/core/agents/index.ts
+@@ -0,0 +1 @@
++export * as repair from "./repair";
+diff --git a/microfyxd/core/index.ts b/microfyxd/core/index.ts
+new file mode 100644
+index 0000000..138965b
+--- /dev/null
++++ b/microfyxd/core/index.ts
+@@ -0,0 +1,2 @@
++export * as agents from "./agents";
++export * as interpretation from "./interpretation";
+diff --git a/microfyxd/core/interpretation/index.ts b/microfyxd/core/interpretation/index.ts
+new file mode 100644
+index 0000000..9e93744
+--- /dev/null
++++ b/microfyxd/core/interpretation/index.ts
+@@ -0,0 +1 @@
++export * as schema from "./schema";
+diff --git a/package.json b/package.json
+index cb24acc..ab82eaa 100644
+--- a/package.json
++++ b/package.json
+@@ -5,11 +5,13 @@
+   "type": "module",
+   "scripts": {
+     "dev": "vite --port=3000 --host=0.0.0.0",
+-    "server": "tsx server/index.ts",
++    "server": "node --import tsx server/index.ts",
+     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
+     "build": "tsc --noEmit && vite build",
+     "preview": "vite preview",
+-    "start": "tsx server/index.ts",
++    "start": "node --import tsx server/index.ts",
++    "health": "node --import tsx healthscript.ts",
++    "generate:entrypoints": "node scripts/generate-entrypoints.mjs",
+     "clean": "rm -rf dist",
+     "lint": "tsc --noEmit"
+   },
+diff --git a/render.yaml b/render.yaml
+index 0895ba4..09a3a7f 100644
+--- a/render.yaml
++++ b/render.yaml
+@@ -8,16 +8,26 @@ services:
+     envVars:
+       - key: NODE_VERSION
+         value: 22.14.0
++      - key: NODE_ENV
++        value: production
+       # Add these in the Render dashboard (Environment tab) rather than
+       # committing real values here:
+       - key: VITE_SUPABASE_URL
+         sync: false
+       - key: VITE_SUPABASE_ANON_KEY
+         sync: false
+-      - key: VITE_GROQ_API_KEY
++      - key: SUPABASE_URL
+         sync: false
+-      - key: VITE_DEEPSEEK_API_KEY
++      - key: SUPABASE_ANON_KEY
+         sync: false
+-      - key: VITE_GEMINI_API_KEY
++      - key: ADMIN_TOKEN
++        sync: false
++      - key: OPERATOR_TOKEN
++        sync: false
++      - key: SYSTEM_TOKEN
++        sync: false
++      - key: GROQ_API_KEY
++        sync: false
++      - key: CORS_ORIGINS
+         sync: false
+     healthCheckPath: /api/health
+diff --git a/scripts/generate-entrypoints.mjs b/scripts/generate-entrypoints.mjs
+new file mode 100644
+index 0000000..e8a3a54
+--- /dev/null
++++ b/scripts/generate-entrypoints.mjs
+@@ -0,0 +1,62 @@
++import { readdirSync, statSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++
++const targets = [
++  "microfixd/core",
++  "microfixd/core/agents",
++  "microfixd/core/autonomy",
++  "microfixd/core/execution",
++  "microfixd/core/federation",
++  "microfixd/core/governance",
++  "microfixd/core/interpretation",
++  "microfixd/core/memory",
++  "microfixd/core/voice",
++  "microfixd/core/wiring",
++  "microfixd/core/crossai",
++  "microfixd/core/crossai/providers",
++  "microfixd/core/episodes",
++  "microfixd/core/metacognition",
++  "microfixd/backend/core",
++  "microfixd/backend/core/agents",
++  "microfixd/backend/core/governance",
++  "microfixd/backend/core/memory",
++  "microfixd/backend/core/mission",
++  "microfixd/backend/core/telemetry",
++  "microfixd/backend/routes",
++  "microfixd/backend/routes/agents",
++  "server/crawl",
++  "server/crossai",
++  "server/evolution",
++  "server/execution",
++  "server/github",
++  "server/hitl",
++  "server/mcp",
++  "server/orchestration",
++  "server/organs",
++  "server/organs/organs",
++  "server/playwright",
++  "server/sandbox",
++  "server/security",
++  "server/skin",
++  "server/tools",
++  "microfyxd/core",
++  "microfyxd/core/agents",
++  "microfyxd/core/interpretation"
++];
++
++for (const directory of targets) {
++  const exports = readdirSync(directory)
++    .filter((entry) => entry !== "index.ts")
++    .filter((entry) => {
++      const path = join(directory, entry);
++      return (statSync(path).isFile() && entry.endsWith(".ts")) ||
++        (statSync(path).isDirectory() && readdirSync(path).some((child) => child === "index.ts" || child.endsWith(".ts")));
++    })
++    .sort()
++    .map((entry) => {
++      const moduleName = entry.replace(/\.ts$/, "");
++      const exportName = moduleName.replace(/[^a-zA-Z0-9_$]/g, "_");
++      return `export * as ${exportName} from "./${moduleName}";`;
++    });
++  writeFileSync(join(directory, "index.ts"), `${exports.join("\n")}\n`);
++}
+diff --git a/server/crawl/index.ts b/server/crawl/index.ts
+new file mode 100644
+index 0000000..f290f48
+--- /dev/null
++++ b/server/crawl/index.ts
+@@ -0,0 +1,4 @@
++export * as contentExtractor from "./contentExtractor";
++export * as crawlEngine from "./crawlEngine";
++export * as crawlQueue from "./crawlQueue";
++export * as crawlRouter from "./crawlRouter";
+diff --git a/server/crossai/crossAIRouter.ts b/server/crossai/crossAIRouter.ts
+index 7710cdc..391854a 100644
+--- a/server/crossai/crossAIRouter.ts
++++ b/server/crossai/crossAIRouter.ts
+@@ -17,9 +17,6 @@ import Anthropic  from "@anthropic-ai/sdk";
+ import OpenAI     from "openai";
+ 
+ export const crossAIRouter = Router();
+-const groq      = new Groq({ apiKey: process.env.GROQ_API_KEY ?? "" });
+-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
+-const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
+ 
+ const auditLog: unknown[] = [];
+ 
+@@ -30,12 +27,16 @@ async function callProvider(to: string, messages: {role: string; content: string
+     let model   = "";
+     switch (to) {
+       case "groq": {
++        if (!process.env.GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
++        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+         const r = await groq.chat.completions.create({ model: "llama-3.1-70b-versatile", messages: messages as Parameters<typeof groq.chat.completions.create>[0]["messages"], max_tokens: opts.max_tokens ?? 1024 });
+         content = r.choices[0]?.message?.content ?? "";
+         model   = r.model;
+         break;
+       }
+       case "claude": {
++        if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
++        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+         const userMsgs = messages.filter(m => m.role !== "system");
+         const sys      = messages.find(m => m.role === "system")?.content ?? "You are a helpful assistant.";
+         const r = await anthropic.messages.create({ model: "claude-3-5-sonnet-20241022", max_tokens: opts.max_tokens ?? 1024, system: sys, messages: userMsgs as Parameters<typeof anthropic.messages.create>[0]["messages"] });
+@@ -44,6 +45,8 @@ async function callProvider(to: string, messages: {role: string; content: string
+         break;
+       }
+       case "openai": {
++        if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
++        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+         const r = await openai.chat.completions.create({ model: "gpt-4o", messages: messages as Parameters<typeof openai.chat.completions.create>[0]["messages"], max_tokens: opts.max_tokens ?? 1024 });
+         content = r.choices[0]?.message?.content ?? "";
+         model   = r.model;
+diff --git a/server/crossai/index.ts b/server/crossai/index.ts
+new file mode 100644
+index 0000000..74d598e
+--- /dev/null
++++ b/server/crossai/index.ts
+@@ -0,0 +1 @@
++export * as crossAIRouter from "./crossAIRouter";
+diff --git a/server/evolution/index.ts b/server/evolution/index.ts
+new file mode 100644
+index 0000000..9c0b3d7
+--- /dev/null
++++ b/server/evolution/index.ts
+@@ -0,0 +1,2 @@
++export * as selfEvolvingLayer from "./selfEvolvingLayer";
++export * as selfMorphingLayer from "./selfMorphingLayer";
+diff --git a/server/execution/index.ts b/server/execution/index.ts
+new file mode 100644
+index 0000000..12c3842
+--- /dev/null
++++ b/server/execution/index.ts
+@@ -0,0 +1,3 @@
++export * as executionRouter from "./executionRouter";
++export * as executionSpine from "./executionSpine";
++export * as executionTracer from "./executionTracer";
+diff --git a/server/github/index.ts b/server/github/index.ts
+new file mode 100644
+index 0000000..5a41539
+--- /dev/null
++++ b/server/github/index.ts
+@@ -0,0 +1 @@
++export * as githubRouter from "./githubRouter";
+diff --git a/server/hitl/index.ts b/server/hitl/index.ts
+new file mode 100644
+index 0000000..202b6a8
+--- /dev/null
++++ b/server/hitl/index.ts
+@@ -0,0 +1,2 @@
++export * as hitlManager from "./hitlManager";
++export * as hitlRouter from "./hitlRouter";
+diff --git a/server/index.ts b/server/index.ts
+index 988cd3c..9bcd200 100644
+--- a/server/index.ts
++++ b/server/index.ts
+@@ -28,6 +28,10 @@ import { securityRouter }    from "./security/securityRouter";
+ import { executionRouter }   from "./execution/executionRouter";
+ import { skinRouter }        from "./skin/skinRouter";
+ import { crossAIRouter }     from "./crossai/crossAIRouter";
++import { rbacMiddleware }    from "./security/rbac";
++import { organRegistry }     from "./organs/organRegistry";
++import { getPending }        from "./hitl/hitlManager";
++import { initOrgans }        from "../microfixd/langgraph/organs";
+ 
+ const PORT   = Number(process.env.PORT) || 3001;
+ const app    = express();
+@@ -35,9 +39,53 @@ const server = http.createServer(app);
+ const wss    = new WebSocketServer({ server, path: "/ws" });
+ 
+ // ── Middleware ─────────────────────────────────────────────────────────────
+-app.use(cors({ origin: true, credentials: true }));
++const allowedOrigins = (process.env.CORS_ORIGINS ?? "")
++  .split(",")
++  .map((origin) => origin.trim())
++  .filter(Boolean);
++app.use(cors({
++  origin: allowedOrigins.length > 0 ? allowedOrigins : false,
++  credentials: allowedOrigins.length > 0,
++}));
+ app.use(express.json({ limit: "10mb" }));
+ 
++// ── Health and boot state (public, read-only) ──────────────────────────────
++const cognitiveOrgans = initOrgans();
++
++app.get("/api/health", (_, res) => {
++  res.json({
++    status: "ok",
++    version: "1.1.0",
++    ts: new Date().toISOString(),
++    services: ["playwright", "sandbox", "hitl", "github", "mcp", "organs", "command", "crawl", "tools", "security", "execution", "skin", "crossai"],
++  });
++});
++
++app.get("/api/health/deep", (_, res) => {
++  const records = organRegistry.all();
++  const configured = {
++    admin: Boolean(process.env.ADMIN_TOKEN),
++    supabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
++    llm: Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.VITE_GEMINI_API_KEY),
++  };
++  const ready = configured.admin && configured.supabase;
++  res.status(ready ? 200 : 503).json({
++    status: ready ? organRegistry.systemHealth() : "degraded",
++    ready,
++    ts: new Date().toISOString(),
++    runtime: {
++      organsInitialized: Boolean(cognitiveOrgans.paragon && cognitiveOrgans.wiring && cognitiveOrgans.memory),
++      registeredOrgans: records.length,
++      failedOrgans: records.filter((organ) => organ.status === "error").map((organ) => organ.id),
++      pendingHumanApprovals: getPending().length,
++    },
++    configured,
++  });
++});
++
++// Every operational API below this line is authenticated and role-gated.
++app.use(rbacMiddleware);
++
+ // ── REST routes ────────────────────────────────────────────────────────────
+ app.use("/api/playwright", playwrightRouter);
+ app.use("/api/sandbox",    sandboxRouter);
+@@ -53,16 +101,6 @@ app.use("/api/execution",  executionRouter);
+ app.use("/api/skin",       skinRouter);
+ app.use("/api/crossai",    crossAIRouter);
+ 
+-// ── Health check ───────────────────────────────────────────────────────────
+-app.get("/api/health", (_, res) => {
+-  res.json({
+-    status:    "ok",
+-    version:   "1.0.0",
+-    ts:        new Date().toISOString(),
+-    services:  ["playwright", "sandbox", "hitl", "github", "mcp", "organs", "command", "crawl", "tools", "security", "execution", "skin", "crossai"],
+-  });
+-});
+-
+ const distDir = path.resolve(process.cwd(), "dist");
+ app.use(express.static(distDir));
+ app.get("*", (req, res, next) => {
+diff --git a/server/mcp/index.ts b/server/mcp/index.ts
+new file mode 100644
+index 0000000..02fa3db
+--- /dev/null
++++ b/server/mcp/index.ts
+@@ -0,0 +1 @@
++export * as mcpRouter from "./mcpRouter";
+diff --git a/server/orchestration/index.ts b/server/orchestration/index.ts
+new file mode 100644
+index 0000000..fc8cefc
+--- /dev/null
++++ b/server/orchestration/index.ts
+@@ -0,0 +1,3 @@
++export * as commandCenter from "./commandCenter";
++export * as feedbackLoop from "./feedbackLoop";
++export * as orchestratorRouter from "./orchestratorRouter";
+diff --git a/server/organs/index.ts b/server/organs/index.ts
+new file mode 100644
+index 0000000..a9ae81c
+--- /dev/null
++++ b/server/organs/index.ts
+@@ -0,0 +1,4 @@
++export * as organMetrics from "./organMetrics";
++export * as organRegistry from "./organRegistry";
++export * as organRouter from "./organRouter";
++export * as organs from "./organs";
+diff --git a/server/organs/organs/index.ts b/server/organs/organs/index.ts
+new file mode 100644
+index 0000000..3c1123d
+--- /dev/null
++++ b/server/organs/organs/index.ts
+@@ -0,0 +1,10 @@
++export * as brainOrgan from "./brainOrgan";
++export * as crawlOrgan from "./crawlOrgan";
++export * as evolutionOrgan from "./evolutionOrgan";
++export * as githubOrgan from "./githubOrgan";
++export * as memoryOrgan from "./memoryOrgan";
++export * as playwrightOrgan from "./playwrightOrgan";
++export * as reflexOrgan from "./reflexOrgan";
++export * as schedulerOrgan from "./schedulerOrgan";
++export * as securityOrgan from "./securityOrgan";
++export * as voiceOrgan from "./voiceOrgan";
+diff --git a/server/playwright/browserManager.ts b/server/playwright/browserManager.ts
+index 731fb3b..0210eba 100644
+--- a/server/playwright/browserManager.ts
++++ b/server/playwright/browserManager.ts
+@@ -141,6 +141,3 @@ class BrowserManager {
+ }
+ 
+ export const browserManager = new BrowserManager();
+-
+-// Auto-start browser when server boots
+-browserManager.start().catch(console.error);
+diff --git a/server/playwright/index.ts b/server/playwright/index.ts
+new file mode 100644
+index 0000000..ad4d604
+--- /dev/null
++++ b/server/playwright/index.ts
+@@ -0,0 +1,3 @@
++export * as browserManager from "./browserManager";
++export * as playwrightRouter from "./playwrightRouter";
++export * as screenshotStream from "./screenshotStream";
+diff --git a/server/sandbox/index.ts b/server/sandbox/index.ts
+new file mode 100644
+index 0000000..e541321
+--- /dev/null
++++ b/server/sandbox/index.ts
+@@ -0,0 +1,2 @@
++export * as codeRunner from "./codeRunner";
++export * as sandboxRouter from "./sandboxRouter";
+diff --git a/server/security/index.ts b/server/security/index.ts
+new file mode 100644
+index 0000000..1e0d274
+--- /dev/null
++++ b/server/security/index.ts
+@@ -0,0 +1,6 @@
++export * as antiDrift from "./antiDrift";
++export * as antiTamper from "./antiTamper";
++export * as identityLock from "./identityLock";
++export * as rbac from "./rbac";
++export * as securityRouter from "./securityRouter";
++export * as securitySpine from "./securitySpine";
+diff --git a/server/security/rbac.ts b/server/security/rbac.ts
+index ac18f12..fc1acef 100644
+--- a/server/security/rbac.ts
++++ b/server/security/rbac.ts
+@@ -37,16 +37,16 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
+ const auditLog: { ts: string; role: Role; route: string; allowed: boolean; ip: string }[] = [];
+ 
+ function getRoleFromRequest(req: Request): Role {
+-  // Dev: X-Microfixd-Role header (remove in production)
++  // Development-only role override. Production can never trust a caller-supplied role.
+   const devRole = req.headers["x-microfixd-role"] as Role;
+-  if (devRole && devRole in ROLE_PERMISSIONS) return devRole;
++  if (process.env.NODE_ENV !== "production" && devRole && devRole in ROLE_PERMISSIONS) return devRole;
+ 
+   // Auth: Bearer token lookup (stub — replace with JWT in production)
+   const auth  = req.headers["authorization"] ?? "";
+   const token = auth.replace("Bearer ", "").trim();
+-  if (token === process.env.ADMIN_TOKEN)    return "admin";
+-  if (token === process.env.OPERATOR_TOKEN) return "operator";
+-  if (token === process.env.SYSTEM_TOKEN)   return "system";
++  if (process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN)       return "admin";
++  if (process.env.OPERATOR_TOKEN && token === process.env.OPERATOR_TOKEN) return "operator";
++  if (process.env.SYSTEM_TOKEN && token === process.env.SYSTEM_TOKEN)     return "system";
+ 
+   return "anonymous";
+ }
+diff --git a/server/skin/index.ts b/server/skin/index.ts
+new file mode 100644
+index 0000000..07622e0
+--- /dev/null
++++ b/server/skin/index.ts
+@@ -0,0 +1,4 @@
++export * as responseMesh from "./responseMesh";
++export * as sensorMesh from "./sensorMesh";
++export * as skinLayer from "./skinLayer";
++export * as skinRouter from "./skinRouter";
+diff --git a/server/tools/index.ts b/server/tools/index.ts
+new file mode 100644
+index 0000000..e014d57
+--- /dev/null
++++ b/server/tools/index.ts
+@@ -0,0 +1,3 @@
++export * as toolOrchestrator from "./toolOrchestrator";
++export * as toolRegistry from "./toolRegistry";
++export * as toolsRouter from "./toolsRouter";
+-- 
+2.51.1
+
