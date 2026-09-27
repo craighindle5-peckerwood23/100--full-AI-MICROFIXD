@@ -1,0 +1,6 @@
+{
+  "name": "Microfyxd OS",
+  "description": "Synthetic Intelligence Operating System UI",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

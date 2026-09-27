@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "deployed_at": "2026-09-12T23:47:00Z",
+  "environment": "production",
+  "artifacts": [
+    {
+      "filename": "frontend-build-v1.0.0.zip",
+      "version": "1.0.0",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "description": "Compiled static assets for the React frontend."
+    },
+    {
+      "filename": "backend-api-v1.0.0.zip",
+      "version": "1.0.0",
+      "sha256": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+      "description": "Node.js backend server source code and configuration."
+    },
+    {
+      "filename": "database-migrations-v1.0.0.zip",
+      "version": "1.0.0",
+      "sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
+      "description": "SQL migration scripts for the production database."
+    }
+  ]
+}

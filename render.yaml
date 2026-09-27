@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: microfixd-os
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      # Add these in the Render dashboard (Environment tab) rather than
+      # committing real values here:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: VITE_GROQ_API_KEY
+        sync: false
+      - key: VITE_DEEPSEEK_API_KEY
+        sync: false
+      - key: VITE_GEMINI_API_KEY
+        sync: false
+    healthCheckPath: /api/health

@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MICROFIXED v2.5 ENTERPRISE</title>
+  <style>
+    :root {
+      --bg: #05070b;
+      --bg-deep: #020308;
+      --panel-bg: #0b1018;
+      --accent: #4fd1ff;
+      --accent-soft: #2b8fb8;
+      --accent-strong: #00f5ff;
+      --text-main: #e8f4ff;
+      --text-muted: #7f9bb5;
+      --ok: #4fff9a;
+      --warn: #ffc94f;
+      --danger: #ff4f6b;
+      --border-soft: #1b2635;
+      --font-main: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background:
+        radial-gradient(circle at top, #111827 0, #05070b 55%, #020308 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 16px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    /* TOP: ACTIVATION STRIP */
+
+    .activation-strip {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    @media (max-width: 1200px) {
+      .activation-strip {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 800px) {
+      .activation-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .stage-card {
+      background: radial-gradient(circle at top left, #111827 0, #05070b 55%, #020308 100%);
+      border-radius: 10px;
+      border: 1px solid var(--border-soft);
+      padding: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stage-card::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background:
+        radial-gradient(circle at top, rgba(79, 209, 255, 0.12), transparent 60%);
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .stage-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .stage-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .stage-header span.label {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .stage-body {
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text-main);
+    }
+
+    .stage-status {
+      margin-top: 6px;
+      font-size: 10px;
+      color: var(--ok);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .stage-wireframe,
+    .stage-head,
+    .stage-full-interface-visual {
+      height: 70px;
+      margin-top: 6px;
+      border-radius: 8px;
+      border: 1px dashed var(--accent-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent-soft);
+    }
+
+    .stage-wireframe {
+      background:
+        radial-gradient(circle, rgba(79, 209, 255, 0.12), transparent 60%);
+    }
+
+    .stage-head {
+      border-style: solid;
+      background:
+        radial-gradient(circle, rgba(79, 255, 154, 0.12), transparent 60%);
+      color: var(--accent);
+    }
+
+    .stage-full-interface-visual {
+      border-style: solid;
+      background:
+        radial-gradient(circle at center, rgba(79, 209, 255, 0.18), transparent 70%);
+      color: var(--accent-strong);
+    }
+
+    .stage-greeting-text {
+      font-size: 11px;
+      margin-top: 4px;
+      color: var(--text-main);
+    }
+
+    .stage-greeting-text span.ai-name {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .stage-interaction-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .pill {
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--accent-soft);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      cursor: pointer;
+      background: transparent;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+    }
+
+    .pill:hover {
+      background: var(--accent);
+      color: var(--bg-deep);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    /* BOTTOM: DASHBOARD */
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: 2.2fr 1.8fr;
+      gap: 16px;
+      min-height: 380px;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: radial-gradient(circle at top left, #111827 0, #05070b 55%, #020308 100%);
+      border-radius: 12px;
+      border: 1px solid var(--border-soft);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background:
+        radial-gradient(circle at top, rgba(79, 209, 255, 0.12), transparent 60%);
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .panel-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .brand {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .nav-tab {
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #111827;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .nav-tab.active {
+      background: var(--accent);
+      color: var(--bg-deep);
+      border-color: var(--accent);
+    }
+
+    .boot-log {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .boot-log span {
+      color: var(--accent);
+    }
+
+    .panel-body {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      font-size: 11px;
+    }
+
+    @media (max-width: 720px) {
+      .panel-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .metric-block {
+      background: #05070b;
+      border-radius: 8px;
+      border: 1px solid #111827;
+      padding: 8px;
+    }
+
+    .metric-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 3px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      color: var(--text-main);
+    }
+
+    .metric-value {
+      font-size: 11px;
+      color: var(--accent);
+    }
+
+    .metric-bar {
+      margin-top: 3px;
+      height: 4px;
+      border-radius: 999px;
+      background: #111827;
+      overflow: hidden;
+    }
+
+    .metric-bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--ok));
+      width: 0%;
+      transition: width 0.6s ease-out;
+    }
+
+    .mission-progress {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-main);
+    }
+
+    .mission-progress span {
+      color: var(--ok);
+      font-weight: 600;
+    }
+
+    .brain-diagram {
+      height: 80px;
+      border-radius: 8px;
+      border: 1px dashed var(--accent-soft);
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent-soft);
+      background:
+        radial-gradient(circle, rgba(79, 209, 255, 0.08), transparent 60%);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px solid #111827;
+      padding-bottom: 6px;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+    }
+
+    .panel-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .agents-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .agent-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .agent-name {
+      color: var(--text-main);
+    }
+
+    .agent-status {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ok);
+    }
+
+    .env-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      margin-bottom: 3px;
+    }
+
+    .env-status {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ok);
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #111827;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ok);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--ok);
+      box-shadow: 0 0 6px rgba(79, 255, 154, 0.8);
+    }
+
+    /* STAGE HIGHLIGHT */
+
+    .stage-card.active {
+      box-shadow: 0 0 16px rgba(79, 209, 255, 0.7);
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- TOP: ACTIVATION STAGES -->
+    <div class="activation-strip">
+      <!-- 1. Boot Sequence -->
+      <div class="stage-card" data-stage="boot">
+        <div class="stage-inner">
+          <div class="stage-header">
+            <span class="label">Boot Sequence</span>
+            <span>System initializing</span>
+          </div>
+          <div class="stage-body">
+            Loading Neural Architecture…<br />
+            Bringing Memory Tasks online…<br />
+            Linking Agents, Workspace, and Telemetry…
+            <div class="stage-status">STATUS: NOMINAL</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Emergence -->
+      <div class="stage-card" data-stage="emergence">
+        <div class="stage-inner">
+          <div class="stage-header">
+            <span class="label">Emergence</span>
+            <span>AI takes shape</span>
+          </div>
+          <div class="stage-body">
+            Constructing cognitive mesh…<br />
+            Activating perception nodes…<br />
+            Binding mission core to agents…
+            <div class="stage-wireframe">Glowing Wireframe Head Forming</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Awareness -->
+      <div class="stage-card" data-stage="awareness">
+        <div class="stage-inner">
+          <div class="stage-header">
+            <span class="label">Awareness</span>
+            <span>System online</span>
+          </div>
+          <div class="stage-body">
+            Conscious loop engaged…<br />
+            Telemetry linked to intelligence core…<br />
+            Threat grid synchronized with mission state…
+            <div class="stage-head">Fully Formed Digital Head</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Greeting -->
+      <div class="stage-card" data-stage="greeting">
+        <div class="stage-inner">
+          <div class="stage-header">
+            <span class="label">Greeting</span>
+            <span>AI introduces itself</span>
+          </div>
+          <div class="stage-body">
+            <div class="stage-greeting-text">
+              Good Morning, I am <span class="ai-name">Microfixed</span>.<br />
+              All systems operational.<br />
+              17 tasks completed overnight.<br />
+              How may I assist you today?
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Interaction -->
+      <div class="stage-card" data-stage="interaction">
+        <div class="stage-inner">
+          <div class="stage-header">
+            <span class="label">Interaction</span>
+            <span>Awaits user command</span>
+          </div>
+          <div class="stage-body">
+            I am listening.<br />
+            What would you like to accomplish?
+            <div class="stage-interaction-options">
+              <button class="pill" data-action="optimize">Optimize</button>
+              <button class="pill" data-action="build">Build</button>
+              <button class="pill" data-action="analyze">Analyze</button>
+              <button class="pill" data-action="automate">Automate</button>
+              <button class="pill" data-action="deploy">Deploy</button>
+              <button class="pill" data-action="research">Research</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Full Interface -->
+      <div class="stage-card" data-stage="interface">
+        <div class="stage-inner">
+          <div class="stage-header">
+            <span class="label">Full Interface</span>
+            <span>System ready</span>
+          </div>
+          <div class="stage-body">
+            <div class="stage-full-interface-visual">
+              AI Head + Holographic Panels Active
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM: MICROFIXED v2.5 ENTERPRISE DASHBOARD -->
+    <div class="dashboard">
+      <!-- LEFT PANEL: Mission / AI / Insights -->
+      <div class="panel">
+        <div class="panel-inner">
+          <div class="top-bar">
+            <div class="brand">MICROFIXED v2.5 ENTERPRISE</div>
+            <div class="nav-tabs">
+              <div class="nav-tab active">Mission</div>
+              <div class="nav-tab">AI</div>
+              <div class="nav-tab">Agents</div>
+              <div class="nav-tab">Workspace</div>
+              <div class="nav-tab">System</div>
+            </div>
+          </div>
+
+          <div class="boot-log">
+            Boot Log: <span>Neural Processing</span> online · Memory tasks linked · Threat detection armed · Data sync grid ready.
+          </div>
+
+          <div class="panel-body">
+            <!-- Active Operations -->
+            <div class="metric-block">
+              <div class="metric-title">Active Operations</div>
+
+              <div class="metric-row">
+                <span class="metric-label">Neural Processing</span>
+                <span class="metric-value" data-metric="neural">98%</span>
+              </div>
+              <div class="metric-bar">
+                <div class="metric-bar-fill" data-bar="neural"></div>
+              </div>
+
+              <div class="metric-row">
+                <span class="metric-label">Memory Optimization</span>
+                <span class="metric-value" data-metric="memory">76%</span>
+              </div>
+              <div class="metric-bar">
+                <div class="metric-bar-fill" data-bar="memory"></div>
+              </div>
+
+              <div class="metric-row">
+                <span class="metric-label">Threat Detection</span>
+                <span class="metric-value" data-metric="threat">100%</span>
+              </div>
+              <div class="metric-bar">
+                <div class="metric-bar-fill" data-bar="threat"></div>
+              </div>
+
+              <div class="metric-row">
+                <span class="metric-label">Data Synchronization</span>
+                <span class="metric-value" data-metric="sync">82%</span>
+              </div>
+              <div class="metric-bar">
+                <div class="metric-bar-fill" data-bar="sync"></div>
+              </div>
+
+              <div class="metric-row">
+                <span class="metric-label">Autonomous Tasks</span>
+                <span class="metric-value">17 Running</span>
+              </div>
+            </div>
+
+            <!-- AI Insights + Mission Control + Intelligence Core -->
+            <div class="metric-block">
+              <div class="metric-title">AI Insights</div>
+              <ul style="list-style:none; padding-left:0; font-size:11px; color:var(--text-main);">
+                <li>• Pattern recognition optimized</li>
+                <li>• Workflow efficiency increased</li>
+                <li>• Resource allocation balanced</li>
+                <li>• Security protocols updated</li>
+              </ul>
+
+              <div class="mission-progress">
+                Mission Control: <span>92% On Track</span>
+              </div>
+
+              <div class="brain-diagram">
+                Cognitive Functions Active · Knowledge Base · Learning Rate
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL: Telemetry / Agents / Workspace / System -->
+      <div class="panel">
+        <div class="panel-inner">
+          <div class="panel-header">
+            <div class="panel-title">System Telemetry</div>
+            <div class="panel-subtitle">Live metrics · Infrastructure health</div>
+          </div>
+
+          <div class="panel-body">
+            <!-- Core Telemetry -->
+            <div class="metric-block">
+              <div class="metric-title">Core Telemetry</div>
+
+              <div class="metric-row">
+                <span class="metric-label">CPU Usage</span>
+                <span class="metric-value" data-metric="cpu">32%</span>
+              </div>
+              <div class="metric-bar">
+                <div class="metric-bar-fill" data-bar="cpu"></div>
+              </div>
+
+              <div class="metric-row">
+                <span class="metric-label">Memory</span>
+                <span class="metric-value" data-metric="ram">41%</span>
+              </div>
+              <div class="metric-bar">
+                <div class="metric-bar-fill" data-bar="ram"></div>
+              </div>
+
+              <div class="metric-row">
+                <span class="metric-label">GPU Load</span>
+                <span class="metric-value" data-metric="gpu">28%</span>
+              </div>
+              <div class="metric-bar">
+                <div class="metric-bar-fill" data-bar="gpu"></div>
+              </div>
+
+              <div class="metric-row">
+                <span class="metric-label">Network</span>
+                <span class="metric-value">3.2 GB/s</span>
+              </div>
+            </div>
+
+            <!-- Agents / Workspace / System Infrastructure -->
+            <div class="metric-block">
+              <div class="metric-title">Agents Management</div>
+              <div class="agents-list">
+                <div class="agent-row">
+                  <span class="agent-name">Watching Agent</span>
+                  <span class="agent-status">Active</span>
+                </div>
+                <div class="agent-row">
+                  <span class="agent-name">Repair Agent</span>
+                  <span class="agent-status">Active</span>
+                </div>
+                <div class="agent-row">
+                  <span class="agent-name">Security Agent</span>
+                  <span class="agent-status">Active</span>
+                </div>
+                <div class="agent-row">
+                  <span class="agent-name">Optimization Agent</span>
+                  <span class="agent-status">Active</span>
+                </div>
+                <div class="agent-row">
+                  <span class="agent-name">Synchronization Agent</span>
+                  <span class="agent-status">Active</span>
+                </div>
+              </div>
+
+              <div class="metric-title" style="margin-top:8px;">Workspace / Sandbox</div>
+              <div class="env-row">
+                <span>Testing</span>
+                <span class="env-status">Running</span>
+              </div>
+              <div class="env-row">
+                <span>Staging</span>
+                <span class="env-status">Running</span>
+              </div>
+              <div class="env-row">
+                <span>Production</span>
+                <span class="env-status">Running</span>
+              </div>
+
+              <div class="metric-title" style="margin-top:8px;">System Infrastructure</div>
+              <div style="font-size:11px; color:var(--text-main);">
+                Compute Systems:
+                <span class="status-chip"><span class="status-dot"></span>Healthy</span><br />
+                Memory Systems:
+                <span class="status-chip"><span class="status-dot"></span>Healthy</span><br />
+                Storage Systems:
+                <span class="status-chip"><span class="status-dot"></span>Healthy</span><br />
+                Network Systems:
+                <span class="status-chip"><span class="status-dot"></span>Healthy</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Animate metric bars based on text values
+    function initBars() {
+      const keys = ["neural", "memory", "threat", "sync", "cpu", "ram", "gpu"];
+      keys.forEach((key) => {
+        const valueEl = document.querySelector(`[data-metric="${key}"]`);
+        const barEl = document.querySelector(`[data-bar="${key}"]`);
+        if (!valueEl || !barEl) return;
+        const text = valueEl.textContent.trim();
+        const num = parseFloat(text);
+        if (!isNaN(num)) {
+          requestAnimationFrame(() => {
+            barEl.style.width = Math.min(num, 100) + "%";
+          });
+        }
+      });
+    }
+
+    // Interaction pills: dispatch to Microfixd agent backend
+    function initActions() {
+      document.querySelectorAll(".pill").forEach((pill) => {
+        pill.addEventListener("click", async () => {
+          const action = pill.dataset.action;
+          const originalText = pill.textContent;
+          pill.textContent = "Dispatching...";
+          pill.style.opacity = "0.7";
+          console.log("[Microfixed] User selected action:", action);
+
+          try {
+            const res = await fetch("/api/agents/dispatch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action })
+            });
+            const data = await res.json();
+            console.log("[Microfixed] Agent dispatch result:", data);
+            
+            const messageEl = document.querySelector(".ai-message");
+            if (messageEl && data.status === "ok") {
+              messageEl.innerHTML = `<strong>[${data.agent}]</strong>: ${data.result?.summary || 'Task completed successfully.'} <span style="font-size:11px; color:var(--text-muted); display:block; margin-top:4px;">Action: ${data.action.toUpperCase()} | Mission: Nominal</span>`;
+            }
+          } catch (err) {
+            console.error("Agent dispatch network error:", err);
+          } finally {
+            pill.textContent = originalText;
+            pill.style.opacity = "1";
+          }
+        });
+      });
+    }
+
+    // Stage progression highlight
+    function initStages() {
+      const stages = Array.from(document.querySelectorAll(".stage-card"));
+      let idx = 0;
+      function highlightNext() {
+        stages.forEach((s) => s.classList.remove("active"));
+        const current = stages[idx % stages.length];
+        current.classList.add("active");
+        idx++;
+      }
+      highlightNext();
+      setInterval(highlightNext, 2500);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      initBars();
+      initActions();
+      initStages();
+    });
+  </script>
+</body>
+</html>
