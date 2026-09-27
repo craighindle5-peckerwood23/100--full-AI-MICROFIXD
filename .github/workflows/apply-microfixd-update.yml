@@ -3,7 +3,7 @@ name: Apply verified Microfixd update
 on:
   push:
     branches: [main]
-    paths: [microfixd-update.patch]
+    paths: [microfixd-update.txt]
 
 permissions:
   contents: write
@@ -19,8 +19,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git am microfixd-update.patch
-          rm microfixd-update.patch .github/workflows/apply-microfixd-update.yml
+          git am microfixd-update.txt
+          rm microfixd-update.txt .github/workflows/apply-microfixd-update.yml
           git add -A
           git commit -m "Remove one-time update installer"
           git push origin HEAD:main
