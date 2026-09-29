@@ -13,6 +13,7 @@ import express       from "express";
 import cors          from "cors";
 import http          from "http";
 import path          from "path";
+import { readFileSync } from "fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { playwrightRouter }  from "./playwright/playwrightRouter";
 import { sandboxRouter }     from "./sandbox/sandboxRouter";
@@ -82,6 +83,19 @@ app.get("/api/health/deep", (_, res) => {
     },
     configured,
   });
+});
+
+
+// ── MCP manifest (public, read-only) ───────────────────────────────────────
+app.get("/api/mcp/manifest", (_, res) => {
+  try {
+    const manifest = JSON.parse(
+      readFileSync(path.resolve(process.cwd(), process.env.MCP_MANIFEST_PATH ?? "mcp-manifest.json"), "utf-8")
+    );
+    res.json(manifest);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to read MCP manifest: " + String(err) });
+  }
 });
 
 // Every operational API below this line is authenticated and role-gated.
