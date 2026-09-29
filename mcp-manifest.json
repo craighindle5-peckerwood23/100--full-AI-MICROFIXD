@@ -1,0 +1,13 @@
+{
+  "name": "Microfixd",
+  "description": "Governed autonomy runtime with Paragon, HITL, sandbox, memory, and multi-agent orchestration.",
+  "permissions": {
+    "health": "read",
+    "ready": "read",
+    "login": "execute",
+    "registry": "read",
+    "sandbox": "execute",
+    "deploy": "execute",
+    "migrations": "execute"
+  }
+}
