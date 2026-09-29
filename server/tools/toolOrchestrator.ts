@@ -35,7 +35,7 @@ const ORGAN_EXECUTORS: Record<string, (action: string, payload: unknown) => Prom
   reflex:           executeReflexOrgan,
   sandbox: async (action, payload) => {
     const p = payload as Record<string, unknown>;
-    const resp = await fetch("http://localhost:3001/api/sandbox/run", {
+    const resp = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/sandbox/run`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: p.code, lang: p.lang, session_id: "tool_orchestrator" }),
     });

@@ -109,7 +109,7 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
   // 2. Reflex check
   executionTracer.addStep(traceId, "reflex", "running");
   try {
-    const reflexResp = await fetch("http://localhost:3001/api/organs/reflex/execute", {
+    const reflexResp = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/organs/reflex/execute`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "match", payload: { text: sanitizedTask } }),
     });
@@ -148,7 +148,7 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
     try {
       executionTracer.addStep(traceId, organId, "running");
       const resp = await withRetry(() =>
-        fetch(`http://localhost:3001/api/organs/${organId}/execute`, {
+        fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/organs/${organId}/execute`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ action: "complete", payload: { task: sanitizedTask } }),

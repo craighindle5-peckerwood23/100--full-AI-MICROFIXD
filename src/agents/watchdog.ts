@@ -59,20 +59,12 @@ class Watchdog {
     // Broadcast system summary to server
     const summary = agentRegistry.getSystemSummary();
     if (summary.stalled > 0 || summary.error > 2) {
-      fetch("http://localhost:3001/api/hitl/trigger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          session_id: "watchdog",
-          artifact: {
-            name:     `System degraded: ${summary.stalled} stalled, ${summary.error} errored`,
-            type:     "watchdog_alert",
-            severity: summary.stalled > 0 ? "critical" : "major",
-            summary,
-          },
-          trigger: "watchdog_alert",
-        }),
-      }).catch(() => {});
+      HITL.trigger("watchdog", {
+        name: `System degraded: ${summary.stalled} stalled, ${summary.error} errored`,
+        type: "watchdog_alert",
+        severity: summary.stalled > 0 ? "critical" : "major",
+        summary,
+      }, "watchdog_alert").catch(() => {});
     }
   }
 

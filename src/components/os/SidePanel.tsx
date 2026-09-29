@@ -8,6 +8,7 @@ import {
   GitBranch, Zap, Brain, FlaskConical, BookOpen,
   BarChart2, Settings, ChevronRight
 } from "lucide-react";
+import { ServerHealth } from "../../lib/serverApi";
 import type { RoomId } from "./MicrofixdOS";
 
 const NAV_ITEMS: { id: RoomId; label: string; icon: React.ReactNode }[] = [
@@ -42,10 +43,8 @@ export default function SidePanel({ activeRoom, onRoomChange }: SidePanelProps) 
   useEffect(() => {
     const poll = async () => {
       try {
-        const resp = await fetch("http://localhost:3001/api/health");
-        if (resp.ok) {
-          setOrganStatus(s => ({ ...s, server: "active" }));
-        }
+        const health = await ServerHealth.check();
+        setOrganStatus(s => ({ ...s, server: health.status === "ok" ? "active" : "error" }));
       } catch {
         setOrganStatus(s => ({ ...s, server: "error" }));
       }

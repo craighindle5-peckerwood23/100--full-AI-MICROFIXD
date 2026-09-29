@@ -71,7 +71,7 @@ class SkinLayer {
     }
 
     // Route to execution spine for full processing
-    const result = await fetch("http://localhost:3001/api/execution/run", {
+    const result = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/execution/run`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ task: typeof payload === "string" ? payload : JSON.stringify(payload), session_id: sid, source: type }),

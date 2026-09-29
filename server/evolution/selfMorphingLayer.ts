@@ -51,7 +51,7 @@ export async function morphOrgan(
   };
 
   // All morphs need HITL
-  await fetch("http://localhost:3001/api/hitl/trigger", {
+  await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/hitl/trigger`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({

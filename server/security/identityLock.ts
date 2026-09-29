@@ -74,7 +74,7 @@ export function checkIdentityDrift(text: string): DriftCheckResult {
     broadcast("security:identity_drift", { drifts, severity, ts: new Date().toISOString() });
     console.error(`[identity_lock] CRITICAL DRIFT DETECTED: ${drifts.join(" | ")}`);
     // Trigger HITL
-    fetch("http://localhost:3001/api/hitl/trigger", {
+    fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/hitl/trigger`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

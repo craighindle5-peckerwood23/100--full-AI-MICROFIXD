@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion } from "motion/react";
 import { Search, Brain, Globe, FlaskConical, BookOpen, BarChart2, Zap, Settings, Terminal } from "lucide-react";
+import { ServerHealth, Playwright } from "../../lib/serverApi";
 import type { RoomId } from "./MicrofixdOS";
 
 interface Command {
@@ -35,8 +36,8 @@ export default function CommandPalette({ onClose, onRoomChange }: CommandPalette
     { id: "room-analytics",  label: "Open Analytics",       group: "Rooms",   icon: <BarChart2 size={13} />,   action: () => { onRoomChange("analytics");  onClose(); } },
     { id: "room-overwatch",  label: "Open Overwatch",       group: "Rooms",   icon: <Zap size={13} />,         action: () => { onRoomChange("overwatch");  onClose(); } },
     { id: "room-settings",   label: "Open Settings",        group: "Rooms",   icon: <Settings size={13} />,    action: () => { onRoomChange("settings");   onClose(); } },
-    { id: "cmd-screenshot",  label: "Take Browser Screenshot", group: "Playwright", icon: <Globe size={13} />, action: () => { fetch("http://localhost:3001/api/playwright/screenshot"); onClose(); } },
-    { id: "cmd-server",      label: "Check Server Health",  group: "System",  icon: <Terminal size={13} />,    action: () => { fetch("http://localhost:3001/api/health"); onClose(); } },
+    { id: "cmd-screenshot",  label: "Take Browser Screenshot", group: "Playwright", icon: <Globe size={13} />, action: () => { Playwright.screenshot(); onClose(); } },
+    { id: "cmd-server",      label: "Check Server Health",  group: "System",  icon: <Terminal size={13} />,    action: () => { ServerHealth.check(); onClose(); } },
   ];
 
   const filtered = query

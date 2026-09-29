@@ -81,7 +81,7 @@ Output JSON only: {
   // Auto-escalate high priority to HITL
   if (proposal.priority === "high") {
     proposal.status = "pending_hitl";
-    await fetch("http://localhost:3001/api/hitl/trigger", {
+    await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/hitl/trigger`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
@@ -103,7 +103,7 @@ export async function applyProposal(id: string, repo: string, branch: string): P
   if (!proposal.new_content) throw new Error("No content to apply");
 
   // Push via GitHub organ
-  const resp = await fetch("http://localhost:3001/api/organs/github_connector/execute", {
+  const resp = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/organs/github_connector/execute`, {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({

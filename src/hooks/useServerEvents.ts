@@ -1,6 +1,6 @@
 /**
  * src/hooks/useServerEvents.ts
- * WebSocket hook — connects to backend ws://localhost:3001/ws
+ * WebSocket hook — connects to the page host, using WSS on HTTPS
  * Delivers live events: playwright screenshots, sandbox results,
  * HITL triggers, metacognitive overwatch alerts.
  */
@@ -24,9 +24,13 @@ export function useServerEvents(onEvent?: Handler) {
     if (onEvent) handlersRef.current = [onEvent];
   }, [onEvent]);
 
+  const stopped = useRef(false);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const connect = useCallback(() => {
+    if (stopped.current) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
-    const ws = new WebSocket("ws://localhost:3001/ws");
+    const ws = new WebSocket(`${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -45,7 +49,7 @@ export function useServerEvents(onEvent?: Handler) {
     ws.onclose = () => {
       setConnected(false);
       // Reconnect after 3s
-      setTimeout(connect, 3000);
+      if (!stopped.current) reconnectTimer.current = setTimeout(connect, 3000);
     };
 
     ws.onerror = () => {
@@ -54,8 +58,14 @@ export function useServerEvents(onEvent?: Handler) {
   }, []);
 
   useEffect(() => {
+    stopped.current = false;
     connect();
-    return () => { wsRef.current?.close(); };
+    return () => {
+      stopped.current = true;
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+      wsRef.current = null;
+    };
   }, [connect]);
 
   const send = useCallback((type: string, payload?: unknown) => {
