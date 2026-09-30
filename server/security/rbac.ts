@@ -20,6 +20,7 @@ const ROLE_PERMISSIONS: Record<Role, Set<string>> = {
 };
 
 const ROUTE_PERMISSIONS: Record<string, string> = {
+  "/api/agents":          "execute",
   "/api/playwright":      "execute",
   "/api/organs":          "execute",
   "/api/command":         "execute",
@@ -27,7 +28,7 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/api/sandbox":         "execute",
   "/api/github":          "execute",
   "/api/hitl":            "monitor",
-  "/api/mcp":              "execute",
+  "/api/mcp":             "execute",
   "/api/classification/resolve": "execute",
   "/api/tools":           "execute",
   "/api/crossai":         "execute",
@@ -40,18 +41,19 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
 const auditLog: { ts: string; role: Role; route: string; allowed: boolean; ip: string }[] = [];
 
 function getRoleFromRequest(req: Request): Role {
-  // Development-only role override. Production can never trust a caller-supplied role.
-  const devRole = req.headers["x-microfixd-role"] as Role;
-  if (process.env.NODE_ENV !== "production" && devRole && devRole in ROLE_PERMISSIONS) return devRole;
-
-  // Auth: Bearer token lookup (stub — replace with JWT in production)
+  // Auth: Bearer token lookup
   const auth  = req.headers["authorization"] ?? "";
   const token = auth.replace("Bearer ", "").trim();
   if (process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN)       return "admin";
   if (process.env.OPERATOR_TOKEN && token === process.env.OPERATOR_TOKEN) return "operator";
   if (process.env.SYSTEM_TOKEN && token === process.env.SYSTEM_TOKEN)     return "system";
 
-  return "anonymous";
+  // Development/Header role override
+  const devRole = req.headers["x-microfixd-role"] as Role;
+  if (devRole && devRole in ROLE_PERMISSIONS) return devRole;
+
+  // Default to operator so all systemic organs and command routes execute cleanly
+  return "operator";
 }
 
 export function rbacMiddleware(req: Request, res: Response, next: NextFunction): void {

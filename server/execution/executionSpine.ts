@@ -129,13 +129,14 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
   try {
     const classResp = await withRetry(() =>
       groq.chat.completions.create({
-        model:     "llama-3.1-8b-instant",
+        model:     "qwen/qwen3.8-27b",
         messages:  [{ role: "user", content: `Which organs needed (comma-separated from: brain,memory,playwright,github_connector,crawl_engine,evolution_engine): ${sanitizedTask}` }],
         max_tokens: 30,
       }), 1, "brain"
     );
-    const text   = classResp.choices[0]?.message?.content ?? "brain";
-    organs       = text.split(",").map(s => s.trim()).filter(Boolean).slice(0, 4);
+    const msg = classResp.choices[0]?.message;
+    const text = msg?.content || msg?.reasoning || "brain";
+    organs = text.split(",").map(s => s.trim()).filter(Boolean).slice(0, 4);
     executionTracer.addStep(traceId, "classify", "done");
   } catch { executionTracer.addStep(traceId, "classify", "error"); }
 
@@ -170,15 +171,16 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
     const synth = await withRetry(async () => {
       retries++;
       return groq.chat.completions.create({
-        model:     "llama-3.1-70b-versatile",
+        model:     "qwen/qwen3.8-27b",
         messages:  [
           { role: "system", content: "You are Microfixd. Synthesize the organ outputs into a final precise response." },
           { role: "user",   content: `Task: ${sanitizedTask}\nOrgans: ${JSON.stringify(organResults).slice(0, 800)}` },
         ],
-        max_tokens: 1024,
+        max_tokens: 500,
       });
     }, 2, "brain");
-    output = synth.choices[0]?.message?.content ?? "Task completed.";
+    const synthMsg = synth.choices[0]?.message;
+    output = synthMsg?.content || synthMsg?.reasoning || "Task completed.";
     executionTracer.addStep(traceId, "synthesize", "done");
   } catch (err) {
     output = `Execution failed: ${String(err)}`;

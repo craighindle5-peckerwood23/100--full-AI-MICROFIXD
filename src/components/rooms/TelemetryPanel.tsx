@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { SystemMetrics } from '../../types';
-import { Activity, Download, Filter, Radio, ShieldCheck } from 'lucide-react';
+import { Activity, Download, Filter, Radio, ShieldCheck, BarChart3, List } from 'lucide-react';
 import { sound } from '../../utils/audio';
+import SystemLoadDashboard from '../telemetry/SystemLoadDashboard';
 
 export default function TelemetryPanel() {
+  const [viewMode, setViewMode] = useState<'dashboard' | 'logs'>('dashboard');
   const [metrics, setMetrics] = useState<SystemMetrics>({
     cpu: 18,
     memory: 42,
@@ -55,64 +57,98 @@ export default function TelemetryPanel() {
     : events.filter(e => e.src.includes(filter));
 
   return (
-    <div className="h-full flex flex-col gap-4 font-mono text-cyan-400">
+    <div className="h-full flex flex-col gap-4 font-mono text-cyan-400 overflow-y-auto pr-1">
       {/* Top Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-3 shrink-0">
         <div className="flex items-center gap-3">
           <Activity className="text-cyan-400" size={20} />
-          <span className="text-sm font-semibold tracking-wider text-white">TELEMETRY & OBSERVABILITY // CHAPTER 9 & 18</span>
+          <span className="text-sm font-semibold tracking-wider text-white">TELEMETRY & OBSERVABILITY // RECHARTS LIVE DASHBOARD</span>
           <span className="px-2 py-0.5 text-[10px] bg-cyan-950/80 border border-cyan-500/40 rounded text-cyan-300">
-            HIGH-RESOLUTION SAMPLING (100Hz)
+            HIGH-RESOLUTION 100Hz SAMPLING
           </span>
         </div>
+
         <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-black/60 border border-cyan-500/30 rounded-lg p-0.5 text-xs">
+            <button
+              onClick={() => setViewMode('dashboard')}
+              className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-all ${
+                viewMode === 'dashboard'
+                  ? 'bg-cyan-500/20 border border-cyan-400 text-white font-bold'
+                  : 'text-cyan-500/60 hover:text-cyan-200'
+              }`}
+            >
+              <BarChart3 size={13} />
+              Metrics Charts
+            </button>
+
+            <button
+              onClick={() => setViewMode('logs')}
+              className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-all ${
+                viewMode === 'logs'
+                  ? 'bg-cyan-500/20 border border-cyan-400 text-white font-bold'
+                  : 'text-cyan-500/60 hover:text-cyan-200'
+              }`}
+            >
+              <List size={13} />
+              Raw Event Feed
+            </button>
+          </div>
+
           <button
             onClick={handleExport}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-400 text-xs text-white shadow-[0_0_15px_rgba(6,182,212,0.2)]"
           >
-            <Download size={13} /> Export Snapshot
+            <Download size={13} /> Export
           </button>
         </div>
       </div>
 
-      {/* Primary Metrics Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        <MetricCard title="CPU Mesh" value={metrics.cpu} unit="%" />
-        <MetricCard title="HBM3e Memory" value={metrics.memory} unit="%" />
-        <MetricCard title="H100 GPU" value={metrics.gpu} unit="%" />
-        <MetricCard title="Interconnect" value={metrics.network} unit=" MB/s" isGauge={false} />
-        <MetricCard title="Tokens / Sec" value={metrics.tokensPerSec || 184} unit=" t/s" isGauge={false} />
-        <MetricCard title="Q-Coherence" value={metrics.quantumCoherence || 99.4} unit="%" />
-      </div>
-
-      {/* Live Event Stream Panel */}
-      <div className="flex-1 flex flex-col border border-cyan-500/30 rounded-2xl bg-black/60 p-4 min-h-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3 border-b border-cyan-500/15 pb-2">
-          <div className="flex items-center gap-2 text-xs text-white font-semibold uppercase tracking-wider">
-            <Radio size={14} className="text-cyan-400 animate-pulse" />
-            <span>REAL-TIME OBSERVABILITY EVENT FEED</span>
+      {viewMode === 'dashboard' ? (
+        <SystemLoadDashboard />
+      ) : (
+        <>
+          {/* Primary Metrics Strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <MetricCard title="CPU Mesh" value={metrics.cpu} unit="%" />
+            <MetricCard title="HBM3e Memory" value={metrics.memory} unit="%" />
+            <MetricCard title="H100 GPU" value={metrics.gpu} unit="%" />
+            <MetricCard title="Interconnect" value={metrics.network} unit=" MB/s" isGauge={false} />
+            <MetricCard title="Tokens / Sec" value={metrics.tokensPerSec || 184} unit=" t/s" isGauge={false} />
+            <MetricCard title="Q-Coherence" value={metrics.quantumCoherence || 99.4} unit="%" />
           </div>
 
-          <div className="flex items-center gap-1 text-[10px]">
-            <Filter size={12} className="text-cyan-500/50" />
-            {['ALL', 'SYS.CORE', 'AGENT', 'SEC.KERNEL', 'INFRA'].map(f => (
-              <button
-                key={f}
-                onClick={() => { sound.playTick(); setFilter(f); }}
-                className={`px-2 py-0.5 rounded transition-all border ${filter === f ? 'bg-cyan-500/20 border-cyan-400 text-white' : 'border-cyan-500/15 text-cyan-500/60 hover:text-white'}`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
+          {/* Live Event Stream Panel */}
+          <div className="flex-1 flex flex-col border border-cyan-500/30 rounded-2xl bg-black/60 p-4 min-h-[350px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3 border-b border-cyan-500/15 pb-2">
+              <div className="flex items-center gap-2 text-xs text-white font-semibold uppercase tracking-wider">
+                <Radio size={14} className="text-cyan-400 animate-pulse" />
+                <span>REAL-TIME OBSERVABILITY EVENT FEED</span>
+              </div>
 
-        <div className="overflow-y-auto space-y-2 font-mono text-xs flex-1 pr-1">
-          {filteredEvents.map((evt, i) => (
-            <EventRow key={i} time={evt.time} src={evt.src} msg={evt.msg} type={evt.type} />
-          ))}
-        </div>
-      </div>
+              <div className="flex items-center gap-1 text-[10px]">
+                <Filter size={12} className="text-cyan-500/50" />
+                {['ALL', 'SYS.CORE', 'AGENT', 'SEC.KERNEL', 'INFRA'].map(f => (
+                  <button
+                    key={f}
+                    onClick={() => { sound.playTick(); setFilter(f); }}
+                    className={`px-2 py-0.5 rounded transition-all border ${filter === f ? 'bg-cyan-500/20 border-cyan-400 text-white' : 'border-cyan-500/15 text-cyan-500/60 hover:text-white'}`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="overflow-y-auto space-y-2 font-mono text-xs flex-1 pr-1">
+              {filteredEvents.map((evt, i) => (
+                <EventRow key={i} time={evt.time} src={evt.src} msg={evt.msg} type={evt.type} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

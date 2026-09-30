@@ -108,19 +108,57 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     parameters: { type: "object", properties: { context: { type: "string", description: "Context for the proposal" } }, required: ["context"] },
     organ: "evolution_engine", action: "propose",
   },
-  // ── Sandbox ───────────────────────────────────────────────────────────
+  // ── World Thinking & Counterfactual Simulation ──────────────────────
   {
-    name: "run_code",
-    description: "Execute code in the sandboxed environment.",
+    name: "simulate_world_thinking",
+    description: "Perform counterfactual tree simulation, hallucination risk analysis, and future state projection before critical executions.",
     parameters: {
       type: "object",
       properties: {
-        code: { type: "string", description: "Code to execute" },
-        lang: { type: "string", description: "Language", enum: ["typescript", "javascript", "python", "bash"] },
+        task: { type: "string", description: "The task or hypothesis to simulate" },
       },
-      required: ["code", "lang"],
+      required: ["task"],
     },
-    organ: "sandbox", action: "run",
+    organ: "world_thinking_engine", action: "simulate",
+  },
+  {
+    name: "query_epistemic_uncertainty",
+    description: "Measure epistemic uncertainty score, entropy, and safety margins for a target operation.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "The action to evaluate for epistemic uncertainty" },
+      },
+      required: ["task"],
+    },
+    organ: "world_thinking_engine", action: "estimate_uncertainty",
+  },
+  // ── Orchestration Oversight & Invariance ──────────────────────────────
+  {
+    name: "verify_orchestration_oversight",
+    description: "Audit agent delegation hierarchy, check max call stack depth (limit: 3), prevent circular loops, and query system invariants.",
+    parameters: {
+      type: "object",
+      properties: {
+        agent: { type: "string", description: "Calling agent or spawner identifier" },
+        action: { type: "string", description: "Action or task being delegated" },
+        depth: { type: "number", description: "Current delegation depth" },
+      },
+      required: ["agent", "action"],
+    },
+    organ: "orchestration_oversight", action: "oversight_status",
+  },
+  {
+    name: "trigger_emergency_kill_switch",
+    description: "Trigger immediate zero-state circuit kill switch across all active sub-agent threads and halt spawner.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: { type: "string", description: "Operator or algorithmic reason for triggering emergency halt" },
+      },
+      required: ["reason"],
+    },
+    organ: "orchestration_oversight", action: "emergency_kill",
   },
 ];
 

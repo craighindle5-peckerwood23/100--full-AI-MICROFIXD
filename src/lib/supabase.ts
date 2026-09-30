@@ -22,8 +22,19 @@ export type {
 };
 
 // Supabase configuration
-const DEFAULT_SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-const DEFAULT_SUPABASE_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+function isValidHttpUrl(str?: string): boolean {
+  return typeof str === 'string' && (str.startsWith('http://') || str.startsWith('https://'));
+}
+
+const rawUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
+const DEFAULT_SUPABASE_URL = isValidHttpUrl(rawUrl) 
+  ? rawUrl 
+  : (isValidHttpUrl((import.meta as any).env?.SUPABASE_URL) ? (import.meta as any).env?.SUPABASE_URL : 'https://caiiajbxslllrgeexbaw.supabase.co');
+
+const rawKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
+const DEFAULT_SUPABASE_KEY = (typeof rawKey === 'string' && (rawKey.startsWith('sb_') || rawKey.startsWith('eyJ')))
+  ? rawKey
+  : 'sb_publishable_IAqedYdeAhdsX475RhxUMg_EUE2Merq';
 
 let supabaseClient: SupabaseClient | null = null;
 
@@ -34,6 +45,21 @@ export interface SupabaseConfig {
   mode: 'cloud' | 'local_fallback';
   lastPing?: string;
   error?: string;
+}
+
+export interface UIStateRecord {
+  id: string;
+  active_subsystem: string;
+  active_room?: string;
+  theme?: string;
+  is_muted?: boolean;
+  is_voice_enabled?: boolean;
+  active_model?: string;
+  avatar_state?: string;
+  orbit_open?: boolean;
+  last_command?: string;
+  state_data?: Record<string, any>;
+  updated_at?: string;
 }
 
 export function getSupabaseCredentials(): { url: string; anonKey: string } {
@@ -129,13 +155,13 @@ export async function testSupabaseConnection(): Promise<{ success: boolean; mess
 // Helper to log system events to Supabase or fallback
 export async function logSystemEvent(source: string, message: string, severity: 'INFO' | 'WARN' | 'CRITICAL' = 'INFO') {
   const client = getSupabase();
-  // The system_logs table uses `level` and `created_at` as its real column
-  // names — inserting `severity` / `timestamp` previously failed with
-  // "column ... does not exist" against a live Supabase schema.
+  // Include both text and message for compatibility with various system_logs schemas
   const payload = {
     source,
     message,
+    text: message,
     level: severity.toLowerCase(),
+    status: 'received',
     created_at: new Date().toISOString()
   };
 
@@ -154,6 +180,138 @@ export async function logSystemEvent(source: string, message: string, severity: 
       logs.unshift(payload);
       localStorage.setItem('microfyxd_local_logs', JSON.stringify(logs.slice(0, 100)));
     } catch {}
+  }
+}
+
+// ==========================================
+// UI State Live Synchronization Helpers
+// ==========================================
+
+const LOCAL_UI_STATE_KEY = 'microfyxd_ui_state';
+
+const DEFAULT_UI_STATE: UIStateRecord = {
+  id: 'current',
+  active_subsystem: 'ai_core',
+  active_room: 'ai_core',
+  theme: 'dark',
+  is_muted: false,
+  is_voice_enabled: false,
+  active_model: 'Groq / Gemini / DeepSeek',
+  avatar_state: 'idle',
+  orbit_open: true,
+  last_command: '',
+  state_data: {},
+  updated_at: new Date().toISOString()
+};
+
+export async function getUIState(): Promise<UIStateRecord> {
+  const client = getSupabase();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('ui_state')
+        .select('*')
+        .eq('id', 'current')
+        .maybeSingle();
+
+      if (!error && data) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LOCAL_UI_STATE_KEY, JSON.stringify(data));
+        }
+        return data as UIStateRecord;
+      }
+    } catch (err) {
+      console.warn('Supabase getUIState failed, trying local fallback:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(LOCAL_UI_STATE_KEY);
+      if (stored) {
+        return { ...DEFAULT_UI_STATE, ...JSON.parse(stored) };
+      }
+    } catch {}
+  }
+
+  return DEFAULT_UI_STATE;
+}
+
+export async function saveUIState(
+  partial: Partial<UIStateRecord>
+): Promise<{ success: boolean; state: UIStateRecord; destination: 'supabase' | 'local_fallback' }> {
+  // Merge with existing local state
+  let current: UIStateRecord = DEFAULT_UI_STATE;
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(LOCAL_UI_STATE_KEY);
+      if (stored) current = { ...current, ...JSON.parse(stored) };
+    } catch {}
+  }
+
+  const updated: UIStateRecord = {
+    ...current,
+    ...partial,
+    id: 'current',
+    updated_at: new Date().toISOString(),
+  };
+
+  // Cache locally immediately
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(LOCAL_UI_STATE_KEY, JSON.stringify(updated));
+    } catch {}
+  }
+
+  let destination: 'supabase' | 'local_fallback' = 'local_fallback';
+  const client = getSupabase();
+  if (client) {
+    try {
+      const { error } = await client
+        .from('ui_state')
+        .upsert(updated, { onConflict: 'id' });
+
+      if (!error) {
+        destination = 'supabase';
+      } else {
+        console.warn('Supabase saveUIState upsert error:', error.message);
+      }
+    } catch (err) {
+      console.warn('Supabase saveUIState error:', err);
+    }
+  }
+
+  return { success: true, state: updated, destination };
+}
+
+export function subscribeToUIState(onChange: (state: UIStateRecord) => void): () => void {
+  const client = getSupabase();
+  if (!client) return () => {};
+
+  try {
+    const channel = client
+      .channel('public:ui_state')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ui_state', filter: 'id=eq.current' },
+        (payload) => {
+          if (payload.new) {
+            const newState = payload.new as UIStateRecord;
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(LOCAL_UI_STATE_KEY, JSON.stringify(newState));
+            }
+            onChange(newState);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Failed to subscribe to ui_state changes:', err);
+    return () => {};
   }
 }
 

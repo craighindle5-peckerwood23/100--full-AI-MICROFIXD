@@ -33,6 +33,7 @@ import {
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
 import { autonomousCore } from '../../autonomy/autonomousCore';
+import WorldThinkingPanel from '../thinking/WorldThinkingPanel';
 
 const LANGGRAPH_NODES = [
   { id: 'ingest', name: 'Input Parsing', type: 'Ingestion' },
@@ -52,6 +53,7 @@ export default function AICoreRoom() {
   const [lastExecution, setLastExecution] = useState<RouterExecutionResult | null>(null);
   const [history, setHistory] = useState<RouterHistoryItem[]>(omniRouter.getHistory());
   const [showKeyInputs, setShowKeyInputs] = useState(false);
+  const [showWorldThinking, setShowWorldThinking] = useState(false);
   const [voiceSpeaking, setVoiceSpeaking] = useState(voice.isSpeaking());
   const [fallbackAlert, setFallbackAlert] = useState(autonomousCore.getFallbackAlert());
 
@@ -162,6 +164,18 @@ export default function AICoreRoom() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => { sound.playTick(); setShowWorldThinking(!showWorldThinking); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all ${
+              showWorldThinking 
+                ? 'bg-purple-500/20 border-purple-400 text-purple-200 font-bold shadow-[0_0_15px_rgba(168,85,247,0.2)]' 
+                : 'bg-black/50 border-cyan-500/30 text-cyan-400 hover:text-white'
+            }`}
+          >
+            <Brain size={13} className="text-purple-400" />
+            <span>{showWorldThinking ? 'Omni Router' : 'World Thinking & Oversight'}</span>
+          </button>
+
+          <button
             onClick={() => { sound.playTick(); setShowKeyInputs(!showKeyInputs); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all ${
               showKeyInputs 
@@ -228,13 +242,13 @@ export default function AICoreRoom() {
                 <div>
                   <label className="text-[10px] text-cyan-400 block mb-0.5">MODEL</label>
                   <select
-                    value={providers.groq?.model || 'llama-3.3-70b-versatile'}
+                    value={providers.groq?.model || 'qwen/qwen3.8-27b'}
                     onChange={e => handleModelChange('groq', e.target.value)}
                     className="w-full bg-black/60 border border-cyan-500/30 rounded px-2 py-1 text-xs text-white focus:outline-none font-mono"
                   >
-                    <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
-                    <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-                    <option value="gemma2-9b-it">gemma2-9b-it</option>
+                    <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b (Fastest LPU)</option>
+                    <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (Deep Reasoning)</option>
+                    <option value="openai/gpt-oss-20b">openai/gpt-oss-20b (Ultra Fast)</option>
                   </select>
                 </div>
               </div>

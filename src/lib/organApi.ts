@@ -6,10 +6,17 @@
 import { api } from "./serverApi";
 
 export const OrganApi = {
-  // List all organs
+  // List all organs with snapshot
   list: () => api("GET", "/organs"),
 
-  // Single organ
+  // Direct array of all 235+ registered organs
+  getAll: () => api("GET", "/organs/all"),
+
+  // Load and register all 235 organs live
+  loadAll: () => api("POST", "/organs/load-all", {}),
+
+  // Single organ record & status
+  get:     (id: string)                           => api("GET",    `/organs/${id}`),
   status:  (id: string)                           => api("GET",    `/organs/${id}/status`),
   metrics: (id: string)                           => api("GET",    `/organs/${id}/metrics`),
   log:     (id: string, limit = 20)               => api("GET",    `/organs/${id}/log?limit=${limit}`),
@@ -17,8 +24,16 @@ export const OrganApi = {
   isolate: (id: string)                           => api("POST",   `/organs/${id}/isolate`, {}),
 
   // Execute any organ action — main entry point
-  execute: (id: string, action: string, payload: unknown = {}) =>
+  execute: (id: string, action: string = "execute", payload: unknown = {}) =>
     api("POST", `/organs/${id}/execute`, { action, payload }),
+
+  // Call any organ directly via /:id
+  call: (id: string, action: string = "execute", payload: unknown = {}) =>
+    api("POST", `/organs/${id}`, { action, payload }),
+
+  // Parallel batch execution across multiple organs
+  batch: (calls: Array<{ id: string; action?: string; payload?: unknown }>) =>
+    api("POST", "/organs/batch", { calls }),
 
   // Broadcast to multiple organs simultaneously
   broadcast: (organIds: string[], action: string, payload: unknown = {}) =>
@@ -30,6 +45,10 @@ export const OrganApi = {
 
   feedback: (limit = 20) => api("GET", `/command/feedback?limit=${limit}`),
   snapshot: ()           => api("GET", "/organs/snapshot"),
+
+  // 200% Capacity Full System Load Test
+  loadTest: (concurrencyFactor = 2.0) =>
+    api("POST", "/command/load-test", { concurrencyFactor }),
 };
 
 // ── Organ shorthand calls ─────────────────────────────────────────────────
@@ -96,3 +115,37 @@ export const Scheduler = {
   triggerJob:  (job_id: string) => OrganApi.execute("scheduler", "trigger_job", { job_id }),
   status:      ()              => OrganApi.execute("scheduler", "status",       {}),
 };
+
+export const Governance = {
+  evaluate: (action: string, targetOrgan: string) =>
+    OrganApi.execute("governance", action, { targetOrgan }),
+  checkConstitution: () =>
+    OrganApi.execute("constitution", "verify", {}),
+  status: () =>
+    OrganApi.execute("governance", "status", {}),
+};
+
+export const TelemetryOrgan = {
+  push: (metric: string, value: number) =>
+    OrganApi.execute("telemetry_grid", "push", { metric, value }),
+  snapshot: () =>
+    OrganApi.execute("telemetry_sensor", "status", {}),
+};
+
+export const AgentOrgan = (agentId: string) => ({
+  execute: (action: string, payload: unknown = {}) =>
+    OrganApi.execute(`agent_${agentId.replace(/^agent_/, "")}`, action, payload),
+  status: () =>
+    OrganApi.status(`agent_${agentId.replace(/^agent_/, "")}`),
+});
+
+export const AnyOrgan = (organId: string) => ({
+  call: (action: string = "execute", payload: unknown = {}) =>
+    OrganApi.execute(organId, action, payload),
+  status: () =>
+    OrganApi.status(organId),
+  metrics: () =>
+    OrganApi.metrics(organId),
+  log: (limit = 20) =>
+    OrganApi.log(organId, limit),
+});

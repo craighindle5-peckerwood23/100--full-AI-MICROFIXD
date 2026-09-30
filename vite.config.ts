@@ -1,128 +1,70 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, Plugin} from 'vite';
-import {agentRegistry} from './microfixd/backend/core/agents/registry';
-import {missionEngine} from './microfixd/backend/core/mission/engine';
-import {memory} from './microfixd/backend/core/memory/state';
-import {telemetry} from './microfixd/backend/core/telemetry/grid';
-import {governanceEngine} from './microfixd/backend/core/governance/engine';
+import { defineConfig, Plugin } from 'vite';
+import { WebSocketServer } from 'ws';
+import { app } from './server/index';
+import { registerWsClient, unregisterWsClient } from './server/events';
 
-const apiPlugin = (): Plugin => ({
-  name: 'microfixd-api',
+const backendPlugin = (): Plugin => ({
+  name: 'microfixd-backend-unified',
   configureServer(server) {
-    server.middlewares.use((req, res, next) => {
-      const pathname = (req.url || '').split('?')[0];
-      if (
-        pathname === '/api/agents/dispatch' ||
-        pathname === '/api/agents/dispatch/' ||
-        pathname.endsWith('/api/agents/dispatch')
-      ) {
-        if (req.method === 'POST') {
-          let body = '';
-          req.on('data', (chunk) => {
-            body += chunk;
+    // 1. Mount complete Express backend routes (/api/*) directly on dev server
+    server.middlewares.use(app);
+
+    // 2. Attach WebSocket server natively to Vite dev server HTTP instance (/ws)
+    if (server.httpServer) {
+      const wss = new WebSocketServer({ noServer: true });
+
+      server.httpServer.on('upgrade', (req, socket, head) => {
+        const url = req.url || '';
+        if (url === '/ws' || url.startsWith('/ws?')) {
+          wss.handleUpgrade(req, socket, head, (ws) => {
+            wss.emit('connection', ws, req);
           });
-          req.on('end', async () => {
-            try {
-              const parsed = body ? JSON.parse(body) : {};
-              const action = parsed.action;
-              if (!action) {
-                res.statusCode = 400;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(
-                  JSON.stringify({error: "Missing 'action' in request body."})
-                );
-                return;
-              }
-              const agent = (agentRegistry as any)[action.toLowerCase()];
-              if (!agent) {
-                res.statusCode = 404;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(
-                  JSON.stringify({
-                    error: `No agent found for action '${action}'.`,
-                  })
-                );
-                return;
-              }
-              const decision = await governanceEngine.evaluateAction(action.toLowerCase(), agent.name || action);
-
-              if (decision.decision === "BLOCK") {
-                res.statusCode = 403;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(
-                  JSON.stringify({
-                    error: `Blocked by Governance: ${decision.reason}`,
-                    decision
-                  })
-                );
-                return;
-              }
-
-              if (decision.decision === "PENDING_APPROVAL") {
-                res.statusCode = 403;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(
-                  JSON.stringify({
-                    error: `Requires Manual Approval: ${decision.reason}`,
-                    decision
-                  })
-                );
-                return;
-              }
-
-              const result = await agent.execute({
-                mission: missionEngine.getCurrentMission(),
-                memory,
-                telemetry,
-              });
-              res.statusCode = 200;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(
-                JSON.stringify({
-                  status: 'ok',
-                  agent: agent.name,
-                  action,
-                  result,
-                })
-              );
-            } catch (err: any) {
-              res.statusCode = 500;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(
-                JSON.stringify({
-                  error: 'Agent dispatch failed.',
-                  details: err?.message || String(err),
-                })
-              );
-            }
-          });
-          return;
         }
-      }
-      next();
-    });
+      });
+
+      wss.on('connection', (ws) => {
+        registerWsClient(ws);
+        ws.send(JSON.stringify({ type: 'connected', ts: new Date().toISOString() }));
+
+        ws.on('message', (data) => {
+          try {
+            const msg = JSON.parse(data.toString());
+            if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }));
+          } catch {
+            // ignore
+          }
+        });
+
+        ws.on('close', () => {
+          unregisterWsClient(ws);
+        });
+      });
+    }
   },
 });
 
 export default defineConfig(() => {
+  const groqKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || '';
+  const supabaseUrl = process.env.SUPABASE_URL || 'https://caiiajbxslllrgeexbaw.supabase.co';
+  const supabaseKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_IAqedYdeAhdsX475RhxUMg_EUE2Merq';
+
   return {
-    plugins: [react(), tailwindcss(), apiPlugin()],
+    plugins: [react(), tailwindcss(), backendPlugin()],
+    define: {
+      'import.meta.env.VITE_GROQ_API_KEY': JSON.stringify(groqKey),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseKey),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
-      proxy: {
-        "/api": { target: `http://127.0.0.1:${Number(process.env.PORT) || 3001}` },
-        "/ws": { target: `ws://127.0.0.1:${Number(process.env.PORT) || 3001}`, ws: true },
-      },
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

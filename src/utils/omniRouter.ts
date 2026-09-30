@@ -3,6 +3,8 @@ import { logSystemEvent, getSupabase } from '../lib/supabase';
 import { voice } from './voice';
 import { autonomousCore } from '../autonomy/autonomousCore';
 
+import { fetchGroqWithRetry } from './groqRetry';
+
 export type LLMProviderId = 'gemini' | 'groq' | 'deepseek' | 'synthetic_kernel';
 
 export interface ProviderConfig {
@@ -38,13 +40,23 @@ export interface RouterHistoryItem {
   timestamp: string;
 }
 
+export interface OrchestrationDecision {
+  thought: string;
+  targetSubsystem: string | null;
+  actionName?: string | null;
+  speech: string;
+  detailedAnswer: string;
+  providerUsed: LLMProviderId;
+  latencyMs: number;
+}
+
 // In-memory & localStorage state
 class OmniLLMRouter {
   private providers: Record<LLMProviderId, ProviderConfig> = {
     groq: {
       id: 'groq',
       name: 'Groq Cloud',
-      model: 'llama-3.3-70b-versatile',
+      model: 'qwen/qwen3.8-27b',
       apiKey: '',
       enabled: true,
       status: 'STANDBY',
@@ -106,8 +118,9 @@ class OmniLLMRouter {
         this.providers.gemini.apiKey = envGemini;
       }
       const envGroq = (import.meta as any).env?.VITE_GROQ_API_KEY;
-      if (envGroq && !this.providers.groq.apiKey) {
+      if (envGroq) {
         this.providers.groq.apiKey = envGroq;
+        this.providers.groq.status = 'ONLINE';
       }
       const envDeepSeek = (import.meta as any).env?.VITE_DEEPSEEK_API_KEY;
       if (envDeepSeek && !this.providers.deepseek.apiKey) {
@@ -340,40 +353,15 @@ class OmniLLMRouter {
   // --- Provider Implementations ---
 
   private async callGroq(prompt: string, systemInstruction: string, config: ProviderConfig): Promise<string> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: config.model || 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.6,
-          max_tokens: 1024
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeout);
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Groq HTTP ${res.status}: ${errorText.slice(0, 100)}`);
-      }
-
-      const data = await res.json();
-      return data.choices?.[0]?.message?.content || 'No response from Groq.';
-    } catch (e: any) {
-      clearTimeout(timeout);
-      throw e;
-    }
+    return fetchGroqWithRetry(config.apiKey, {
+      model: config.model || 'qwen/qwen3.8-27b',
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.6,
+      max_tokens: 500,
+    }, 3);
   }
 
   private async callGemini(prompt: string, systemInstruction: string, config: ProviderConfig): Promise<string> {
@@ -465,6 +453,107 @@ Automated tests queued in Sandbox Workspace #1.`;
     return `[MICROFYXD L6 COGNITIVE RESPONSE]
 Query synthesized: "${prompt}".
 The OS Omni Router evaluated your input across the multi-agent cognitive lattice. All nodes report nominal operational parameters, active episodic memory synchronization, and full constitutional compliance.`;
+  }
+
+  /**
+   * Central Intelligence Command & Orchestration Layer (Groq Powered).
+   * Interprets user communication, decides evaluations, targets subsystems, and produces contoured speech.
+   */
+  public async evaluateAndOrchestrate(
+    prompt: string,
+    currentSubsystem: string = 'ai_core'
+  ): Promise<OrchestrationDecision> {
+    const startTime = performance.now();
+
+    const systemPrompt = `You are Carter, the Flagship Synthetic OS Commander and Central Intelligence Orchestrator of Microfyxd OS Level 6.
+You are the central command that interprets all user communications, questions, commands, and tasks.
+Evaluate the user's input and decide:
+1. What subsystem room should be navigated to or opened (if appropriate), choosing from: "autonomy", "mission_control", "ai_core", "agents", "sandbox", "workspace", "infra", "telemetry", "memory", "learning", "automation", "supabase", "governance", "federation", "bible", or null if staying in the current room (${currentSubsystem}).
+2. What agent action should be dispatched (if any), choosing from: "optimize", "build", "analyze", "automate", "deploy", "research", or null.
+3. A contoured, natural spoken response for the speech synthesizer: keep it concise (1-2 natural sentences, max 30 words), warm, confident, and professional. NEVER output markdown symbols, asterisks, brackets, quotes, or code in the speech field.
+4. A detailed answer and technical explanation to display in the UI console.
+
+You MUST respond strictly in valid JSON without backticks:
+{
+  "thought": "brief 1-sentence evaluation of user intent and decision rationale",
+  "targetSubsystem": "mission_control" | "ai_core" | "agents" | "sandbox" | "workspace" | "infra" | "telemetry" | "memory" | "learning" | "automation" | "supabase" | "governance" | "federation" | "bible" | "autonomy" | null,
+  "actionName": "optimize" | "build" | "analyze" | "automate" | "deploy" | "research" | null,
+  "speech": "natural contoured speech output",
+  "detailedAnswer": "complete technical answer or reasoning for text display"
+}`;
+
+    try {
+      const execResult = await this.execute(prompt, systemPrompt);
+      const latency = Math.round(performance.now() - startTime);
+      const text = execResult.text.trim();
+
+      // Extract JSON payload
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            thought: parsed.thought || 'Request evaluated by Central Command.',
+            targetSubsystem: parsed.targetSubsystem || null,
+            actionName: parsed.actionName || null,
+            speech: parsed.speech || text.slice(0, 160),
+            detailedAnswer: parsed.detailedAnswer || text,
+            providerUsed: execResult.providerUsed,
+            latencyMs: latency
+          };
+        } catch {
+          // JSON parsing failed, use structured text fallback
+        }
+      }
+
+      // Natural fallback routing if output was freeform
+      const lower = prompt.toLowerCase();
+      let target: string | null = null;
+      let action: string | null = null;
+
+      if (lower.includes('mission') || lower.includes('goal')) target = 'mission_control';
+      else if (lower.includes('supabase') || lower.includes('database') || lower.includes('sql')) target = 'supabase';
+      else if (lower.includes('agent') || lower.includes('matrix')) target = 'agents';
+      else if (lower.includes('sandbox') || lower.includes('code') || lower.includes('wasm')) target = 'sandbox';
+      else if (lower.includes('auto') || lower.includes('watchdog') || lower.includes('loop')) target = 'autonomy';
+      else if (lower.includes('telemetry') || lower.includes('metric') || lower.includes('health')) target = 'telemetry';
+      else if (lower.includes('memory') || lower.includes('vector')) target = 'memory';
+      else if (lower.includes('safety') || lower.includes('constitution') || lower.includes('rule')) target = 'governance';
+      else if (lower.includes('federation') || lower.includes('mcp')) target = 'federation';
+      else if (lower.includes('bible') || lower.includes('doc')) target = 'bible';
+
+      if (lower.includes('optimize') || lower.includes('speed')) action = 'optimize';
+      else if (lower.includes('build') || lower.includes('repair')) action = 'build';
+      else if (lower.includes('analyze') || lower.includes('inspect')) action = 'analyze';
+
+      // Clean speech contour
+      const cleanSpeech = text
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/[*_#`[\]{}()]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 180);
+
+      return {
+        thought: 'Synthesized by Central Command.',
+        targetSubsystem: target,
+        actionName: action,
+        speech: cleanSpeech || 'Command received and synchronized across system organs.',
+        detailedAnswer: text,
+        providerUsed: execResult.providerUsed,
+        latencyMs: latency
+      };
+    } catch (e: any) {
+      return {
+        thought: 'Evaluated locally by Microkernel Ring-0 fallback.',
+        targetSubsystem: null,
+        actionName: null,
+        speech: 'Understood. Processing your command through local microkernel.',
+        detailedAnswer: `Executed locally. Reason: ${e?.message || 'Inference bridge fallback.'}`,
+        providerUsed: 'synthetic_kernel',
+        latencyMs: Math.round(performance.now() - startTime)
+      };
+    }
   }
 }
 

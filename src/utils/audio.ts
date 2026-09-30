@@ -183,6 +183,23 @@ class SoundSynthesizer {
       });
     } catch {}
   }
+
+  // Modern UI sound aliases
+  public click() {
+    this.playTick();
+  }
+
+  public telemetry() {
+    this.playCognitivePulse();
+  }
+
+  public critical() {
+    this.playAlert();
+  }
+
+  public success() {
+    this.playSuccess();
+  }
 }
 
 export const sound = new SoundSynthesizer();

@@ -34,7 +34,7 @@ class AutonomousCore {
   private fallbackAlert: FallbackAlertState = {
     active: false,
     primaryProvider: 'groq',
-    primaryModel: 'llama-3.3-70b-versatile',
+    primaryModel: 'qwen/qwen3.8-27b',
     fallbackProvider: 'synthetic_kernel',
     fallbackModel: 'microfyxd-l6-autonomous',
     reason: 'Primary endpoint socket timeout (HTTP 504 / ECONNREFUSED)',

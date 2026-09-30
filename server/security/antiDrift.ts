@@ -113,7 +113,7 @@ export async function checkAndCorrect(
   if (autoCorrect && violations.length > 0 && !hasCritical) {
     try {
       const comp = await groq.chat.completions.create({
-        model:     "llama-3.1-8b-instant",
+        model:     "qwen/qwen3.8-27b",
         messages:  [{
           role:    "system",
           content: "You are the Microfixd constitutional corrector. Remove any identity drift, doctrine violations, or unsafe content from the following text. Keep the helpful intent. Output only the corrected text.",
@@ -121,9 +121,10 @@ export async function checkAndCorrect(
           role:    "user",
           content: output,
         }],
-        max_tokens: output.length > 2000 ? 2000 : output.length + 200,
+        max_tokens: 500,
       });
-      corrected_output = comp.choices[0]?.message?.content ?? output;
+      const msg = comp.choices[0]?.message;
+      corrected_output = msg?.content || msg?.reasoning || output;
       violations.forEach(v => v.corrected = true);
     } catch { corrected_output = output; }
   }

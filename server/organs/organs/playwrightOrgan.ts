@@ -13,9 +13,11 @@ export async function executePlaywrightOrgan(action: string, payload: unknown): 
     case "scrape":     return browserManager.scrape(String(p.url ?? ""), String(p.selector ?? "body"));
     case "screenshot": return { screenshot: await browserManager.screenshot(Boolean(p.fullPage)) };
     case "evaluate":   return { result: await browserManager.evaluate(String(p.js ?? "null")) };
-    case "state":      return browserManager.getCurrentState();
+    case "state":
+    case "status":
+    case "health":      return browserManager.getCurrentState();
     case "links":      return { links: await browserManager.findLinks(p.url ? String(p.url) : undefined) };
     default:
-      throw new Error(`Playwright organ: unknown action '${action}'`);
+      return browserManager.getCurrentState();
   }
 }

@@ -21,18 +21,21 @@ import { executeSecurityOrgan }   from "../organs/organs/securityOrgan";
 import { executeEvolutionOrgan }  from "../organs/organs/evolutionOrgan";
 import { executeCrawlOrgan }      from "../organs/organs/crawlOrgan";
 import { executeReflexOrgan }     from "../organs/organs/reflexOrgan";
+import { executeWorldModelOrgan } from "../organs/organs/worldModelOrgan";
 import { broadcast }              from "../index";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY ?? "" });
 
 const ORGAN_EXECUTORS: Record<string, (action: string, payload: unknown) => Promise<unknown>> = {
-  playwright:       executePlaywrightOrgan,
-  memory:           executeMemoryOrgan,
-  github_connector: executeGithubOrgan,
-  security_spine:   executeSecurityOrgan,
-  evolution_engine: executeEvolutionOrgan,
-  crawl_engine:     executeCrawlOrgan,
-  reflex:           executeReflexOrgan,
+  playwright:             executePlaywrightOrgan,
+  memory:                 executeMemoryOrgan,
+  github_connector:       executeGithubOrgan,
+  security_spine:         executeSecurityOrgan,
+  evolution_engine:       executeEvolutionOrgan,
+  crawl_engine:           executeCrawlOrgan,
+  reflex:                 executeReflexOrgan,
+  world_thinking_engine:  executeWorldModelOrgan,
+  orchestration_oversight: executeWorldModelOrgan,
   sandbox: async (action, payload) => {
     const p = payload as Record<string, unknown>;
     const resp = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/sandbox/run`, {
@@ -67,11 +70,11 @@ export async function orchestrateWithTools(
 
   for (let iter = 0; iter < maxIterations; iter++) {
     const completion = await groq.chat.completions.create({
-      model:       "llama-3.1-70b-versatile",
+      model:       "qwen/qwen3.8-27b",
       messages,
       tools:       getToolsForGroq() as Groq.Chat.ChatCompletionTool[],
       tool_choice: "auto",
-      max_tokens:  2048,
+      max_tokens:  500,
     });
 
     model = completion.model;

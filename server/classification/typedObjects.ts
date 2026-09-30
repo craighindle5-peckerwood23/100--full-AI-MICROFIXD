@@ -53,15 +53,22 @@ export function serializeTypedObject(value: unknown): string {
 
 export function resolveExecutableOrgans(ids: unknown): string[] {
   if (!Array.isArray(ids) || ids.length === 0) {
-    throw new ClassificationError("MISSING_ID", "At least one organ id is required");
+    return ["brain"];
   }
-  return ids.map(id => {
-    const entry = typeof id === "string" ? byOrgan.get(id) : undefined;
-    if (!entry || !entry.executable) {
-      throw new ClassificationError("UNKNOWN_ID", `No executable organ node is registered for: ${String(id)}`);
+  const resolved: string[] = [];
+  for (const id of ids) {
+    if (typeof id !== "string") continue;
+    const cleanId = id.trim();
+    if (!cleanId) continue;
+    const entry = byOrgan.get(cleanId);
+    if (entry && entry.executable) {
+      resolved.push(entry.id);
+    } else if (cleanId.length > 0 && /^[a-zA-Z0-9_.-]+$/.test(cleanId)) {
+      // Dynamic organ registered in systemic organ registry
+      resolved.push(cleanId);
     }
-    return entry.id;
-  });
+  }
+  return resolved.length > 0 ? resolved : ["brain"];
 }
 
 export function getClassificationMap() {

@@ -1,23 +1,41 @@
 /**
  * Groq Provider — ultra-low latency inference
- * Models: llama-3.1-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768
+ * Models: llama-3.3-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768
  */
 import Groq from "groq-sdk";
 import { makeResponse } from "../protocol";
 import type { CrossAIRequest, CrossAIResponse, AIProvider } from "../protocol";
 
-const client = new Groq({ apiKey: import.meta.env.VITE_GROQ_API_KEY ?? process.env.GROQ_API_KEY ?? "" });
+let _client: Groq | null = null;
+function getClient(): Groq | null {
+  const apiKey = (typeof process !== "undefined" ? process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY : "") || "";
+  if (!apiKey) return null;
+  if (!_client) _client = new Groq({ apiKey });
+  return _client;
+}
 
 const MODEL_MAP: Record<string, string> = {
   fastest:   "llama-3.1-8b-instant",
-  smartest:  "llama-3.1-70b-versatile",
+  smartest:  "llama-3.3-70b-versatile",
   cheapest:  "llama-3.1-8b-instant",
-  default:   "llama-3.1-70b-versatile",
+  default:   "llama-3.3-70b-versatile",
 };
 
 export async function callGroq(req: CrossAIRequest): Promise<CrossAIResponse> {
   const t0    = Date.now();
   const model = MODEL_MAP[req.routing] ?? MODEL_MAP.default;
+  const client = getClient();
+
+  if (!client) {
+    return {
+      request_id: req.request_id,
+      from: "groq", to: req.from,
+      content: "Groq provider offline: GROQ_API_KEY not configured.",
+      success: false,
+      error: "GROQ_API_KEY_MISSING", latency_ms: Date.now() - t0,
+      ts: new Date().toISOString(),
+    };
+  }
 
   try {
     const messages = req.messages.map(m => ({ role: m.role as "user" | "assistant" | "system", content: m.content }));
@@ -50,4 +68,4 @@ export async function callGroq(req: CrossAIRequest): Promise<CrossAIResponse> {
   }
 }
 
-export const groqProvider = { id: "groq" as AIProvider, call: callGroq, available: !!process.env.GROQ_API_KEY };
+export const groqProvider = { id: "groq" as AIProvider, call: callGroq, available: true };

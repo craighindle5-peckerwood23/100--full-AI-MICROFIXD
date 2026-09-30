@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { AvatarState } from '../../types';
 
 interface AvatarProps {
@@ -7,9 +7,18 @@ interface AvatarProps {
   isZoomed: boolean;
   onClick: () => void;
   speechText?: string | null;
+  isVoiceListening?: boolean;
+  isVoiceProcessing?: boolean;
 }
 
-export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarProps) {
+export default function Avatar({ 
+  state, 
+  isZoomed, 
+  onClick, 
+  speechText,
+  isVoiceListening = false,
+  isVoiceProcessing = false,
+}: AvatarProps) {
   // Define glow colors and animations based on state
   const stateConfigs = {
     idle: {
@@ -67,6 +76,42 @@ export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarP
         </motion.div>
       )}
 
+      {/* Voice Listening / Processing Aura Rings */}
+      <AnimatePresence>
+        {(isVoiceListening || isVoiceProcessing) && !isZoomed && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            {/* Primary Aura Wave */}
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ 
+                scale: isVoiceListening ? [1, 1.45, 1] : [1, 1.25, 1],
+                opacity: isVoiceListening ? [0.35, 0.85, 0.35] : [0.4, 0.7, 0.4] 
+              }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ duration: isVoiceListening ? 1.4 : 0.9, repeat: Infinity, ease: 'easeInOut' }}
+              className={`absolute w-44 h-44 md:w-56 md:h-56 rounded-full border ${
+                isVoiceListening 
+                  ? 'border-red-400/60 bg-radial from-red-500/15 via-transparent to-transparent shadow-[0_0_60px_rgba(239,68,68,0.4)]'
+                  : 'border-cyan-400/60 bg-radial from-cyan-500/20 via-transparent to-transparent shadow-[0_0_60px_rgba(6,182,212,0.5)]'
+              }`}
+            />
+
+            {/* Secondary Ripple Wave */}
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ 
+                scale: [1, 1.8, 2.1], 
+                opacity: [0.6, 0.2, 0] 
+              }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'easeOut' }}
+              className={`absolute w-36 h-36 md:w-44 md:h-44 rounded-full border ${
+                isVoiceListening ? 'border-red-400/40' : 'border-cyan-400/40'
+              }`}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Main Avatar Entity */}
       <motion.div
         onClick={onClick}
@@ -77,10 +122,10 @@ export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarP
         }`}
         layout
         style={{
-          boxShadow: isZoomed ? 'none' : config.boxShadow,
+          boxShadow: isZoomed ? 'none' : isVoiceListening ? '0 0 80px rgba(239, 68, 68, 0.6)' : config.boxShadow,
         }}
-        animate={{ scale: isZoomed ? 1 : config.scale }}
-        transition={isZoomed ? { duration: 0.6, ease: 'easeInOut' } : config.transition}
+        animate={{ scale: isZoomed ? 1 : isVoiceListening ? [1, 1.08, 1] : config.scale }}
+        transition={isZoomed ? { duration: 0.6, ease: 'easeInOut' } : isVoiceListening ? { duration: 1.2, repeat: Infinity } : config.transition}
         title="Click to interact with Microfyxd Core Entity"
       >
         {/* Holographic outer orbital gyroscopes */}
@@ -88,7 +133,7 @@ export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarP
           <>
             <div 
               className="absolute -inset-4 rounded-full border border-cyan-500/20 animate-[spin_8s_linear_infinite] pointer-events-none" 
-              style={{ borderColor: config.ringColor }}
+              style={{ borderColor: isVoiceListening ? 'rgba(239, 68, 68, 0.7)' : config.ringColor }}
             />
             <div 
               className="absolute -inset-8 rounded-full border border-cyan-400/10 animate-[spin_12s_linear_infinite_reverse] pointer-events-none" 
@@ -101,7 +146,9 @@ export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarP
           <div 
             className="absolute inset-0 rounded-full opacity-85 mix-blend-screen transition-all duration-500"
             style={{
-              background: `radial-gradient(circle at 35% 35%, ${config.color} 0%, transparent 75%)`
+              background: isVoiceListening 
+                ? 'radial-gradient(circle at 35% 35%, rgba(239, 68, 68, 0.7) 0%, transparent 75%)'
+                : `radial-gradient(circle at 35% 35%, ${config.color} 0%, transparent 75%)`
             }}
           />
           
@@ -109,10 +156,10 @@ export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarP
           <motion.div 
             className="absolute inset-[-50%] opacity-40"
             style={{
-              background: `conic-gradient(from 0deg, transparent 0deg, ${config.color} 90deg, transparent 180deg)`,
+              background: `conic-gradient(from 0deg, transparent 0deg, ${isVoiceListening ? 'rgba(239, 68, 68, 0.8)' : config.color} 90deg, transparent 180deg)`,
             }}
             animate={{ rotate: 360 }}
-            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+            transition={{ duration: isVoiceListening ? 3 : 8, repeat: Infinity, ease: "linear" }}
           />
         </div>
         
@@ -120,7 +167,11 @@ export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarP
         <div className={`rounded-full bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center shadow-inner ${
           isZoomed ? 'w-5 h-5 md:w-6 md:h-6' : 'w-10 h-10 md:w-14 md:h-14'
         }`}>
-          <div className="w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full bg-white/80 animate-pulse shadow-[0_0_10px_#fff]" />
+          <div className={`w-2.5 h-2.5 md:w-3.5 md:h-3.5 rounded-full animate-pulse ${
+            isVoiceListening 
+              ? 'bg-red-400 shadow-[0_0_15px_#f87171]' 
+              : 'bg-white/80 shadow-[0_0_10px_#fff]'
+          }`} />
         </div>
       </motion.div>
 
@@ -130,10 +181,16 @@ export default function Avatar({ state, isZoomed, onClick, speechText }: AvatarP
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="mt-4 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/60 border border-cyan-500/30 text-[9px] font-mono uppercase tracking-widest text-cyan-300"
+          className={`mt-4 flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-black/60 border text-[9px] font-mono uppercase tracking-widest transition-all ${
+            isVoiceListening
+              ? 'border-red-500/50 text-red-300 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+              : 'border-cyan-500/30 text-cyan-300'
+          }`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-          <span>COGNITION: {state}</span>
+          <span className={`w-1.5 h-1.5 rounded-full animate-ping ${
+            isVoiceListening ? 'bg-red-400' : 'bg-cyan-400'
+          }`} />
+          <span>{isVoiceListening ? 'VOICE LISTENING...' : `COGNITION: ${state}`}</span>
         </motion.div>
       )}
     </div>

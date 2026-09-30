@@ -38,7 +38,7 @@ export async function generateProposal(
   type: EvolutionProposal["type"] = "modify_file",
 ): Promise<EvolutionProposal> {
   const completion = await groq.chat.completions.create({
-    model:     "llama-3.1-70b-versatile",
+    model:     "qwen/qwen3.8-27b",
     messages:  [{
       role:    "system",
       content: `You are the Microfixd Evolution Engine. Generate a specific code improvement proposal.
@@ -54,7 +54,7 @@ Output JSON only: {
       role:    "user",
       content: `Generate a ${type} proposal for: ${context}`,
     }],
-    max_tokens: 1500,
+    max_tokens: 500,
     temperature: 0.7,
   });
 

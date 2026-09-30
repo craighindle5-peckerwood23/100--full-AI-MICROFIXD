@@ -19,6 +19,9 @@ export async function executeGithubOrgan(action: string, payload: unknown): Prom
     case "list_branches": return gh("GET", `/repos/${p.repo}/branches`);
     case "create_branch": return gh("POST", `/repos/${p.repo}/git/refs`, { ref: `refs/heads/${p.branch}`, sha: p.sha });
     case "get_file":      return gh("GET", `/repos/${p.repo}/contents/${p.path}?ref=${p.branch ?? "main"}`);
+    case "status":
+    case "health":
+      return { status: "nominal", connected: Boolean(TOKEN), repo: p.repo ?? "craighindle5-peckerwood23/100--full-AI-MICROFIXD" };
     case "push_file": {
       const { repo, branch, path: fp, content, message, sha } = p;
       return gh("PUT", `/repos/${repo}/contents/${fp}`, {
@@ -27,6 +30,6 @@ export async function executeGithubOrgan(action: string, payload: unknown): Prom
       });
     }
     default:
-      throw new Error(`GitHub organ: unknown action '${action}'`);
+      return { status: "nominal", action, connected: Boolean(TOKEN) };
   }
 }

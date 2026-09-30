@@ -27,10 +27,15 @@ async function callProvider(to: string, messages: {role: string; content: string
     let model   = "";
     switch (to) {
       case "groq": {
-        if (!process.env.GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
-        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-        const r = await groq.chat.completions.create({ model: "llama-3.1-70b-versatile", messages: messages as Parameters<typeof groq.chat.completions.create>[0]["messages"], max_tokens: opts.max_tokens ?? 1024 });
-        content = r.choices[0]?.message?.content ?? "";
+        if (!process.env.GROQ_API_KEY && !process.env.VITE_GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY });
+        const r = await groq.chat.completions.create({
+          model: "qwen/qwen3.8-27b",
+          messages: messages as Parameters<typeof groq.chat.completions.create>[0]["messages"],
+          max_tokens: Math.min(Number(opts.max_tokens ?? 500), 750)
+        });
+        const msg = r.choices[0]?.message;
+        content = msg?.content || msg?.reasoning || "";
         model   = r.model;
         break;
       }
@@ -64,7 +69,7 @@ async function callProvider(to: string, messages: {role: string; content: string
 crossAIRouter.get("/providers", (req, res) => {
   res.json({
     providers: [
-      { id: "groq",      available: !!process.env.GROQ_API_KEY,       model: "llama-3.1-70b-versatile" },
+      { id: "groq",      available: !!(process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY),       model: "qwen/qwen3.8-27b" },
       { id: "claude",    available: !!process.env.ANTHROPIC_API_KEY,  model: "claude-3-5-sonnet-20241022" },
       { id: "openai",    available: !!process.env.OPENAI_API_KEY,     model: "gpt-4o" },
       { id: "copilot",   available: !!process.env.AZURE_OPENAI_API_KEY, model: "azure/gpt-4o" },

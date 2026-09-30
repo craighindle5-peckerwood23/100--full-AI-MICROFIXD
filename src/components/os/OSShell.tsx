@@ -32,7 +32,7 @@ import {
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
 import { omniRouter } from '../../utils/omniRouter';
-import { getSupabaseCredentials } from '../../lib/supabase';
+import { getSupabaseCredentials, saveUIState, getUIState } from '../../lib/supabase';
 import { autonomousCore } from '../../autonomy/autonomousCore';
 
 // Page Rooms (Complete Pages)
@@ -51,7 +51,10 @@ import SupabaseRoom from '../rooms/SupabaseRoom';
 import ConstitutionalRoom from '../rooms/ConstitutionalRoom';
 import FederationRoom from '../rooms/FederationRoom';
 import BibleRoom from '../rooms/BibleRoom';
+import WorldThinkingOversightRoom from '../rooms/WorldThinkingOversightRoom';
 import FallbackAlertBanner from './FallbackAlertBanner';
+import GlobalCommandConsole from './GlobalCommandConsole';
+import FloatingCommandPalette from './FloatingCommandPalette';
 
 interface Props {
   onReboot?: () => void;
@@ -66,6 +69,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'autonomy', label: 'Autonomous Core', hotkey: 'A', icon: ShieldAlert },
+  { id: 'world_thinking', label: 'World Thinking & Oversight', hotkey: 'W', icon: Brain },
   { id: 'mission_control', label: 'Mission Control', hotkey: '1', icon: Rocket },
   { id: 'ai_core', label: 'Omni Router', hotkey: '2', icon: Radio },
   { id: 'agents', label: 'Agent Matrix', hotkey: '3', icon: Users },
@@ -93,6 +97,7 @@ export default function OSShell({ onReboot }: Props) {
   const [supabaseConnected, setSupabaseConnected] = useState(false);
   const [watchdogStatus, setWatchdogStatus] = useState(autonomousCore.getWatchdog());
   const [fallbackState, setFallbackState] = useState(autonomousCore.getFallbackAlert());
+  const [isCommandConsoleOpen, setIsCommandConsoleOpen] = useState(false);
 
   // Holographic Core: the persistent avatar + glassmorphic orbit room-selector.
   // Starts open (full "hologram + orbit" view) right after boot; once a room
@@ -144,6 +149,19 @@ export default function OSShell({ onReboot }: Props) {
   // Global Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Global hotkey to open Command Console: Cmd+K / Ctrl+K
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandConsoleOpen(prev => !prev);
+        return;
+      }
+
+      if (e.key === 'Escape' && isCommandConsoleOpen) {
+        e.preventDefault();
+        setIsCommandConsoleOpen(false);
+        return;
+      }
+
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
         return;
       }
@@ -155,7 +173,7 @@ export default function OSShell({ onReboot }: Props) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isCommandConsoleOpen]);
 
   const handleNavigate = (subsystem: Subsystem) => {
     if (subsystem === activeSubsystem) return;
@@ -178,56 +196,44 @@ export default function OSShell({ onReboot }: Props) {
     sound.playCognitivePulse();
     setIsCommandRunning(true);
 
-    const lower = query.toLowerCase();
+    try {
+      // Intelligence Central Command & Main Orchestrator (Groq / OmniRouter)
+      const decision = await omniRouter.evaluateAndOrchestrate(query, activeSubsystem);
 
-    // Natural language routing triggers
-    if (lower.includes('autonom') || lower.includes('watchdog') || lower.includes('heal') || lower.includes('oversight') || lower.includes('execution')) {
-      handleNavigate('autonomy');
-      voice.speak('Opening Autonomous Core, Watchdog and Execution Engine.');
-    } else if (lower.includes('mission')) {
-      handleNavigate('mission_control');
-      voice.speak('Switching to Mission Control.');
-    } else if (lower.includes('omni') || lower.includes('ai') || lower.includes('router') || lower.includes('groq') || lower.includes('gemini') || lower.includes('deepseek')) {
-      handleNavigate('ai_core');
-      voice.speak('Opening Omni LLM Router and AI Core.');
-    } else if (lower.includes('agent') || lower.includes('carter') || lower.includes('sentinel')) {
-      handleNavigate('agents');
-      voice.speak('Opening Agent Matrix.');
-    } else if (lower.includes('sandbox') || lower.includes('wasm') || lower.includes('code')) {
-      handleNavigate('sandbox');
-      voice.speak('Opening Sandbox Orchestrator.');
-    } else if (lower.includes('supabase') || lower.includes('database') || lower.includes('sql')) {
-      handleNavigate('supabase');
-      voice.speak('Opening Supabase Cloud Backend.');
-    } else if (lower.includes('safety') || lower.includes('constitutional') || lower.includes('directive')) {
-      handleNavigate('governance');
-      voice.speak('Opening Chapter 15 Constitutional Safety.');
-    } else if (lower.includes('bible') || lower.includes('doc') || lower.includes('chapter')) {
-      handleNavigate('bible');
-      voice.speak('Opening Microfyxd OS 25-Chapter Architecture Bible.');
-    } else if (lower.includes('telemetry') || lower.includes('health') || lower.includes('metric')) {
-      handleNavigate('telemetry');
-      voice.speak('Streaming live telemetry at 100 Hertz.');
-    } else if (lower.includes('memory')) {
-      handleNavigate('memory');
-      voice.speak('Accessing memory graphs.');
-    } else if (lower.includes('learn')) {
-      handleNavigate('learning');
-      voice.speak('Entering Continual Learning loop.');
-    } else if (lower.includes('auto')) {
-      handleNavigate('automation');
-      voice.speak('Accessing Automation pipelines.');
-    } else {
-      // Execute query through Omni LLM Router with fallback!
-      try {
-        const result = await omniRouter.execute(query);
-        voice.speak(result.text.slice(0, 180));
-      } catch {
-        voice.speak('Command processed by microkernel.');
+      // 1. If Groq decides to target or switch a subsystem, navigate smoothly
+      if (decision.targetSubsystem && decision.targetSubsystem !== activeSubsystem) {
+        handleNavigate(decision.targetSubsystem as Subsystem);
       }
-    }
 
-    setIsCommandRunning(false);
+      // 2. If Groq decides to dispatch an agent action, dispatch to agent matrix
+      if (decision.actionName) {
+        fetch('/api/agents/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: decision.actionName, query }),
+        }).catch(() => {});
+      }
+
+      // 3. Speak the contoured, natural expressive speech output aloud
+      if (decision.speech && voice.isEnabled()) {
+        voice.speak(decision.speech, true);
+      }
+
+      // 4. Persist interaction to Supabase UI State
+      saveUIState({
+        last_command: query,
+        state_data: {
+          lastThought: decision.thought,
+          lastProvider: decision.providerUsed,
+          lastAnswer: decision.detailedAnswer,
+          latencyMs: decision.latencyMs
+        }
+      });
+    } catch {
+      voice.speak('Command processed by microkernel.');
+    } finally {
+      setIsCommandRunning(false);
+    }
   };
 
   // Render the selected full page
@@ -235,6 +241,8 @@ export default function OSShell({ onReboot }: Props) {
     switch (activeSubsystem) {
       case 'autonomy':
         return <AutonomyRoom />;
+      case 'world_thinking':
+        return <WorldThinkingOversightRoom />;
       case 'mission_control':
         return <MissionControlRoom />;
       case 'ai_core':
@@ -379,6 +387,20 @@ export default function OSShell({ onReboot }: Props) {
           >
             <Radio size={13} className="text-cyan-400 animate-pulse" />
             <span className="hidden sm:inline font-bold">OMNI ROUTER</span>
+          </button>
+
+          {/* Global Command Console Overlay Trigger */}
+          <button
+            onClick={() => {
+              sound.playTick();
+              setIsCommandConsoleOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-cyan-500/40 bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 text-xs shadow-[0_0_12px_rgba(6,182,212,0.15)] transition-all font-bold"
+            title="Open Global Command Console (⌘K)"
+          >
+            <Terminal size={13} className="text-cyan-400" />
+            <span className="hidden sm:inline">CONSOLE</span>
+            <span className="px-1 py-0.2 bg-black/60 border border-cyan-500/30 rounded text-[9px] text-cyan-400/80">⌘K</span>
           </button>
 
           {/* Synthetic Voice Waveform & Toggle */}
@@ -553,6 +575,20 @@ export default function OSShell({ onReboot }: Props) {
           ))}
         </div>
       </footer>
+
+      {/* Global Command Console Overlay (⌘K / Ctrl+K) */}
+      <GlobalCommandConsole
+        isOpen={isCommandConsoleOpen}
+        onClose={() => setIsCommandConsoleOpen(false)}
+        onNavigate={handleNavigate}
+        activeSubsystem={activeSubsystem}
+      />
+
+      {/* Persistent Floating Command Palette & Hands-Free Web Speech Voice (⌘J / Ctrl+J) */}
+      <FloatingCommandPalette
+        onNavigate={handleNavigate}
+        activeSubsystem={activeSubsystem}
+      />
     </div>
   );
 }

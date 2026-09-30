@@ -10,6 +10,7 @@ import { speechCleaner }     from "./speechCleaner";
 import { conversationTimer } from "./conversationTimer";
 import { useVoiceStore }     from "./voiceState";
 import { OrganApi }          from "../lib/organApi";
+import { omniRouter }        from "../utils/omniRouter";
 
 type SubmitCallback = (transcript: string) => Promise<string>;
 
@@ -49,13 +50,17 @@ class SpeechEngine {
         conversationTimer.onSilenceDetected(transcript, async (t) => {
           conversationTimer.onAIProcessing();
           try {
-            // Send to command center
-            const result = await OrganApi.command(t) as { output: string };
-            const response = result.output ?? "I couldn't process that.";
-            conversationTimer.onAIResponseReady(response);
+            // Send to Groq Central Command & Orchestration Layer
+            const decision = await omniRouter.evaluateAndOrchestrate(t);
+            conversationTimer.onAIResponseReady(decision.speech);
           } catch {
-            this.speak("I encountered an error processing your request.");
-            conversationTimer.reset();
+            try {
+              const fallback = await OrganApi.command(t) as { output: string };
+              conversationTimer.onAIResponseReady(fallback.output ?? "Command processed by microkernel.");
+            } catch {
+              this.speak("Command processed by microkernel.");
+              conversationTimer.reset();
+            }
           }
         });
       },

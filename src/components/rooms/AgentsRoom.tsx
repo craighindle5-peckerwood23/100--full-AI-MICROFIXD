@@ -14,11 +14,13 @@ import {
 import { AgentRecord } from '../../types';
 import { INITIAL_AGENTS } from '../../data/osData';
 import { sound } from '../../utils/audio';
+import DualKeyPipelineManager from '../governance/DualKeyPipelineManager';
 
 export default function AgentsRoom() {
   const [agents, setAgents] = useState<AgentRecord[]>(INITIAL_AGENTS);
   const [selectedAgentId, setSelectedAgentId] = useState<string>(INITIAL_AGENTS[0].id);
   const [search, setSearch] = useState('');
+  const [showFleetPipeline, setShowFleetPipeline] = useState(false);
   const [a2aMessages, setA2aMessages] = useState<string[]>([
     '[10:44:12] CARTER -> SENTINEL: Transmitting Chronos mission shard checksum [0x8f4b].',
     '[10:44:14] SENTINEL -> CARTER: Constitutional directive 3 pass. Zero syscall leaks.',
@@ -71,6 +73,21 @@ export default function AgentsRoom() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              sound.playTick();
+              setShowFleetPipeline(prev => !prev);
+            }}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+              showFleetPipeline
+                ? 'bg-cyan-500/20 border-cyan-400 text-white'
+                : 'bg-black/40 border-cyan-500/30 text-cyan-400 hover:text-white'
+            }`}
+          >
+            <Zap size={13} className={showFleetPipeline ? 'text-cyan-300' : ''} />
+            <span>{showFleetPipeline ? 'Show Agent Fleet' : 'Fleet Pipeline & Dual-Key'}</span>
+          </button>
+
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-2.5 text-cyan-500/50" />
             <input
@@ -84,8 +101,13 @@ export default function AgentsRoom() {
         </div>
       </div>
 
-      {/* Main Grid: Fleet List & Selected Agent Dossier */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 overflow-hidden">
+      {showFleetPipeline ? (
+        <div className="flex-1 overflow-y-auto pr-1">
+          <DualKeyPipelineManager />
+        </div>
+      ) : (
+        /* Main Grid: Fleet List & Selected Agent Dossier */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 overflow-hidden">
         {/* Left: Agent Fleet Cards */}
         <div className="lg:col-span-5 flex flex-col gap-2 overflow-y-auto pr-1">
           <div className="text-[11px] uppercase tracking-widest text-cyan-500/60 mb-1 flex items-center justify-between">
@@ -224,6 +246,7 @@ export default function AgentsRoom() {
           </div>
         </div>
       </div>
-    </div>
-  );
+    )}
+  </div>
+);
 }

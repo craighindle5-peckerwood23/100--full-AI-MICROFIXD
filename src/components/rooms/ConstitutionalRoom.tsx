@@ -19,13 +19,14 @@ import { ConstitutionalDirective } from '../../types';
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
 import { governanceEngine, ApprovalRequest, GovernanceDecision, AuditLog } from '../../../microfixd/backend/core/governance/engine';
+import DualKeyPipelineManager from '../governance/DualKeyPipelineManager';
 
-type TabType = 'directives' | 'audits' | 'approvals';
+type TabType = 'dual_key' | 'directives' | 'audits' | 'approvals';
 
 export default function ConstitutionalRoom() {
   const [directives, setDirectives] = useState<ConstitutionalDirective[]>(CONSTITUTIONAL_DIRECTIVES);
   const [selectedDirective, setSelectedDirective] = useState<ConstitutionalDirective>(CONSTITUTIONAL_DIRECTIVES[0]);
-  const [activeTab, setActiveTab] = useState<TabType>('directives');
+  const [activeTab, setActiveTab] = useState<TabType>('dual_key');
   
   // Local states synchronized with the Governance Engine
   const [decisionLogs, setDecisionLogs] = useState<GovernanceDecision[]>([]);
@@ -143,7 +144,17 @@ export default function ConstitutionalRoom() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-emerald-500/20 pb-0.5 gap-2">
+      <div className="flex border-b border-emerald-500/20 pb-0.5 gap-2 flex-wrap">
+        <button
+          onClick={() => { sound.playTick(); setActiveTab('dual_key'); }}
+          className={`px-4 py-2 text-xs font-bold uppercase border-t-2 border-x transition-all rounded-t-lg cursor-pointer ${
+            activeTab === 'dual_key'
+              ? 'bg-emerald-950/40 border-t-emerald-400 border-x-emerald-500/30 text-emerald-300'
+              : 'border-transparent text-cyan-500/60 hover:text-cyan-400'
+          }`}
+        >
+          2-Step Dual-Key & Fleet Build
+        </button>
         <button
           onClick={() => { sound.playTick(); setActiveTab('directives'); }}
           className={`px-4 py-2 text-xs font-bold uppercase border-t-2 border-x transition-all rounded-t-lg cursor-pointer ${
@@ -177,18 +188,15 @@ export default function ConstitutionalRoom() {
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
           )}
         </button>
-
-        {/* Bypass Mode Toggle */}
-        <button
-          onClick={handleToggleBypass}
-          className="ml-auto flex items-center gap-2 px-3 py-1 rounded-md border text-[11px] font-bold transition-all uppercase cursor-pointer border-amber-500/40 bg-amber-500/10 text-amber-300"
-        >
-          <Fingerprint size={13} />
-          <span>Bypass: {bypassMode ? 'ON' : 'OFF'}</span>
-        </button>
       </div>
 
       {/* Main Tabbed Area */}
+      {activeTab === 'dual_key' && (
+        <div className="flex-1 min-h-0">
+          <DualKeyPipelineManager />
+        </div>
+      )}
+
       {activeTab === 'directives' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0 animate-fade-in">
           {/* Directives List */}

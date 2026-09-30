@@ -15,6 +15,7 @@ export type Subsystem =
   | 'supabase'
   | 'governance'
   | 'federation'
+  | 'world_thinking'
   | 'bible';
 
 export type AvatarState = 'idle' | 'processing' | 'alert' | 'success' | 'learning';
@@ -253,6 +254,66 @@ export interface CognitiveRequestRecord {
   confidence?: number;
   created_at?: string;
 }
+
+// ==========================================
+// World Thinking Engine & Orchestration Oversight
+// ==========================================
+export interface WorldState {
+  id: string;
+  step: number;
+  cpuLoadEst: number;
+  memoryLoadEst: number;
+  agentThreadsActive: number;
+  safetyScore: number;
+  riskProbability: number;
+  invariantsPreserved: boolean;
+  predictedOutcome: string;
+  timestamp: string;
+}
+
+export interface SimulationBranch {
+  branchId: string;
+  actionName: string;
+  hypotheticalArgs: Record<string, unknown>;
+  expectedUtility: number;
+  riskFactor: number;
+  hallucinationRisk: number;
+  predictedState: WorldState;
+  decision: 'APPROVED' | 'PRUNED' | 'REQUIRES_HITL';
+  reasoning: string;
+}
+
+export interface WorldThinkingReport {
+  taskId: string;
+  taskPrompt: string;
+  epistemicUncertainty: number; // 0.0 - 1.0 (lower is more certain)
+  activeWorldState: WorldState;
+  branchesEvaluated: SimulationBranch[];
+  optimalBranch: SimulationBranch;
+  simulatedTimeHorizonSteps: number;
+  timestamp: string;
+}
+
+export interface OversightAudit {
+  id: string;
+  timestamp: string;
+  source: string;
+  action: string;
+  depth: number;
+  maxDepth: number;
+  status: 'NOMINAL' | 'THROTTLED' | 'BLOCKED' | 'INTERCEPTED';
+  reason: string;
+  tokensConsumed: number;
+}
+
+export interface SystemInvariants {
+  recursionDepthMax: number;
+  memoryLeakZero: boolean;
+  dataPersistencePreserved: boolean;
+  antiDriftCompliant: boolean;
+  emergencyKillEngaged: boolean;
+}
+
 
 
 

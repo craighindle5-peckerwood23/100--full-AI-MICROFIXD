@@ -22,6 +22,7 @@ import { githubRouter }      from "./github/githubRouter";
 import { mcpRouter }         from "./mcp/mcpRouter";
 import { broadcastManager }  from "./playwright/screenshotStream";
 import { organRouter }       from "./organs/organRouter";
+import { getGroqDebugLogs } from "./orchestration/groqRetry";
 import { orchestratorRouter } from "./orchestration/orchestratorRouter";
 import { crawlRouter }       from "./crawl/crawlRouter";
 import { toolsRouter }       from "./tools/toolsRouter";
@@ -34,11 +35,13 @@ import { organRegistry }     from "./organs/organRegistry";
 import { getPending }        from "./hitl/hitlManager";
 import { initOrgans }        from "../microfixd/langgraph/organs";
 import { ClassificationError, getClassificationMap, resolveTypedObject } from "./classification";
+import dispatchRouter from "../microfixd/backend/routes/agents/dispatch";
 
-const PORT   = Number(process.env.PORT) || 3001;
-const app    = express();
-const server = http.createServer(app);
-const wss    = new WebSocketServer({ server, path: "/ws" });
+const PORT   = Number(process.env.PORT) || 3000;
+const HOST   = "0.0.0.0";
+export const app = express();
+export const server = http.createServer(app);
+export const wss = new WebSocketServer({ server, path: "/ws" });
 
 // ── Middleware ─────────────────────────────────────────────────────────────
 const allowedOrigins = (process.env.CORS_ORIGINS ?? "")
@@ -115,6 +118,7 @@ app.post("/api/classification/resolve", (req, res) => {
 });
 
 // ── REST routes ────────────────────────────────────────────────────────────
+app.use("/api/agents",     dispatchRouter);
 app.use("/api/playwright", playwrightRouter);
 app.use("/api/sandbox",    sandboxRouter);
 app.use("/api/hitl",       hitlRouter);
@@ -129,6 +133,12 @@ app.use("/api/execution",  executionRouter);
 app.use("/api/skin",       skinRouter);
 app.use("/api/crossai",    crossAIRouter);
 
+// Groq Diagnostic Debug Logs Endpoint
+app.get("/api/groq/debug-logs", (req, res) => {
+  const limit = Number(req.query.limit ?? 50);
+  res.json({ logs: getGroqDebugLogs(limit) });
+});
+
 const distDir = path.resolve(process.cwd(), "dist");
 app.use(express.static(distDir));
 app.get("*", (req, res, next) => {
@@ -136,12 +146,13 @@ app.get("*", (req, res, next) => {
   res.sendFile(path.join(distDir, "index.html"), err => err && next(err));
 });
 
-// ── WebSocket hub ──────────────────────────────────────────────────────────
-const clients = new Set<WebSocket>();
+import { broadcast, registerWsClient, unregisterWsClient } from "./events";
+export { broadcast };
 
+// ── WebSocket hub ──────────────────────────────────────────────────────────
 wss.on("connection", (ws) => {
-  clients.add(ws);
-  console.log(`[ws] Client connected. Total: ${clients.size}`);
+  registerWsClient(ws);
+  console.log(`[ws] Client connected.`);
 
   ws.on("message", (data) => {
     try {
@@ -153,21 +164,13 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    clients.delete(ws);
-    console.log(`[ws] Client disconnected. Total: ${clients.size}`);
+    unregisterWsClient(ws);
+    console.log(`[ws] Client disconnected.`);
   });
 
   // Send initial system state
   ws.send(JSON.stringify({ type: "connected", ts: new Date().toISOString() }));
 });
-
-// Broadcast to all connected clients
-export function broadcast(type: string, payload: unknown): void {
-  const msg = JSON.stringify({ type, payload, ts: new Date().toISOString() });
-  clients.forEach((ws) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(msg);
-  });
-}
 
 // Register broadcast with screenshot streamer
 broadcastManager.setBroadcast(broadcast);
@@ -191,10 +194,16 @@ async function handleWsMessage(ws: WebSocket, msg: { type: string; payload?: unk
   }
 }
 
-// ── Start ──────────────────────────────────────────────────────────────────
-server.listen(PORT, () => {
-  console.log(`\n🧠 Microfixd Backend Server`);
-  console.log(`   REST: http://localhost:${PORT}/api`);
-  console.log(`   WS:   ws://localhost:${PORT}/ws`);
-  console.log(`   Playwright, Sandbox, HITL, GitHub, MCP — ready\n`);
-});
+// ── Start (standalone mode) ────────────────────────────────────────────────
+if (
+  typeof process !== "undefined" &&
+  process.argv[1] &&
+  (process.argv[1].endsWith("server/index.ts") || process.argv[1].endsWith("server.ts"))
+) {
+  server.listen(PORT, HOST, () => {
+    console.log(`\n🧠 Microfixd Backend Server`);
+    console.log(`   REST: http://${HOST}:${PORT}/api`);
+    console.log(`   WS:   ws://${HOST}:${PORT}/ws`);
+    console.log(`   Playwright, Sandbox, HITL, GitHub, MCP — ready\n`);
+  });
+}

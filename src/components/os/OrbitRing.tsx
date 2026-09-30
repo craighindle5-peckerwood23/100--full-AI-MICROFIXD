@@ -23,6 +23,7 @@ interface OrbitRingProps {
 const NODES: { id: Subsystem; icon: React.ElementType; label: string }[] = [
   { id: 'mission_control', icon: Target, label: 'Mission Control' },
   { id: 'ai_core', icon: Brain, label: 'AI Core' },
+  { id: 'world_thinking', icon: Brain, label: 'World Thinking' },
   { id: 'agents', icon: Cpu, label: 'Agents' },
   { id: 'sandbox', icon: Box, label: 'Sandbox' },
   { id: 'workspace', icon: Layout, label: 'Workspace' },
