@@ -237,10 +237,13 @@ autonomyRouter.get("/usage-report", (_req, res) => {
       metadata: { status: r.status, decidedBy: r.decided_by },
     });
   }
-  events.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  events.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  // `recentDurableEvents` is the field the TV's ActivityTimeline consumes
+  // (it does .slice(-maxItems).reverse() on this ASC-ordered array).
   res.json({
     tenantId: "default",
-    events: events.slice(0, 100),
+    recentDurableEvents: events.slice(-100),
+    events: events.slice(-100).reverse(),
     counts: {
       total: events.length,
       rbacEntries: getRbacAuditLog(1000).length,
@@ -700,6 +703,22 @@ autonomyRouter.post("/meta/heal", (_req, res) => {
     safeModeCurrentlyActive: organRegistry.systemHealth() !== "nominal" && stillFailed.length > 0,
     healed,
     stillFailed,
+  });
+});
+
+// ── Credential status: honest env-derived booleans, nothing exposed ─────────
+
+autonomyRouter.get("/system/credential-status", (_req, res) => {
+  res.json({
+    adminKeyConfigured: Boolean(process.env.ADMIN_TOKEN),
+    signingKeysConfigured: false,   // this outlet has no signing-key subsystem
+    signingKeyCount: 0,
+    activeKeyVersion: null,
+    githubTokenConfigured: Boolean(process.env.GITHUB_TOKEN),
+    renderApiKeyConfigured: false,   // Render key is not stored on the outlet
+    railwayTokenConfigured: false,
+    twilioConfigured: false,
+    valueExposure: "redacted",
   });
 });
 
