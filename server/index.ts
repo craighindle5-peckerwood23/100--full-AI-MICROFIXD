@@ -30,6 +30,7 @@ import { securityRouter }    from "./security/securityRouter";
 import { executionRouter }   from "./execution/executionRouter";
 import { skinRouter }        from "./skin/skinRouter";
 import { crossAIRouter }     from "./crossai/crossAIRouter";
+import { autonomyRouter }   from "./autonomy-adapter/autonomyRouter";
 import { rbacMiddleware }    from "./security/rbac";
 import { organRegistry }     from "./organs/organRegistry";
 import { getPending }        from "./hitl/hitlManager";
@@ -56,6 +57,24 @@ app.use(express.json({ limit: "10mb" }));
 
 // ── Health and boot state (public, read-only) ──────────────────────────────
 const cognitiveOrgans = initOrgans();
+
+// Boot readiness for the OS TV: mirrors deep health without auth so the
+// boot screen can show nominal/degraded before the operator logs in.
+app.get("/readyz", (_, res) => {
+  const configured = {
+    admin: Boolean(process.env.ADMIN_TOKEN),
+    supabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+    llm: Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY),
+  };
+  const health = organRegistry.systemHealth();
+  const ready = configured.admin && configured.supabase && health !== "critical";
+  res.status(ready ? 200 : 503).json({
+    status: ready ? "ok" : "degraded",
+    systemHealth: health,
+    storage: { durable: configured.supabase, engine: configured.supabase ? "supabase-postgres" : "in-memory" },
+    ts: new Date().toISOString(),
+  });
+});
 
 app.get("/api/health", (_, res) => {
   res.json({
@@ -132,6 +151,11 @@ app.use("/api/security",   securityRouter);
 app.use("/api/execution",  executionRouter);
 app.use("/api/skin",       skinRouter);
 app.use("/api/crossai",    crossAIRouter);
+
+// Autonomy API compatibility layer: lets the Microfixd OS TV frontend talk to
+// this outlet over its native /api/autonomy/* contract. See the adapter file
+// for the full endpoint->subsystem mapping.
+app.use("/api/autonomy",   autonomyRouter);
 
 // Groq Diagnostic Debug Logs Endpoint
 app.get("/api/groq/debug-logs", (req, res) => {
