@@ -16,7 +16,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts tests/voice-delivery.test.ts",
-    "test:services": "node scripts/test-services.mjs"
+    "test:services": "node scripts/test-services.mjs",
+    "test:website": "npm run build && node --import tsx --test tests/public-website.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
