@@ -60,7 +60,14 @@ export function useServerEvents(onEvent?: Handler) {
   useEffect(() => {
     stopped.current = false;
     connect();
+    const reauthenticate=()=>{
+      if(reconnectTimer.current)clearTimeout(reconnectTimer.current);
+      if(wsRef.current){wsRef.current.onclose=null;wsRef.current.close();wsRef.current=null;}
+      setConnected(false);connect();
+    };
+    window.addEventListener('microfixd:auth-changed',reauthenticate);
     return () => {
+      window.removeEventListener('microfixd:auth-changed',reauthenticate);
       stopped.current = true;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
