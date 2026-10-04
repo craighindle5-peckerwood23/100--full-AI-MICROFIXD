@@ -100,7 +100,7 @@ export class TTSEngine {
       const utterance=new SpeechSynthesisUtterance(text);this.utterance=utterance;
       utterance.lang=useVoiceStore.getState().language;utterance.rate=0.95;utterance.pitch=1;
       const voices=window.speechSynthesis.getVoices();
-      utterance.voice=voices.find(v=>v.lang.startsWith('en')&&v.localService) || voices[0] || null;
+      utterance.voice=voices.find(v=>v.lang===utterance.lang&&v.localService) || voices.find(v=>v.lang.startsWith(utterance.lang.split('-')[0])) || null;
       this.cleanupChunk=()=>{utterance.onend=null;utterance.onerror=null;this.utterance=null;};
       utterance.onend=()=>{this.utterance=null;resolve();};
       utterance.onerror=e=>{this.utterance=null;reject(new Error(`Speech playback failed: ${e.error}`));};
