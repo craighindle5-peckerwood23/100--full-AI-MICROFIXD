@@ -15,7 +15,7 @@
     "validate:classification": "node --import tsx scripts/validate-classification.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts",
+    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts",
     "test:services": "node scripts/test-services.mjs"
   },
   "dependencies": {
