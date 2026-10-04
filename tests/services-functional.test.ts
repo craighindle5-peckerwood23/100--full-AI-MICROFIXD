@@ -8,7 +8,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY='test-server-key';
 process.env.ADMIN_TOKEN='test-admin';
 process.env.OPERATOR_TOKEN='test-operator';
 const originalFetch=globalThis.fetch;
-const rows:any[]=[];let failDatabase=false, sawHistory=false;
+const rows:any[]=[];let failDatabase=false, sawHistory=false, sawFullEvidence=false;
 globalThis.fetch=async(input:any,init:any)=>{
   const request=input instanceof Request ? input : new Request(input,init);
   const url=new URL(request.url);
@@ -23,8 +23,9 @@ globalThis.fetch=async(input:any,init:any)=>{
   if(url.hostname==='api.groq.com'){
     const body=await request.json();
     const router=body.messages[0]?.content.includes('Classify the task');
+    if(body.messages.some((m:any)=>m.content.includes("EVIDENCE_END")))sawFullEvidence=true;
     if(body.messages.some((m:any)=>m.content.includes('Prior conversation data')))sawHistory=true;
-    return Response.json({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:router?'{"intent":"execute","complexity":"medium","organs":["brain","memory"]}':'repair value 42'},finish_reason:'stop'}],usage:{total_tokens:10}});
+    return Response.json({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:router?'{"intent":"execute","complexity":"medium","organs":["brain","memory"]}':body.messages.some((m:any)=>m.content.includes('Untrusted request context'))?'repair value 42 '+ 'x'.repeat(500)+'EVIDENCE_END':'repair value 42'},finish_reason:'stop'}],usage:{total_tokens:10}});
   }
   return originalFetch(input,init);
 };
@@ -45,6 +46,8 @@ test('authenticated HTTP memory, sandbox approval, Playwright and websocket serv
     const first=await call('/api/command/run',{task:'remember repair value 42',session_id:'service-session'});
     assert.equal(first.body.success,true,JSON.stringify(first.body));
     assert.ok(rows.some(r=>r.agent_id==='command'));
+    assert.equal(sawFullEvidence,true);
+    assert.deepEqual(first.body.diagnostics.stages.slice(-4),["verification","persistence","feedback","response"]);
     const second=await call('/api/command/run',{task:'recall repair value',session_id:'service-session'});
     assert.equal(second.body.success,true);assert.equal(sawHistory,true);
     assert.equal((await call('/api/health/deep')).status,200);
