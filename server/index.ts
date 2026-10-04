@@ -1,3 +1,5 @@
+import {getGroqClient,groqConfiguration} from './orchestration/groqRuntime';
+import {executeGroqWithRetry} from './orchestration/groqRetry';
 /**
  * server/index.ts
  * Microfixd Backend Server — Playwright + Sandbox + HITL + GitHub + MCP
@@ -166,6 +168,17 @@ app.use("/api/crossai",    crossAIRouter);
 // this outlet over its native /api/autonomy/* contract. See the adapter file
 // for the full endpoint->subsystem mapping.
 app.use("/api/autonomy",   autonomyRouter);
+
+app.get('/api/groq/status',(_,res)=>res.json(groqConfiguration()));
+app.post('/api/groq/check',async(_,res)=>{
+  const client=getGroqClient();
+  if(!client)return res.status(503).json({success:false,error:'GROQ_API_KEY is not configured on the server',code:'GROQ_NOT_CONFIGURED'});
+  try {
+    const result=await executeGroqWithRetry(client,{model:groqConfiguration().model,messages:[{role:'user',content:'Reply with OK.'}],max_tokens:128,temperature:0});
+    if(!result.content.trim() || result.completion.choices[0]?.finish_reason!=='stop')throw new Error('Groq returned an incomplete diagnostic response');
+    res.json({success:true,connected:true,model:result.modelUsed,latency_ms:result.totalLatencyMs});
+  }catch(error:any){res.status(502).json({success:false,connected:false,error:String(error.message),provider_status:error.status,code:'GROQ_CHECK_FAILED'});}
+});
 
 // Groq Diagnostic Debug Logs Endpoint
 app.get("/api/groq/debug-logs", (req, res) => {
