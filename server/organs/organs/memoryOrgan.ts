@@ -8,7 +8,7 @@ function database(): SupabaseClient {
   if (!url || !key) throw new Error("Durable memory requires SUPABASE_URL and a server-only SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY");
   const parsed = new URL(url);
   if (parsed.protocol !== "https:") throw new Error("SUPABASE_URL must be an HTTPS API URL");
-  return client ??= createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  return client ??= createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(10000) }) } });
 }
 export async function executeMemoryOrgan(action: string, payload: unknown): Promise<any> {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, any>;
