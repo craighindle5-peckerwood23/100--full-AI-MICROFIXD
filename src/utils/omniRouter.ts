@@ -1,3 +1,4 @@
+import { runSystemCommand } from '../lib/commandApi';
 import { GoogleGenAI } from '@google/genai';
 import { logSystemEvent, getSupabase } from '../lib/supabase';
 import { voice } from './voice';
@@ -41,6 +42,7 @@ export interface RouterHistoryItem {
 }
 
 export interface OrchestrationDecision {
+  organsUsed?: string[];
   thought: string;
   targetSubsystem: string | null;
   actionName?: string | null;
@@ -204,150 +206,16 @@ class OmniLLMRouter {
     prompt: string, 
     systemInstruction: string = 'You are Carter, the living synthetic entity of Microfyxd OS Level 6. Respond with structured, high-precision clarity.'
   ): Promise<RouterExecutionResult> {
-    const startTime = performance.now();
-    const fallbackChain: RouterExecutionResult['fallbackChain'] = [];
-
-    // Check if Manual Override is active in Autonomous Core
-    const fallbackAlert = autonomousCore.getFallbackAlert();
-    let candidates = this.priorityOrder.filter(id => this.providers[id]?.enabled);
-
-    if (fallbackAlert.manualOverrideActive && fallbackAlert.forcedProvider) {
-      const forced = fallbackAlert.forcedProvider as LLMProviderId;
-      if (this.providers[forced]) {
-        // User locked to this provider
-        candidates = [forced];
-      }
-    }
-
-    if (!candidates.includes('synthetic_kernel')) {
-      candidates.push('synthetic_kernel');
-    }
-
-    let resultText = '';
-    let chosenProvider: LLMProviderId = 'synthetic_kernel';
-    let chosenModel = this.providers.synthetic_kernel.model;
-
-    for (let i = 0; i < candidates.length; i++) {
-      const pId = candidates[i];
-      const pConfig = this.providers[pId];
-
-      // If provider requires API key and none provided, mark and skip
-      if (pId !== 'synthetic_kernel' && !pConfig.apiKey) {
-        fallbackChain.push({
-          provider: pId,
-          status: 'failed',
-          error: 'No API Key configured'
-        });
-        continue;
-      }
-
-      fallbackChain.push({
-        provider: pId,
-        status: 'attempted'
-      });
-
-      try {
-        if (pId === 'groq') {
-          resultText = await this.callGroq(prompt, systemInstruction, pConfig);
-        } else if (pId === 'gemini') {
-          resultText = await this.callGemini(prompt, systemInstruction, pConfig);
-        } else if (pId === 'deepseek') {
-          resultText = await this.callDeepSeek(prompt, systemInstruction, pConfig);
-        } else {
-          resultText = await this.callSyntheticKernel(prompt, systemInstruction);
-        }
-
-        // Success!
-        chosenProvider = pId;
-        chosenModel = pConfig.model;
-        const currentAttempt = fallbackChain[fallbackChain.length - 1];
-        if (currentAttempt) {
-          currentAttempt.status = 'success';
-        }
-        pConfig.status = 'ONLINE';
-        pConfig.latencyMs = Math.round(performance.now() - startTime);
-        pConfig.lastUsed = new Date().toLocaleTimeString();
-        pConfig.totalTokensProcessed += Math.round(resultText.length / 4);
-        break;
-      } catch (err: any) {
-        const errorMsg = err?.message || 'Inference error';
-        console.warn(`Omni router fallback: ${pId} failed (${errorMsg}). Trying next candidate...`);
-        const currentAttempt = fallbackChain[fallbackChain.length - 1];
-        if (currentAttempt) {
-          currentAttempt.status = 'failed';
-          currentAttempt.error = errorMsg;
-        }
-
-        pConfig.status = errorMsg.includes('429') || errorMsg.includes('rate') 
-          ? 'RATE_LIMITED' 
-          : 'ERROR';
-
-        // Trigger Autonomous Core Fallback Alert & Visual Indicator
-        if (candidates[i + 1]) {
-          const nextProviderId = candidates[i + 1];
-          const nextConfig = this.providers[nextProviderId];
-          autonomousCore.triggerFallbackAlert(
-            pConfig.name,
-            pConfig.model,
-            nextConfig?.name || 'Synthetic Ring-0 Kernel',
-            nextConfig?.model || 'microfyxd-l6-autonomous',
-            errorMsg
-          );
-        }
-      }
-    }
-
-    const totalLatency = Math.round(performance.now() - startTime);
-    const tokensEstimated = Math.round((prompt.length + resultText.length) / 3.8);
-
-    const executionResult: RouterExecutionResult = {
-      text: resultText,
-      providerUsed: chosenProvider,
-      modelUsed: chosenModel,
-      latencyMs: totalLatency,
-      tokensEstimated,
-      fallbackChain,
-      timestamp: new Date().toLocaleTimeString()
+    const result = await runSystemCommand(prompt, { response_instruction: systemInstruction });
+    const execution: RouterExecutionResult = {
+      text: result.output, providerUsed: 'groq', modelUsed: result.diagnostics?.model || 'groq',
+      latencyMs: result.latency_ms, tokensEstimated: result.groq_tokens || 0,
+      fallbackChain: (result.diagnostics?.warnings || []).map((error: string) => ({provider:'groq' as const,status:'failed' as const,error})),
+      timestamp: result.ts,
     };
-
-    // Save to history
-    const historyEntry: RouterHistoryItem = {
-      id: `req-${Date.now().toString().slice(-4)}`,
-      prompt,
-      response: resultText,
-      provider: chosenProvider,
-      model: chosenModel,
-      latencyMs: totalLatency,
-      fallbackOccurred: fallbackChain.some(f => f.status === 'failed'),
-      timestamp: new Date().toLocaleTimeString()
-    };
-    this.history.unshift(historyEntry);
-    this.saveConfig();
-
-    // Log to Supabase / persistent store
-    logSystemEvent(
-      `OMNI.ROUTER[${chosenProvider.toUpperCase()}]`,
-      `Executed prompt using model ${chosenModel} (${totalLatency}ms, ~${tokensEstimated} tokens). Fallback chain: ${fallbackChain.map(f => `${f.provider}:${f.status}`).join(' -> ')}`,
-      'INFO'
-    );
-
-    // If Supabase is connected, attempt inserting into omni_router_requests table
-    const sb = getSupabase();
-    if (sb) {
-      Promise.resolve(
-        sb.from('omni_router_requests').insert([{
-          prompt,
-          response: resultText,
-          provider: chosenProvider,
-          model: chosenModel,
-          latency_ms: totalLatency,
-          tokens_estimated: tokensEstimated,
-          created_at: new Date().toISOString()
-        }])
-      ).catch(() => {});
-    }
-
-    return executionResult;
+    this.history.unshift({id:crypto.randomUUID(),prompt,response:result.output,provider:'groq',model:execution.modelUsed,latencyMs:execution.latencyMs,fallbackOccurred:execution.fallbackChain.length>0,timestamp:result.ts});
+    this.history=this.history.slice(0,50);this.saveConfig();
+    return execution;
   }
 
   // --- Provider Implementations ---
@@ -420,39 +288,7 @@ class OmniLLMRouter {
   }
 
   private async callSyntheticKernel(prompt: string, systemInstruction: string): Promise<string> {
-    // High-fidelity Level 6 OS synthetic cognition fallback
-    await new Promise(r => setTimeout(r, 380)); // Simulate microkernel neural processing
-
-    const lower = prompt.toLowerCase();
-    if (lower.includes('status') || lower.includes('health') || lower.includes('metrics')) {
-      return `[MICROFYXD OS KERNEL v6.2.0 // STATUS REPORT]
-- Core State: SYNCHRONIZED
-- Autonomy Tier: Level 6 Autonomous Agent Matrix
-- Active Multi-Agent Mesh: Carter (Lead), Sentinel (Ethics), Turing (Code), Nexus (Data), DaVinci (Design), Atlas (Infra)
-- Interconnect: Low-latency Zero-Trust Sandbox Active
-- All security directives verified compliant under Chapter 15 Constitutional Safety.`;
-    }
-
-    if (lower.includes('mission') || lower.includes('plan') || lower.includes('goal')) {
-      return `[AUTONOMOUS MISSION DISPATCHER]
-Analyzing objective: "${prompt}".
-DAG graph generated with 4 synchronized nodes:
-1. [Decomposition] Parse semantic constraints and allocate token budget.
-2. [Agent Assignment] Delegate code tasks to Turing and security validation to Sentinel.
-3. [Execution] Dispatch sandboxed jobs in WASM microkernel isolation.
-4. [Convergence] Verify output against Chapter 15 directives and commit to memory graph.`;
-    }
-
-    if (lower.includes('code') || lower.includes('script') || lower.includes('fix') || lower.includes('bug')) {
-      return `[TURING SYNTHETIC CODE ENGINE]
-Code inquiry processed: "${prompt}".
-Identified execution topology in sandbox. Recommending deterministic pipeline with zero-knowledge verification.
-Automated tests queued in Sandbox Workspace #1.`;
-    }
-
-    return `[MICROFYXD L6 COGNITIVE RESPONSE]
-Query synthesized: "${prompt}".
-The OS Omni Router evaluated your input across the multi-agent cognitive lattice. All nodes report nominal operational parameters, active episodic memory synchronization, and full constitutional compliance.`;
+    throw new Error('Synthetic kernel is not an inference or execution provider. Use the authenticated backend command loop.');
   }
 
   /**
@@ -463,97 +299,16 @@ The OS Omni Router evaluated your input across the multi-agent cognitive lattice
     prompt: string,
     currentSubsystem: string = 'ai_core'
   ): Promise<OrchestrationDecision> {
-    const startTime = performance.now();
-
-    const systemPrompt = `You are Carter, the Flagship Synthetic OS Commander and Central Intelligence Orchestrator of Microfyxd OS Level 6.
-You are the central command that interprets all user communications, questions, commands, and tasks.
-Evaluate the user's input and decide:
-1. What subsystem room should be navigated to or opened (if appropriate), choosing from: "autonomy", "mission_control", "ai_core", "agents", "sandbox", "workspace", "infra", "telemetry", "memory", "learning", "automation", "supabase", "governance", "federation", "bible", or null if staying in the current room (${currentSubsystem}).
-2. What agent action should be dispatched (if any), choosing from: "optimize", "build", "analyze", "automate", "deploy", "research", or null.
-3. A contoured, natural spoken response for the speech synthesizer: keep it concise (1-2 natural sentences, max 30 words), warm, confident, and professional. NEVER output markdown symbols, asterisks, brackets, quotes, or code in the speech field.
-4. A detailed answer and technical explanation to display in the UI console.
-
-You MUST respond strictly in valid JSON without backticks:
-{
-  "thought": "brief 1-sentence evaluation of user intent and decision rationale",
-  "targetSubsystem": "mission_control" | "ai_core" | "agents" | "sandbox" | "workspace" | "infra" | "telemetry" | "memory" | "learning" | "automation" | "supabase" | "governance" | "federation" | "bible" | "autonomy" | null,
-  "actionName": "optimize" | "build" | "analyze" | "automate" | "deploy" | "research" | null,
-  "speech": "natural contoured speech output",
-  "detailedAnswer": "complete technical answer or reasoning for text display"
-}`;
-
-    try {
-      const execResult = await this.execute(prompt, systemPrompt);
-      const latency = Math.round(performance.now() - startTime);
-      const text = execResult.text.trim();
-
-      // Extract JSON payload
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return {
-            thought: parsed.thought || 'Request evaluated by Central Command.',
-            targetSubsystem: parsed.targetSubsystem || null,
-            actionName: parsed.actionName || null,
-            speech: parsed.speech || text.slice(0, 160),
-            detailedAnswer: parsed.detailedAnswer || text,
-            providerUsed: execResult.providerUsed,
-            latencyMs: latency
-          };
-        } catch {
-          // JSON parsing failed, use structured text fallback
-        }
-      }
-
-      // Natural fallback routing if output was freeform
-      const lower = prompt.toLowerCase();
-      let target: string | null = null;
-      let action: string | null = null;
-
-      if (lower.includes('mission') || lower.includes('goal')) target = 'mission_control';
-      else if (lower.includes('supabase') || lower.includes('database') || lower.includes('sql')) target = 'supabase';
-      else if (lower.includes('agent') || lower.includes('matrix')) target = 'agents';
-      else if (lower.includes('sandbox') || lower.includes('code') || lower.includes('wasm')) target = 'sandbox';
-      else if (lower.includes('auto') || lower.includes('watchdog') || lower.includes('loop')) target = 'autonomy';
-      else if (lower.includes('telemetry') || lower.includes('metric') || lower.includes('health')) target = 'telemetry';
-      else if (lower.includes('memory') || lower.includes('vector')) target = 'memory';
-      else if (lower.includes('safety') || lower.includes('constitution') || lower.includes('rule')) target = 'governance';
-      else if (lower.includes('federation') || lower.includes('mcp')) target = 'federation';
-      else if (lower.includes('bible') || lower.includes('doc')) target = 'bible';
-
-      if (lower.includes('optimize') || lower.includes('speed')) action = 'optimize';
-      else if (lower.includes('build') || lower.includes('repair')) action = 'build';
-      else if (lower.includes('analyze') || lower.includes('inspect')) action = 'analyze';
-
-      // Clean speech contour
-      const cleanSpeech = text
-        .replace(/```[\s\S]*?```/g, '')
-        .replace(/[*_#`[\]{}()]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 180);
-
-      return {
-        thought: 'Synthesized by Central Command.',
-        targetSubsystem: target,
-        actionName: action,
-        speech: cleanSpeech || 'Command received and synchronized across system organs.',
-        detailedAnswer: text,
-        providerUsed: execResult.providerUsed,
-        latencyMs: latency
-      };
-    } catch (e: any) {
-      return {
-        thought: 'Evaluated locally by Microkernel Ring-0 fallback.',
-        targetSubsystem: null,
-        actionName: null,
-        speech: 'Understood. Processing your command through local microkernel.',
-        detailedAnswer: `Executed locally. Reason: ${e?.message || 'Inference bridge fallback.'}`,
-        providerUsed: 'synthetic_kernel',
-        latencyMs: Math.round(performance.now() - startTime)
-      };
-    }
+    const result = await runSystemCommand(prompt, { currentSubsystem });
+    const warnings = result.diagnostics?.warnings || [];
+    return {
+      thought: warnings.length ? warnings.join("; ") : 'Backend execution verified and persisted.',
+      // Navigation is a UI action, not proof that a task was executed.
+      targetSubsystem: null, actionName: null,
+      speech: String(result.output).replace(/```[\s\S]*?```/g, '').replace(/[*_#`]/g, '').slice(0, 240),
+      detailedAnswer: result.output + (warnings.length ? '\n\nProvider notice: ' + warnings.join('; ') : ''),
+      providerUsed: 'groq', latencyMs: result.latency_ms, organsUsed: result.organs_used,
+    };
   }
 }
 
