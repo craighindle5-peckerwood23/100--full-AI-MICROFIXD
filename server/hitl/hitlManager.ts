@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 /**
  * server/hitl/hitlManager.ts
  * HITL (Human-in-the-Loop) queue manager.
@@ -6,7 +7,7 @@
  */
 import fs   from "fs";
 import path from "path";
-import { broadcast } from "../index";
+import { broadcast } from "../events";
 
 const HITL_DIR   = path.join(process.cwd(), "server", "hitl", "data");
 const QUEUE_FILE = path.join(HITL_DIR, "hitl_queue.jsonl");
@@ -38,7 +39,7 @@ export function trigger(
   triggerType = "build_complete",
 ): HITLRecord {
   const record: HITLRecord = {
-    hitl_id:    Math.random().toString(36).slice(2, 10),
+    hitl_id:    randomUUID(),
     session_id: sessionId,
     trigger:    triggerType,
     artifact,
@@ -60,7 +61,7 @@ export function decide(
   notes?:    string,
 ): HITLRecord | null {
   const record = _queue.find(r => r.hitl_id === hitlId);
-  if (!record) return null;
+  if (!record || record.status !== "pending") return null;
 
   record.status     = decision;
   record.decided_at = new Date().toISOString();
