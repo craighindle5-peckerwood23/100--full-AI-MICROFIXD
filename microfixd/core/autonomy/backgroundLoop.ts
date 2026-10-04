@@ -56,7 +56,7 @@ export class BackgroundLoopEngine {
         }
 
         // 3. Memory-driven follow-up tasks
-        const recent = this.memory.search("follow_up");
+        const recent = await this.memory.search("follow_up");
         if (recent.length > 0) {
           for (const item of recent) {
             this.scheduler.addTask("analysis", {
