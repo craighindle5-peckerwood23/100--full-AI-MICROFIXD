@@ -42,6 +42,8 @@ export interface RouterHistoryItem {
 }
 
 export interface OrchestrationDecision {
+  responseId?: string;
+  sessionId?: string;
   organsUsed?: string[];
   thought: string;
   targetSubsystem: string | null;
@@ -297,15 +299,17 @@ class OmniLLMRouter {
    */
   public async evaluateAndOrchestrate(
     prompt: string,
-    currentSubsystem: string = 'ai_core'
+    currentSubsystem: string = 'ai_core',
+    outputMode: 'spoken' | 'text' = voice.isEnabled() ? 'spoken' : 'text'
   ): Promise<OrchestrationDecision> {
-    const result = await runSystemCommand(prompt, { currentSubsystem });
+    const result = await runSystemCommand(prompt, { currentSubsystem, output_mode: outputMode });
     const warnings = result.diagnostics?.warnings || [];
     return {
       thought: warnings.length ? warnings.join("; ") : 'Backend execution verified and persisted.',
       // Navigation is a UI action, not proof that a task was executed.
       targetSubsystem: null, actionName: null,
-      speech: String(result.output).replace(/```[\s\S]*?```/g, '').replace(/[*_#`]/g, '').slice(0, 240),
+      speech: String(result.output),
+      responseId: result.response_id, sessionId: result.session_id,
       detailedAnswer: result.output + (warnings.length ? '\n\nProvider notice: ' + warnings.join('; ') : ''),
       providerUsed: 'groq', latencyMs: result.latency_ms, organsUsed: result.organs_used,
     };
