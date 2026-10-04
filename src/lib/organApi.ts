@@ -1,5 +1,5 @@
 import {getCommandPreferences} from './commandPreferences';
-import { commandSession } from './commandApi';
+import { commandSession, runSystemCommand } from './commandApi';
 /**
  * src/lib/organApi.ts
  * Frontend typed API for calling any organ through the backend.
@@ -43,7 +43,7 @@ export const OrganApi = {
 
   // Command center
   command: (task: string, sessionId?: string, source = "api") =>
-    api("POST", "/command/run", { task, session_id: sessionId ?? commandSession(), source, context: getCommandPreferences() }),
+    runSystemCommand(task,undefined,sessionId ?? commandSession(),source),
 
   feedback: (limit = 20) => api("GET", `/command/feedback?limit=${limit}`),
   snapshot: ()           => api("GET", "/organs/snapshot"),
