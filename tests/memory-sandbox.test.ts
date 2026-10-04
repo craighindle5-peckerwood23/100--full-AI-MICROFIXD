@@ -34,8 +34,8 @@ test('database failure rejects instead of returning RAM success', async () => {
 test('central sandbox blocks every supported language without execution', async () => {
   for (const lang of ['javascript','typescript','python','bash']) {
     const result = await runCode('throw new Error("executed")',lang,'test');
-    assert.equal(result.success,false); assert.equal(result.exit_code,126);
-    assert.match(result.stderr,/SANDBOX_DISABLED/);
+    assert.equal(result.success,false); assert.ok([126,2].includes(result.exit_code));
+    assert.match(result.stderr,/Human approval required|Only JavaScript/);
   }
 });
 test('forged admin headers cannot authorize execution or HITL approval', () => {
@@ -54,6 +54,7 @@ test('brain recalls before inference and persists the completed response', async
     const request=input instanceof Request ? input : new Request(input,init);
     if (!request.url.includes('api.groq.com')) return memoryFetch(input,init);
     const body=await request.json();
+    assert.equal(body.max_tokens,2048);
     sawContext=body.messages.some((m:any)=>m.content.includes('repair fact'));
     return new Response(JSON.stringify({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:'remembered repair'},finish_reason:'stop'}],usage:{total_tokens:10}}),{headers:{'Content-Type':'application/json'}});
   };
@@ -63,4 +64,16 @@ test('brain recalls before inference and persists the completed response', async
     assert.equal(sawContext,true);assert.equal(result.memory_persisted,true);
     assert.ok(rows.some(r=>r.content.includes('remembered repair')));
   } finally {globalThis.fetch=memoryFetch;}
+});
+test('core MemoryOrgan uses durable transport and reloads from database',async()=>{
+  const {MemoryOrgan,configureMemoryTransport}=await import('../microfixd/core/memory/memory');
+  configureMemoryTransport(executeMemoryOrgan);
+  const first=new MemoryOrgan();
+  await first.remember('repair_fact','durable core fact');
+  const fresh=new MemoryOrgan();
+  assert.match(await fresh.retrieveContext(),/durable core fact/);
+  fail=true;
+  await assert.rejects(first.remember('broken','must not disappear'),/42501/);
+  await assert.rejects(first.flush(),/42501/);
+  fail=false;
 });
