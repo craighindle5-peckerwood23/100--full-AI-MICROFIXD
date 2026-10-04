@@ -34,13 +34,13 @@ export function useServerEvents(onEvent?: Handler) {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setConnected(true);
-      console.log("[ws] Connected to Microfixd backend");
+      ws.send(JSON.stringify({type:"authenticate",payload:{token:window.sessionStorage.getItem("microfixd_operator_token") || ""}}));
     };
 
     ws.onmessage = (e) => {
       try {
         const event: ServerEvent = JSON.parse(e.data);
+        if(event.type === "authenticated") setConnected(true);
         setLastEvent(event);
         handlersRef.current.forEach(h => h(event));
       } catch {}
