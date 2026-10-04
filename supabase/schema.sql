@@ -95,6 +95,27 @@ CREATE TABLE IF NOT EXISTS public.memory_nodes (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Canonical server memory. Existing installations already use this table.
+CREATE TABLE IF NOT EXISTS public.microfixd_memory_records (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  run_id TEXT,
+  kind TEXT NOT NULL CHECK (kind IN ('episodic','semantic','procedural','experience')),
+  content TEXT NOT NULL,
+  tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+  importance DOUBLE PRECISION NOT NULL CHECK (importance BETWEEN 0 AND 1),
+  score DOUBLE PRECISION,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  tenant_id TEXT NOT NULL DEFAULT 'global',
+  embedding VECTOR(1536),
+  embedding_provider TEXT,
+  embedding_model TEXT
+);
+ALTER TABLE public.microfixd_memory_records ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.microfixd_memory_records FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.microfixd_memory_records TO service_role;
+
 -- ── AUTOMATION RULES ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.automation_rules (
   id         TEXT PRIMARY KEY,
