@@ -1,3 +1,4 @@
+import {getGroqClient,groqConfiguration} from '../../orchestration/groqRuntime';
 /**
  * Brain Organ — Groq LLM calls (ultra-low latency orchestration)
  * Actions: complete, stream, classify, embed, health_check
@@ -6,19 +7,9 @@ import Groq from "groq-sdk";
 import { executeMemoryOrgan } from "./memoryOrgan";
 import { executeGroqWithRetry } from "../../orchestration/groqRetry";
 
-let _groq: Groq | null = null;
-function getGroq(): Groq | null {
-  const apiKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY || "";
-  if (!apiKey) return null;
-  if (!_groq) _groq = new Groq({ apiKey });
-  return _groq;
-}
-
-const DEFAULT_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
-
 export async function executeBrainOrgan(action: string, payload: unknown): Promise<unknown> {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
-  const groq = getGroq();
+  const groq = getGroqClient();
 
   switch (action) {
     case "complete": {
@@ -37,7 +28,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
         : promptMessages;
       if (groq) {
         try {
-          const model = (p.model as string) ?? DEFAULT_MODEL;
+          const model = (p.model as string) ?? groqConfiguration().model;
           const res = await executeGroqWithRetry(groq, {
             model,
             messages: memoryMessages,
@@ -68,7 +59,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
       if (groq) {
         try {
           const res = await executeGroqWithRetry(groq, {
-            model: DEFAULT_MODEL,
+            model: groqConfiguration().model,
             messages: [{ role: "user", content: `Classify this task in one word (plan/execute/retrieve/diagnose/create/reflect): ${String(p.task ?? "")}` }],
             max_tokens: 15,
           }, { maxRetries: 2 });
@@ -81,7 +72,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
     }
     case "health_check":
     case "status": {
-      return { status: "ok", organ: "brain", model: DEFAULT_MODEL, groq_connected: Boolean(groq) };
+      return { status: "ok", organ: "brain", model: groqConfiguration().model, groq_connected: Boolean(groq) };
     }
     default:
       return { status: "ok", action, response: "Brain executed default cognitive evaluation." };
