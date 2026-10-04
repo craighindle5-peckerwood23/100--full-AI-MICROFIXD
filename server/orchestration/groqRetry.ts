@@ -77,7 +77,7 @@ export async function executeGroqWithRetry(
   const fallbackModels = options.fallbackModels ?? VERIFIED_GROQ_MODELS;
   
   let currentModel = requestParams.model || fallbackModels[0];
-  let currentMaxTokens = Math.max(1, Math.min(Number(requestParams.max_tokens) || 2048, 8192));
+  let currentMaxTokens = Math.max(1, Math.min(Number(requestParams.max_tokens) || 10000, 16384));
   
   const startTime = Date.now();
   let lastError: any = null;

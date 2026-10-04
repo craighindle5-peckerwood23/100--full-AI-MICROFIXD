@@ -61,9 +61,10 @@ export const Brain = {
 
 export const Memory = {
   store:   (content: string, tags?: string[], organ?: string) => OrganApi.execute("memory", "store",          { content, tags, organ }),
-  recall:  (query: string,   limit = 5)                       => OrganApi.execute("memory", "recall_keyword", { query, keywords: query.split(" "), limit }),
+  recall:  (query: string,   limit = 30, session_id = commandSession())                       => OrganApi.execute("memory", "recall_keyword", { query, keywords: query.split(" "), limit, session_id }),
   stats:   ()                                                  => OrganApi.execute("memory", "stats",         {}),
-  recent:  (limit = 10)                                        => OrganApi.execute("memory", "recent",        { limit }),
+  context: (limit = 30, max_chars = 60000, query?: string, session_id = commandSession()) => OrganApi.execute("memory", "context", {limit,max_chars,query,session_id}),
+  recent:  (limit = 30, session_id = commandSession())                                        => OrganApi.execute("memory", "recent",        { limit, session_id }),
 };
 
 export const PlaywrightOrgan = {

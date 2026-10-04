@@ -1,3 +1,4 @@
+import {deliverSpokenResponse} from '../../lib/outputDelivery';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -142,7 +143,7 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
 
       // Voice output
       if (decision.speech && voice.isEnabled()) {
-        voice.speak(decision.speech);
+        await deliverSpokenResponse(decision,text=>voice.speak(text));
       }
 
       // Navigate if Groq determined target space

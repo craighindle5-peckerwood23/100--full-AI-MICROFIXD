@@ -1,3 +1,4 @@
+import {deliverSpokenResponse} from '../../lib/outputDelivery';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -208,7 +209,7 @@ export default function FloatingCommandPalette({ onNavigate, activeSubsystem }: 
 
       // Voice response feedback
       if (decision.speech && voice.isEnabled()) {
-        voice.speak(decision.speech);
+        await deliverSpokenResponse(decision,text=>voice.speak(text));
       }
 
       // Auto-navigate if spatial intent was detected

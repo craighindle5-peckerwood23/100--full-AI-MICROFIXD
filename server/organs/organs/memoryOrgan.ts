@@ -16,6 +16,40 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
   const session = String(p.session_id || "default");
   const agent = String(p.organ || "brain");
   const limit = Math.max(1, Math.min(100, Number(p.limit) || 10));
+  if (action === "ack_output") {
+    if (!p.session_id || !p.response_id || !["played", "failed", "cancelled"].includes(p.status)) throw new Error("Valid response_id and playback status required");
+    const { data: output, error: readError } = await db.from("microfixd_memory_records")
+      .select("id,agent_id,metadata").eq("id", p.response_id).contains("metadata", {session_id:session}).single();
+    if (readError || output?.agent_id !== "command" || output.metadata?.output_mode !== "spoken") throw new Error("Spoken response not found in this session");
+    const id = p.status === "played" ? `playback:${p.response_id}` : `playback:${p.response_id}:${randomUUID()}`;
+    if(p.status === "played") {
+      const {data:existing,error:existingError} = await db.from("microfixd_memory_records").select("metadata").eq("id",id).contains("metadata",{session_id:session}).maybeSingle();
+      if(existingError)throw new Error(`Playback lookup failed: ${existingError.message}`);
+      if(existing)return {success:true,response_id:p.response_id,state:existing.metadata.state,cmdId:output.metadata.cmdId,duplicate:true};
+    }
+    const row = {id, agent_id:"delivery", kind:"episodic", content:JSON.stringify({response_id:p.response_id,status:p.status,error:String(p.error || "").slice(0,500)}),
+      tags:["playback"],importance:0.5,tenant_id:"global",metadata:{session_id:session,response_id:p.response_id,state:p.status === "played" ? "completed" : p.status}};
+    // A successful acknowledgment is immutable; retries cannot create duplicate completion records.
+    const {error} = await db.from("microfixd_memory_records").upsert(row,{onConflict:"id",ignoreDuplicates:true});
+    if(error) throw new Error(`Playback acknowledgment failed: ${error.message}`);
+    const {data:ack,error:ackError} = await db.from("microfixd_memory_records").select("metadata").eq("id",id).contains("metadata",{session_id:session}).single();
+    if(ackError) throw new Error(`Playback acknowledgment read failed: ${ackError.message}`);
+    return {success:true,response_id:p.response_id,state:ack.metadata.state,cmdId:output.metadata.cmdId};
+  }
+  if (action === "context") {
+    const requested = Math.max(1,Math.min(100,Number(p.limit ?? process.env.MEMORY_RETRIEVAL_LIMIT) || 30));
+    const max_chars = Math.max(1000,Math.min(100000,Number(p.max_chars ?? process.env.MEMORY_CONTEXT_MAX_CHARS) || 60000));
+    const result = await executeMemoryOrgan(p.query ? "search" : "recent",{session_id:session,limit:requested,query:p.query});
+    const selected:any[]=[];let used=2;
+    for(const memory of result.memories){
+      if(memory.agent_id === "delivery")continue;
+      const record={id:memory.id,content:memory.content,created_at:memory.created_at};
+      const size=JSON.stringify(record).length+1;
+      if(used+size>max_chars)break;
+      selected.push(record);used+=size;
+    }
+    return {context:JSON.stringify(selected.reverse()),window:{requested,returned:selected.length,max_chars,used_chars:used,omitted:result.memories.length-selected.length}};
+  }
   if (action === "store") {
     if (typeof p.content !== "string" || !p.content.trim()) throw new Error("Memory content required");
     const { data, error } = await db.from("microfixd_memory_records").insert({

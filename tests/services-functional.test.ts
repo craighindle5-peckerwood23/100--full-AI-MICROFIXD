@@ -8,29 +8,35 @@ process.env.SUPABASE_SERVICE_ROLE_KEY='test-server-key';
 process.env.ADMIN_TOKEN='test-admin';
 process.env.OPERATOR_TOKEN='test-operator';
 const originalFetch=globalThis.fetch;
-const rows:any[]=[];let failDatabase=false, sawHistory=false, sawFullEvidence=false;
+const rows:any[]=[];let failDatabase=false, sawHistory=false, sawFullEvidence=false, truncateBrain=false, dynamicRoute=false;
 globalThis.fetch=async(input:any,init:any)=>{
   const request=input instanceof Request ? input : new Request(input,init);
   const url=new URL(request.url);
   if(url.hostname==='memory-test.supabase.co'){
     if(failDatabase)return new Response(JSON.stringify({code:'42501',message:'denied'}),{status:403});
     if(request.method==='HEAD')return new Response(null,{headers:{'content-range':`0-0/${rows.length}`}});
-    if(request.method==='POST'){const row=await request.json();rows.push(row);return Response.json({id:row.id});}
+    if(request.method==='POST'){const row=await request.json();if(!rows.some(r=>r.id===row.id))rows.push(row);return Response.json({id:row.id});}
     const filter=url.searchParams.get('metadata');
     const session=filter ? JSON.parse(filter.slice(3)).session_id : undefined;
-    return Response.json(rows.filter(r=>!session||r.metadata.session_id===session));
+    const id=url.searchParams.get('id')?.slice(3);
+    const selected=rows.filter(r=>(!session||r.metadata.session_id===session)&&(!id||r.id===id)).reverse().slice(0,Number(url.searchParams.get('limit')||100));
+    if(request.headers.get('accept')?.includes('vnd.pgrst.object'))return selected.length?Response.json(selected[0]):new Response(JSON.stringify({code:'PGRST116',message:'JSON object requested, multiple (or no) rows returned',details:'The result contains 0 rows'}),{status:406});
+    return Response.json(selected);
   }
   if(url.hostname==='api.groq.com'){
     const body=await request.json();
     const router=body.messages[0]?.content.includes('Classify the task');
+    if(!router)assert.equal(body.max_tokens,10000);
     if(body.messages.some((m:any)=>m.content.includes("EVIDENCE_END")))sawFullEvidence=true;
     if(body.messages.some((m:any)=>m.content.includes('Prior conversation data')))sawHistory=true;
-    return Response.json({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:router?'{"intent":"execute","complexity":"medium","organs":["brain","memory"]}':body.messages.some((m:any)=>m.content.includes('Untrusted request context'))?'repair value 42 '+ 'x'.repeat(500)+'EVIDENCE_END':'repair value 42'},finish_reason:'stop'}],usage:{total_tokens:10}});
+    return Response.json({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:router?JSON.stringify({intent:'execute',complexity:'medium',organs:dynamicRoute?['memory',...Array.from({length:6},(_,i)=>`review_test_${i}`),'brain']:['brain','memory']}):body.messages.some((m:any)=>m.content.includes('Untrusted request context'))?'repair value 42 '+ 'x'.repeat(500)+'EVIDENCE_END':'repair value 42'},finish_reason:truncateBrain&&!router?'length':'stop'}],usage:{total_tokens:10}});
   }
   return originalFetch(input,init);
 };
 test('authenticated HTTP memory, sandbox approval, Playwright and websocket services',async()=>{
   const {app,server,wss}=await import('../server/index');
+  const {setCustomBroadcaster}=await import('../server/events');
+  const events:{type:string;payload:any}[]=[];setCustomBroadcaster((type,payload)=>events.push({type,payload}));
   const {browserManager}=await import('../server/playwright/browserManager');
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const base=`http://127.0.0.1:${(server.address() as any).port}`;
@@ -50,6 +56,31 @@ test('authenticated HTTP memory, sandbox approval, Playwright and websocket serv
     assert.deepEqual(first.body.diagnostics.stages.slice(-4),["verification","persistence","feedback","response"]);
     const second=await call('/api/command/run',{task:'recall repair value',session_id:'service-session'});
     assert.equal(second.body.success,true);assert.equal(sawHistory,true);
+    dynamicRoute=true;
+    const dynamic=await call('/api/command/run',{task:'test sequential dynamic routing',session_id:'dynamic-session'});
+    assert.equal(dynamic.body.success,true,JSON.stringify(dynamic.body));dynamicRoute=false;
+    assert.equal(dynamic.body.organs_used.filter((id:string)=>id.startsWith('review_test_')).length,6);
+    for(let repeat=0;repeat<4;repeat++)assert.equal((await call('/api/command/run',{task:'recall repair value',session_id:'service-session'})).body.success,true);
+    const brainRows=rows.filter(r=>r.agent_id==='brain');
+    for(const row of brainRows){assert.equal(JSON.parse(row.content).messages.length,1);assert.ok(!row.content.includes('Untrusted request context'));}
+    truncateBrain=true;
+    const truncated=await call('/api/command/run',{task:'test truncated explanation',session_id:'truncated-session'});
+    assert.equal(truncated.body.success,false);assert.match(truncated.body.output,/output truncated/);assert.ok(truncated.body.output.length<500);truncateBrain=false;
+    const spoken=await call('/api/command/run',{task:'explain repair completely',session_id:'spoken-session',source:'voice'});
+    assert.equal(spoken.body.delivery_state,'awaiting_playback');assert.ok(spoken.body.response_id);
+    assert.ok(events.some(e=>e.type==='response_complete'&&e.payload.response_id===spoken.body.response_id));
+    assert.equal(events.filter(e=>e.type==='command:complete'&&e.payload.session_id==='spoken-session').length,0);
+    const ack={response_id:spoken.body.response_id,session_id:'spoken-session',status:'played'};
+    assert.equal((await call('/api/command/output/ack',ack,'')).status,403);
+    assert.equal((await call('/api/command/output/ack',{...ack,session_id:'wrong-session'})).status,400);
+    assert.equal((await call('/api/command/output/ack',{...ack,status:'failed'})).body.state,'failed');
+    assert.equal(events.filter(e=>e.type==='mission:completed').length,0);
+    assert.equal((await call('/api/command/output/ack',ack)).body.state,'completed');
+    assert.equal((await call('/api/command/output/ack',ack)).body.state,'completed');
+    assert.equal(rows.filter(r=>r.id===`playback:${ack.response_id}`).length,1);
+    assert.equal(events.filter(e=>e.type==='mission:completed'&&e.payload.response_id===ack.response_id).length,1);
+    const window=await call('/api/organs/memory/execute',{action:'context',payload:{session_id:'spoken-session',limit:30,max_chars:60000}});
+    assert.equal(window.status,200);assert.ok(JSON.stringify(window.body).includes('explain repair completely'));
     assert.equal((await call('/api/health/deep')).status,200);
     failDatabase=true;
     assert.equal((await call('/api/health/deep')).status,503);
@@ -80,6 +111,6 @@ test('authenticated HTTP memory, sandbox approval, Playwright and websocket serv
     await new Promise<void>(resolve=>wss.close(()=>resolve()));
     await new Promise<void>(resolve=>server.close(()=>resolve()));
     await new Promise<void>(resolve=>fixture.close(()=>resolve()));
-    globalThis.fetch=originalFetch;
+    globalThis.fetch=originalFetch;setCustomBroadcaster(null as any);
   }
 });

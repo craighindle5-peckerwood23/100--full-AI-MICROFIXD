@@ -1,3 +1,4 @@
+import {deliverSpokenResponse} from '../../lib/outputDelivery';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Subsystem, AvatarState } from '../../types';
@@ -216,7 +217,7 @@ export default function OSShell({ onReboot }: Props) {
 
       // 3. Speak the contoured, natural expressive speech output aloud
       if (decision.speech && voice.isEnabled()) {
-        voice.speak(decision.speech, true);
+        await deliverSpokenResponse(decision,text=>voice.speak(text));
       }
 
       // 4. Persist interaction to Supabase UI State
@@ -229,8 +230,9 @@ export default function OSShell({ onReboot }: Props) {
           latencyMs: decision.latencyMs
         }
       });
-    } catch {
-      voice.speak('Command processed by microkernel.');
+    } catch (err) {
+      console.error('[command] Output incomplete:', err);
+      void voice.speak(`Command or playback failed. ${String(err)}`).catch(() => {});
     } finally {
       setIsCommandRunning(false);
     }

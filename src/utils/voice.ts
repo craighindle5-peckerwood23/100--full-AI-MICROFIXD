@@ -1,3 +1,4 @@
+import {ttsEngine} from '../voice/ttsEngine';
 // Synthetic Voice Feedback System for Microfyxd OS (Chapter 2 & 21)
 type VoiceListener = (isSpeaking: boolean, text: string) => void;
 
@@ -73,69 +74,13 @@ class SyntheticVoiceEngine {
       .trim();
   }
 
-  public speak(text: string, priority: boolean = false) {
-    if (!this.isVoiceEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      return;
-    }
-
-    if (this.speechTimeout) {
-      clearTimeout(this.speechTimeout);
-      this.speechTimeout = null;
-    }
-
-    try {
-      // If priority or interrupted, cancel currently playing utterance
-      if (priority || window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-      }
-
-      const contouredText = this.cleanForSpeech(text);
-      if (!contouredText) return;
-
-      // Small natural conversational pause (120ms) to avoid clipping and allow ear adjustment
-      this.speechTimeout = setTimeout(() => {
-        try {
-          const utterance = new SpeechSynthesisUtterance(contouredText);
-          if (this.selectedVoice) {
-            utterance.voice = this.selectedVoice;
-          }
-          utterance.rate = this.voiceRate;
-          utterance.pitch = this.voicePitch;
-
-          utterance.onstart = () => {
-            this.notify(true, contouredText);
-          };
-
-          utterance.onend = () => {
-            this.notify(false, '');
-          };
-
-          utterance.onerror = () => {
-            this.notify(false, '');
-          };
-
-          window.speechSynthesis.speak(utterance);
-        } catch (err) {
-          console.warn('Speech synthesis utterance error:', err);
-          this.notify(false, '');
-        }
-      }, 120);
-    } catch (e) {
-      console.warn('Speech synthesis error:', e);
-      this.notify(false, '');
-    }
+  public async speak(text: string, priority: boolean = false): Promise<void> {
+    if (!this.isVoiceEnabled) return Promise.reject(new Error('Voice disabled'));
+    if(priority)ttsEngine.interrupt();
+    try {await ttsEngine.speak(text,()=>this.notify(true,text));}
+    finally {this.notify(false,'');}
   }
-
-  public stop() {
-    if (this.speechTimeout) {
-      clearTimeout(this.speechTimeout);
-      this.speechTimeout = null;
-    }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      this.notify(false, '');
-    }
-  }
+  public stop() {ttsEngine.interrupt();this.notify(false,'');}
 
   public toggleVoice(): boolean {
     this.isVoiceEnabled = !this.isVoiceEnabled;
