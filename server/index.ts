@@ -16,6 +16,7 @@ import path          from "path";
 import { readFileSync } from "fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { playwrightRouter }  from "./playwright/playwrightRouter";
+import { configureMemoryTransport } from "../microfixd/core/memory/memory";
 import { executeMemoryOrgan } from "./organs/organs/memoryOrgan";
 import { sandboxRouter }     from "./sandbox/sandboxRouter";
 import { hitlRouter }        from "./hitl/hitlRouter";
@@ -32,7 +33,7 @@ import { executionRouter }   from "./execution/executionRouter";
 import { skinRouter }        from "./skin/skinRouter";
 import { crossAIRouter }     from "./crossai/crossAIRouter";
 import { autonomyRouter }   from "./autonomy-adapter/autonomyRouter";
-import { rbacMiddleware }    from "./security/rbac";
+import { rbacMiddleware, roleForToken }    from "./security/rbac";
 import { organRegistry }     from "./organs/organRegistry";
 import { getPending }        from "./hitl/hitlManager";
 import { initOrgans }        from "../microfixd/langgraph/organs";
@@ -57,6 +58,7 @@ app.use(cors({
 app.use(express.json({ limit: "10mb" }));
 
 // ── Health and boot state (public, read-only) ──────────────────────────────
+configureMemoryTransport(executeMemoryOrgan);
 const cognitiveOrgans = initOrgans();
 
 // Boot readiness for the OS TV: mirrors deep health without auth so the
@@ -88,7 +90,7 @@ app.get("/api/health", (_, res) => {
 
 app.get("/api/health/deep", async (_, res) => {
   let memoryReady = false;
-  try { await executeMemoryOrgan("health", {}); memoryReady = true; } catch {}
+  try { await cognitiveOrgans.memory.flush(); await executeMemoryOrgan("health", {}); memoryReady = true; } catch {}
   const records = organRegistry.all();
   const configured = {
     admin: Boolean(process.env.ADMIN_TOKEN),
@@ -179,13 +181,21 @@ export { broadcast };
 
 // ── WebSocket hub ──────────────────────────────────────────────────────────
 wss.on("connection", (ws) => {
-  registerWsClient(ws);
-  console.log(`[ws] Client connected.`);
+  let authenticated = false;
+  const timer = setTimeout(() => { if (!authenticated) ws.close(1008, "Authentication required"); }, 5000);
+  ws.once("close", () => clearTimeout(timer));
 
   ws.on("message", (data) => {
     try {
       const msg = JSON.parse(data.toString());
-      handleWsMessage(ws, msg);
+      if (!authenticated) {
+        if (msg.type !== "authenticate" || roleForToken(String(msg.payload?.token || "")) === "anonymous") {
+          ws.close(1008, "Invalid authentication"); return;
+        }
+        authenticated = true; clearTimeout(timer); registerWsClient(ws);
+        ws.send(JSON.stringify({type:"authenticated",ts:new Date().toISOString()})); return;
+      }
+      void handleWsMessage(ws, msg).catch(() => ws.send(JSON.stringify({type:"error",message:"Action failed"})));
     } catch (err) {
       ws.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
     }
@@ -196,8 +206,7 @@ wss.on("connection", (ws) => {
     console.log(`[ws] Client disconnected.`);
   });
 
-  // Send initial system state
-  ws.send(JSON.stringify({ type: "connected", ts: new Date().toISOString() }));
+
 });
 
 // Register broadcast with screenshot streamer

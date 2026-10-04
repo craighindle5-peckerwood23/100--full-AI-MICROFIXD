@@ -189,18 +189,7 @@ export default function FloatingCommandPalette({ onNavigate, activeSubsystem }: 
       let answer = decision.detailedAnswer || decision.speech || decision.thought || 'Task executed successfully.';
       let organsUsed: string[] = ['brain', 'memory'];
 
-      // 2. Dispatch to backend execution mesh if appropriate
-      try {
-        const backendRes = await OrganApi.command(text) as any;
-        if (backendRes?.output && backendRes.success) {
-          answer = backendRes.output;
-        }
-        if (backendRes?.organs_used) {
-          organsUsed = backendRes.organs_used;
-        }
-      } catch {
-        // omniRouter response already valid
-      }
+      organsUsed = decision.organsUsed || [];
 
       const latency = Date.now() - t0;
       const groqMsg: MessageEntry = {

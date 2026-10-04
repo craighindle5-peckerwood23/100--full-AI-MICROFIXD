@@ -53,14 +53,9 @@ class SpeechEngine {
             // Send to Groq Central Command & Orchestration Layer
             const decision = await omniRouter.evaluateAndOrchestrate(t);
             conversationTimer.onAIResponseReady(decision.speech);
-          } catch {
-            try {
-              const fallback = await OrganApi.command(t) as { output: string };
-              conversationTimer.onAIResponseReady(fallback.output ?? "Command processed by microkernel.");
-            } catch {
-              this.speak("Command processed by microkernel.");
-              conversationTimer.reset();
-            }
+          } catch (err) {
+            this.speak(`The command failed. ${err instanceof Error ? err.message : String(err)}`);
+            conversationTimer.reset();
           }
         });
       },

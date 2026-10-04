@@ -47,9 +47,9 @@ organRouter.post("/load-all", async (req, res) => {
         return { id: organ.id, name: organ.name, layer: organ.layer, status: "active", latency_ms: latency };
       } catch (err: any) {
         const latency = Math.round(performance.now() - start);
-        organRegistry.setStatus(organ.id, "active"); // fallback to active on soft warning
-        organRegistry.recordExec(organ.id, true, latency, "load_handshake_fallback");
-        return { id: organ.id, name: organ.name, layer: organ.layer, status: "active", latency_ms: latency };
+        organRegistry.setStatus(organ.id, "error", String(err));
+        organRegistry.recordExec(organ.id, false, latency, "load_handshake_failed", String(err));
+        return { id: organ.id, name: organ.name, layer: organ.layer, status: "error", latency_ms: latency };
       }
     })
   );

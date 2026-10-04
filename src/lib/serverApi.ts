@@ -48,8 +48,8 @@ export const Playwright = {
 
 // ── Sandbox ─────────────────────────────────────────────────────────────────
 export const Sandbox = {
-  run: (code: string, lang: string, session_id = "default") =>
-    api("POST", "/sandbox/run", { code, lang, session_id }),
+  run: (code: string, lang: string, session_id = "default", approval_id?: string) =>
+    api("POST", "/sandbox/run", { code, lang, session_id, approval_id }),
   log: (limit = 50) =>
     api<{ entries: unknown[] }>("GET", `/sandbox/log?limit=${limit}`),
   clearLog: () => api("DELETE", "/sandbox/log"),

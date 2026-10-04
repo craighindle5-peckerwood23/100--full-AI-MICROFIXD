@@ -120,18 +120,7 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
       intent = decision.actionName || 'orchestrate';
       targetSubsystem = decision.targetSubsystem || '';
 
-      // 2. Dispatch backend command if needed
-      try {
-        const backendRes = await OrganApi.command(text) as any;
-        if (backendRes?.organs_used) {
-          organsUsed = backendRes.organs_used;
-        }
-        if (backendRes?.output && backendRes.success) {
-          resultText = backendRes.output;
-        }
-      } catch {
-        // Local orchestrator succeeded
-      }
+      organsUsed = decision.organsUsed || [];
 
       const latency = Date.now() - t0;
 

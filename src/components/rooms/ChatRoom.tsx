@@ -22,6 +22,9 @@ export default function ChatRoom() {
       ts:   new Date().toISOString(),
     },
   ]);
+  const sessionId = useRef(window.sessionStorage.getItem("microfixd_chat_session") || crypto.randomUUID());
+  window.sessionStorage.setItem("microfixd_chat_session", sessionId.current);
+
   const [input,    setInput]    = useState("");
   const [thinking, setThinking] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -43,7 +46,7 @@ export default function ChatRoom() {
     setThinking(true);
 
     try {
-      const result = await runCortex(text, crypto.randomUUID());
+      const result = await runCortex(text, sessionId.current);
       const sysMsg: Message = {
         id:    crypto.randomUUID(),
         role:  "system",

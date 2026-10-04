@@ -40,12 +40,12 @@ mcpRouter.post("/call", async (req, res) => {
       case "playwright_scrape":     result = await browserManager.scrape(args.url, args.selector); break;
       case "playwright_screenshot": result = { screenshot: await browserManager.screenshot() }; break;
       case "playwright_click":      result = await browserManager.click(args.selector); break;
-      case "sandbox_run":           result = await runCode(args.code, args.lang ?? "typescript", "mcp"); break;
+      case "sandbox_run":           result = await runCode(args.code, args.lang ?? "typescript", args.session_id ?? "mcp", args.approval_id); break;
       case "hitl_pending":          result = { records: getPending() }; break;
       case "system_health":         result = { status: "nominal", ts: new Date().toISOString() }; break;
       default: return res.status(404).json({ error: `Tool '${tool_name}' not found.` });
     }
-    res.json({ success: true, result });
+    res.json({ success: !(result && typeof result === "object" && "success" in result && result.success === false), result });
   } catch (err) {
     res.status(500).json({ success: false, error: String(err) });
   }

@@ -16,6 +16,8 @@
  * Circuit breaker: after 3 failures, organ is isolated for 60s.
  */
 import Groq from "groq-sdk";
+import { getExecutor } from "../organs/executors";
+import { executeMemoryOrgan } from "../organs/organs/memoryOrgan";
 import { securitySpine }    from "../security/securitySpine";
 import { organRegistry }    from "../organs/organRegistry";
 import { broadcast }        from "../index";
@@ -109,11 +111,7 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
   // 2. Reflex check
   executionTracer.addStep(traceId, "reflex", "running");
   try {
-    const reflexResp = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/organs/reflex/execute`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "match", payload: { text: sanitizedTask } }),
-    });
-    const reflexResult = await reflexResp.json() as { result: { matches: { tag: string; response?: string }[] } };
+    const reflexResult = { result: await getExecutor("reflex")("match", { text: sanitizedTask }) } as {result:{matches:{tag:string;response?:string}[]}};
     const blocked      = reflexResult.result?.matches?.find((m: { tag: string }) => ["dangerous","bypass_attempt"].includes(m.tag));
     organsUsed.push("reflex");
     executionTracer.addStep(traceId, "reflex", "done");
@@ -148,13 +146,8 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
     if (isCircuitOpen(organId)) return;
     try {
       executionTracer.addStep(traceId, organId, "running");
-      const resp = await withRetry(() =>
-        fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/organs/${organId}/execute`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ action: "complete", payload: { task: sanitizedTask } }),
-        }).then(r => r.json()), 2, organId
-      );
+      const action = organId === "brain" ? "complete" : organId === "memory" ? "query" : "status";
+      const resp = await withRetry(() => getExecutor(organId)(action, { task: sanitizedTask, text: sanitizedTask, session_id: task.session_id }), 2, organId);
       organResults[organId] = resp;
       organsUsed.push(organId);
       executionTracer.addStep(traceId, organId, "done");
@@ -167,6 +160,7 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
   executionTracer.addStep(traceId, "synthesize", "running");
   let output = "";
   let retries = 0;
+  let synthesisSucceeded = false;
   try {
     const synth = await withRetry(async () => {
       retries++;
@@ -181,6 +175,7 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
     }, 2, "brain");
     const synthMsg = synth.choices[0]?.message;
     output = synthMsg?.content || synthMsg?.reasoning || "Task completed.";
+    synthesisSucceeded = true;
     executionTracer.addStep(traceId, "synthesize", "done");
   } catch (err) {
     output = `Execution failed: ${String(err)}`;
@@ -191,14 +186,19 @@ export async function execute(task: ExecutionTask): Promise<ExecutionResult> {
   const outCheck = await securitySpine.checkOutput(output);
   const finalOut = outCheck.output;
 
-  executionTracer.endTrace(traceId, outCheck.clean);
+  let memoryPersisted = false;
+  if (synthesisSucceeded && outCheck.clean) {
+    try { await executeMemoryOrgan("store", {session_id: task.session_id, organ: "execution", content: JSON.stringify({task: sanitizedTask, output: finalOut})}); memoryPersisted = true; }
+    catch (err) { executionTracer.addStep(traceId, "memory", "error"); }
+  }
+  executionTracer.endTrace(traceId, outCheck.clean && memoryPersisted);
   broadcast("execution:task_done", { task_id: task.id, latency_ms: Date.now() - t0 });
 
   return {
     task_id:        task.id,
     session_id:     task.session_id,
     output:         finalOut,
-    success:        true,
+    success:        synthesisSucceeded && outCheck.clean && memoryPersisted,
     organs_used:    organsUsed,
     latency_ms:     Date.now() - t0,
     trace_id:       traceId,

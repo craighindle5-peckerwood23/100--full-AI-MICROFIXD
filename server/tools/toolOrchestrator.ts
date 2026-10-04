@@ -1,3 +1,4 @@
+import { runCode } from "../sandbox/codeRunner";
 /**
  * server/tools/toolOrchestrator.ts
  * TOOL ORCHESTRATOR
@@ -38,11 +39,7 @@ const ORGAN_EXECUTORS: Record<string, (action: string, payload: unknown) => Prom
   orchestration_oversight: executeWorldModelOrgan,
   sandbox: async (action, payload) => {
     const p = payload as Record<string, unknown>;
-    const resp = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/sandbox/run`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: p.code, lang: p.lang, session_id: "tool_orchestrator" }),
-    });
-    return resp.json();
+    return runCode(String(p.code ?? ""), String(p.lang ?? "typescript"), "tool_orchestrator", p.approval_id as string | undefined);
   },
 };
 

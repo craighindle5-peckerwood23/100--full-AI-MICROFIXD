@@ -4,7 +4,7 @@
  * Express middleware + role checker for all API routes.
  *
  * Roles: admin > operator > observer > system > anonymous
- * Token: Bearer in Authorization header (or X-Microfixd-Role for dev)
+ * Token: Bearer in Authorization header; caller-supplied role headers are ignored
  */
 import { Request, Response, NextFunction } from "express";
 import { broadcast } from "../events";
@@ -40,24 +40,24 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
 
 const auditLog: { ts: string; role: Role; route: string; allowed: boolean; ip: string }[] = [];
 
-function getRoleFromRequest(req: Request): Role {
-  // Auth: Bearer token lookup
-  const auth  = req.headers["authorization"] ?? "";
-  const token = auth.replace("Bearer ", "").trim();
-  if (process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN)       return "admin";
+export function roleForToken(token: string): Role {
+  if (process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN) return "admin";
   if (process.env.OPERATOR_TOKEN && token === process.env.OPERATOR_TOKEN) return "operator";
-  if (process.env.SYSTEM_TOKEN && token === process.env.SYSTEM_TOKEN)     return "system";
-
+  if (process.env.SYSTEM_TOKEN && token === process.env.SYSTEM_TOKEN) return "system";
   return "anonymous";
+}
+function getRoleFromRequest(req: Request): Role {
+  const auth = req.headers.authorization ?? "";
+  return /^Bearer /i.test(auth) ? roleForToken(auth.slice(7).trim()) : "anonymous";
 }
 
 export function rbacMiddleware(req: Request, res: Response, next: NextFunction): void {
   const role       = getRoleFromRequest(req);
   const routeBase  = Object.keys(ROUTE_PERMISSIONS).find(r => req.path.startsWith(r)) ?? req.path;
-  const required = req.path.startsWith("/api/hitl") && req.method !== "GET"
+  const required = req.path.startsWith("/api/hitl/decide") && req.method !== "GET"
     ? "approve" : ROUTE_PERMISSIONS[routeBase] ?? (req.method === "GET" ? "read" : "execute");
   const perms      = ROLE_PERMISSIONS[role];
-  const allowed    = perms.has("*") || perms.has(required);
+  const allowed = role !== "anonymous" && (perms.has("*") || perms.has(required));
 
   const entry = { ts: new Date().toISOString(), role, route: req.path, allowed, ip: req.ip ?? "" };
   auditLog.push(entry);

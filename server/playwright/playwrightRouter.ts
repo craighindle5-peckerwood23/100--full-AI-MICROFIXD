@@ -18,7 +18,7 @@
  */
 import { Router } from "express";
 import { browserManager } from "./browserManager";
-import { broadcast } from "../index";
+import { broadcast } from "../events";
 
 export const playwrightRouter = Router();
 

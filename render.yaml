@@ -3,7 +3,7 @@ services:
     name: microfixd-full-ai
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npx playwright install --with-deps chromium && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
@@ -17,6 +17,8 @@ services:
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
       - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
