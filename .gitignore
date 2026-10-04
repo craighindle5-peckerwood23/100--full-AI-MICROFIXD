@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+
+server/hitl/data/
+server/sandbox/workspace/
+server/sandbox/session_log.jsonl
