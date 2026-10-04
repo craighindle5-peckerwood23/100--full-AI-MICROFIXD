@@ -17,12 +17,12 @@ const SESSION_LOG = path.join(process.cwd(), "server", "sandbox", "session_log.j
 
 sandboxRouter.post("/run", async (req, res) => {
   const { code, lang = "typescript", session_id = "default" } = req.body;
-  if (!code) return res.status(400).json({ error: "code required" });
+  if (typeof code !== "string" || !code.trim() || code.length > 65536 || typeof lang !== "string" || typeof session_id !== "string") return res.status(400).json({ error: "code required" });
 
   const result = await runCode(code, lang, session_id);
   // Broadcast to all WS clients so HSH can update (rule-SB-001)
   broadcast("sandbox:exec_result", result);
-  res.json(result);
+  res.status(503).json(result);
 });
 
 sandboxRouter.get("/log", (req, res) => {
