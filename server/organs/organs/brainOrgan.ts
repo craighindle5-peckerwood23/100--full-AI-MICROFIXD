@@ -14,7 +14,7 @@ function getGroq(): Groq | null {
   return _groq;
 }
 
-const DEFAULT_MODEL = "qwen/qwen3.8-27b";
+const DEFAULT_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
 
 export async function executeBrainOrgan(action: string, payload: unknown): Promise<unknown> {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
@@ -36,7 +36,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
         try {
           const model = (p.model as string) ?? DEFAULT_MODEL;
           const res = await executeGroqWithRetry(groq, {
-            model: model.includes("qwen") || model.includes("gpt-oss") ? model : DEFAULT_MODEL,
+            model,
             messages: memoryMessages,
             temperature: (p.temperature as number) ?? 0.7,
             max_tokens: Math.max(1, Math.min(Number(p.max_tokens ?? process.env.BRAIN_MAX_TOKENS) || 2048, 8192)),
