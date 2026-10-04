@@ -1,3 +1,4 @@
+import {deliverSpokenResponse} from '../lib/outputDelivery';
 /**
  * src/voice/speechEngine.ts
  * MASTER SPEECH ENGINE
@@ -39,7 +40,7 @@ class SpeechEngine {
       // onSilence — submit after pause
       (transcript) => {
         const { enabled } = useVoiceStore.getState();
-        if (!enabled) return;
+        if (!enabled || ["ai_speaking", "ai_processing", "turn_transition"].includes(conversationTimer.getState())) return;
 
         // Wake word check
         if (sttEngine.detectWakeWord(transcript, wakeWord)) {
@@ -51,8 +52,8 @@ class SpeechEngine {
           conversationTimer.onAIProcessing();
           try {
             // Send to Groq Central Command & Orchestration Layer
-            const decision = await omniRouter.evaluateAndOrchestrate(t);
-            conversationTimer.onAIResponseReady(decision.speech);
+            const decision = await omniRouter.evaluateAndOrchestrate(t, "ai_core", "spoken");
+            await deliverSpokenResponse(decision,text=>conversationTimer.onAIResponseReady(text));
           } catch (err) {
             this.speak(`The command failed. ${err instanceof Error ? err.message : String(err)}`);
             conversationTimer.reset();
