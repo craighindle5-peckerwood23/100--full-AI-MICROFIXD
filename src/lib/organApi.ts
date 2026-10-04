@@ -1,3 +1,4 @@
+import {getCommandPreferences} from './commandPreferences';
 import { commandSession } from './commandApi';
 /**
  * src/lib/organApi.ts
@@ -42,7 +43,7 @@ export const OrganApi = {
 
   // Command center
   command: (task: string, sessionId?: string, source = "api") =>
-    api("POST", "/command/run", { task, session_id: sessionId ?? commandSession(), source }),
+    api("POST", "/command/run", { task, session_id: sessionId ?? commandSession(), source, context: getCommandPreferences() }),
 
   feedback: (limit = 20) => api("GET", `/command/feedback?limit=${limit}`),
   snapshot: ()           => api("GET", "/organs/snapshot"),
