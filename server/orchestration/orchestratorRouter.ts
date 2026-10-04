@@ -7,6 +7,8 @@
  * GET  /api/command/metrics       — System performance metrics
  * POST /api/command/broadcast     — Broadcast message to all organs
  */
+import { executeMemoryOrgan } from "../organs/organs/memoryOrgan";
+import { broadcast } from "../events";
 import { Router }     from "express";
 import { runCommand, runSystemLoadTest } from "./commandCenter";
 import { feedbackLoop } from "./feedbackLoop";
@@ -15,6 +17,15 @@ import { worldThinkingEngine } from "./worldThinkingEngine";
 import { orchestrationOversight } from "./orchestrationOversight";
 
 export const orchestratorRouter = Router();
+
+orchestratorRouter.post("/output/ack", async (req,res) => {
+  try {
+    const result = await executeMemoryOrgan("ack_output",req.body);
+    if(!result.duplicate && result.state === "completed")broadcast("mission:completed",{missionId:result.cmdId,response_id:result.response_id,session_id:req.body.session_id,outcome:"succeeded",event_id:`playback:${result.response_id}`});
+    if(!result.duplicate)broadcast(result.state === "completed" ? "command:complete" : "command:playback_failed",{...result,session_id:req.body.session_id});
+    res.json(result);
+  } catch(err) {res.status(400).json({success:false,error:String(err)});}
+});
 
 orchestratorRouter.post("/run", async (req, res) => {
   const { task, session_id = crypto.randomUUID(), source = "api", priority = "normal", context } = req.body;
