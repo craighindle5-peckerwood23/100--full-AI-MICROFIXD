@@ -36,9 +36,9 @@ class ConversationTimer {
   // Called when STT detects speech
   onHumanSpeech(): void {
     this.clearSilenceTimer();
-    if (this.state === "ai_speaking") {
-      // Human interrupted — stop AI speech
-      import("./ttsEngine").then(({ ttsEngine }) => ttsEngine.interrupt());
+    if (["ai_speaking", "ai_processing", "turn_transition"].includes(this.state)) {
+      // Ignore microphone echo during playback. Explicit Stop remains available.
+      return;
     }
     this.setState("human_talking");
   }
@@ -66,18 +66,12 @@ class ConversationTimer {
   }
 
   // Called when AI response ready — start speaking
-  onAIResponseReady(text: string): void {
-    this.setState("turn_transition");
-    const elapsed = Date.now() - this.processingStart;
-    console.log(`[conv_timer] AI responded in ${elapsed}ms`);
-    setTimeout(() => {
-      this.setState("ai_speaking");
-      import("./ttsEngine").then(({ ttsEngine }) => {
-        ttsEngine.speak(text, undefined, () => {
-          this.setState("idle");
-        });
-      });
-    }, 150); // brief pause before speaking
+  async onAIResponseReady(text: string): Promise<void> {
+    this.setState("ai_speaking");
+    try {
+      const {ttsEngine}=await import("./ttsEngine");
+      await ttsEngine.speak(text);
+    } finally {this.setState("idle");}
   }
 
   // Reset to idle
