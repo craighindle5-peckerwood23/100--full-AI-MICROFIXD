@@ -127,7 +127,11 @@ app.get("/api/mcp/manifest", (_, res) => {
 });
 
 // Every operational API below this line is authenticated and role-gated.
-app.use(rbacMiddleware);
+app.use((req, res, next) => {
+  // Serve the public UI and its assets without a token. Gate operational APIs only.
+  if (req.path === "/api" || req.path.startsWith("/api/")) return rbacMiddleware(req, res, next);
+  next();
+});
 
 app.get("/api/classification/map", (_, res) => res.json(getClassificationMap()));
 app.post("/api/classification/resolve", (req, res) => {
