@@ -54,7 +54,7 @@ test('brain recalls before inference and persists the completed response', async
     const request=input instanceof Request ? input : new Request(input,init);
     if (!request.url.includes('api.groq.com')) return memoryFetch(input,init);
     const body=await request.json();
-    assert.equal(body.max_tokens,2048);
+    assert.equal(body.max_tokens,10000);
     sawContext=body.messages.some((m:any)=>m.content.includes('repair fact'));
     return new Response(JSON.stringify({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:'remembered repair'},finish_reason:'stop'}],usage:{total_tokens:10}}),{headers:{'Content-Type':'application/json'}});
   };
@@ -76,4 +76,12 @@ test('core MemoryOrgan uses durable transport and reloads from database',async()
   await assert.rejects(first.remember('broken','must not disappear'),/42501/);
   await assert.rejects(first.flush(),/42501/);
   fail=false;
+});
+
+test('callable retrieval preserves whole records and reports budget exclusions',async()=>{
+  await executeMemoryOrgan('store',{session_id:'retrieval-test',content:'complete record '+ 'x'.repeat(5000)+' RECORD_END'});
+  const full=await executeMemoryOrgan('context',{session_id:'retrieval-test',limit:30,max_chars:60000});
+  assert.match(full.context,/RECORD_END/);assert.equal(full.window.returned,1);assert.equal(full.window.omitted,0);
+  const bounded=await executeMemoryOrgan('context',{session_id:'retrieval-test',limit:30,max_chars:1000});
+  assert.equal(bounded.window.returned,0);assert.equal(bounded.window.omitted,1);assert.equal(bounded.context,'[]');
 });
