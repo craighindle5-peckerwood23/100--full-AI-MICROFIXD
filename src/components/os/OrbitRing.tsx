@@ -10,7 +10,7 @@ import {
   Activity, 
   Database, 
   GraduationCap, 
-  Zap 
+  Zap, Settings2
 } from 'lucide-react';
 import { Subsystem } from '../../types';
 import { sound } from '../../utils/audio';
@@ -18,23 +18,16 @@ import { sound } from '../../utils/audio';
 interface OrbitRingProps {
   activeSubsystem: Subsystem | null;
   onSelect: (subsystem: Subsystem) => void;
+  onOpenSettings?: () => void;
 }
 
-const NODES: { id: Subsystem; icon: React.ElementType; label: string }[] = [
-  { id: 'mission_control', icon: Target, label: 'Mission Control' },
-  { id: 'ai_core', icon: Brain, label: 'AI Core' },
-  { id: 'world_thinking', icon: Brain, label: 'World Thinking' },
-  { id: 'agents', icon: Cpu, label: 'Agents' },
-  { id: 'sandbox', icon: Box, label: 'Sandbox' },
-  { id: 'workspace', icon: Layout, label: 'Workspace' },
-  { id: 'infra', icon: Server, label: 'System Infra' },
-  { id: 'telemetry', icon: Activity, label: 'Telemetry' },
-  { id: 'memory', icon: Database, label: 'Memory' },
-  { id: 'learning', icon: GraduationCap, label: 'Learning' },
-  { id: 'automation', icon: Zap, label: 'Automation' },
+const NODES: { id: Subsystem | 'settings'; icon: React.ElementType; label: string }[] = [
+  {id:'workspace',icon:Layout,label:'Workspace'},
+  {id:'sandbox',icon:Box,label:'Sandbox'},
+  {id:'settings',icon:Settings2,label:'Settings'},
 ];
 
-export default function OrbitRing({ activeSubsystem, onSelect }: OrbitRingProps) {
+export default function OrbitRing({ activeSubsystem, onSelect, onOpenSettings }: OrbitRingProps) {
   const [radius, setRadius] = useState(220);
 
   useEffect(() => {
@@ -92,15 +85,13 @@ export default function OrbitRing({ activeSubsystem, onSelect }: OrbitRingProps)
             className="absolute flex flex-col items-center justify-center group"
           >
             <button
-              onClick={() => { sound.playWarp(); onSelect(node.id); }}
+              onClick={() => { sound.playWarp(); if(node.id === 'settings')onOpenSettings?.();else onSelect(node.id); }}
               onMouseEnter={() => sound.playTick()}
               className={`${btnSize} rounded-full bg-black/60 border border-cyan-500/30 text-cyan-400 flex items-center justify-center backdrop-blur-sm transition-all duration-300 hover:scale-115 hover:bg-cyan-500/20 hover:border-cyan-300 hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] pointer-events-auto relative`}
-              title={`${node.label} (Press ${index === 9 ? '0' : index + 1})`}
+              title={node.label}
             >
               <Icon size={iconSize} />
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-black/80 border border-cyan-500/40 text-[8px] flex items-center justify-center text-cyan-300/70 font-mono">
-                {index === 9 ? '0' : index + 1}
-              </span>
+
             </button>
             <div className={`absolute ${lblTop} text-[9px] md:text-[10px] uppercase tracking-widest text-cyan-300 font-mono opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap bg-black/70 px-2 py-0.5 rounded border border-cyan-500/20 pointer-events-none`}>
               {node.label}
