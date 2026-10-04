@@ -41,9 +41,10 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
 const auditLog: { ts: string; role: Role; route: string; allowed: boolean; ip: string }[] = [];
 
 export function roleForToken(token: string): Role {
-  if (process.env.ADMIN_TOKEN && token === process.env.ADMIN_TOKEN) return "admin";
-  if (process.env.OPERATOR_TOKEN && token === process.env.OPERATOR_TOKEN) return "operator";
-  if (process.env.SYSTEM_TOKEN && token === process.env.SYSTEM_TOKEN) return "system";
+  const admin=process.env.ADMIN_TOKEN?.trim(),operator=process.env.OPERATOR_TOKEN?.trim(),system=process.env.SYSTEM_TOKEN?.trim();
+  if(admin && token===admin)return "admin";
+  if(operator && token===operator)return "operator";
+  if(system && token===system)return "system";
   return "anonymous";
 }
 function getRoleFromRequest(req: Request): Role {
@@ -65,7 +66,7 @@ export function rbacMiddleware(req: Request, res: Response, next: NextFunction):
 
   if (!allowed) {
     broadcast("security:rbac_denied", entry);
-    res.status(403).json({ error: `Forbidden: role '${role}' cannot '${required}'` });
+    res.status(403).json({ code: role === "anonymous" ? "AUTH_REQUIRED" : "PERMISSION_DENIED", error: `Forbidden: role '${role}' cannot '${required}'` });
     return;
   }
 
