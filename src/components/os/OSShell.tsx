@@ -1,3 +1,5 @@
+import SettingsWindow from './SettingsWindow';
+import type {SettingsSection} from '../rooms/SettingsRoom';
 import {deliverSpokenResponse} from '../../lib/outputDelivery';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -28,7 +30,7 @@ import {
   CheckCircle2,
   Server,
   ShieldAlert,
-  Zap
+  Zap, Settings2
 } from 'lucide-react';
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
@@ -88,7 +90,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function OSShell({ onReboot }: Props) {
-  const [activeSubsystem, setActiveSubsystem] = useState<Subsystem>('ai_core');
+  const [activeSubsystem, setActiveSubsystem] = useState<Subsystem>('workspace');
   const [isMuted, setIsMuted] = useState(sound.isMuted);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(voice.isEnabled());
   const [isSpeaking, setIsSpeaking] = useState(voice.isSpeaking());
@@ -104,7 +106,8 @@ export default function OSShell({ onReboot }: Props) {
   // Starts open (full "hologram + orbit" view) right after boot; once a room
   // is picked it shrinks to a small always-present corner icon that can be
   // clicked again at any time to reopen the orbit menu.
-  const [orbitOpen, setOrbitOpen] = useState(true);
+  const [orbitOpen, setOrbitOpen] = useState(false);
+  const [settingsSection,setSettingsSection]=useState<SettingsSection | null>(null);
 
   // Derive the avatar's visual/emotional state from real system signals
   // instead of a hardcoded value, so the "living" holographic entity
@@ -150,6 +153,8 @@ export default function OSShell({ onReboot }: Props) {
   // Global Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {e.preventDefault();setSettingsSection('general');setOrbitOpen(false);return;}
+      if (document.querySelector('dialog[open]')) return;
       // Global hotkey to open Command Console: Cmd+K / Ctrl+K
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -174,7 +179,7 @@ export default function OSShell({ onReboot }: Props) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCommandConsoleOpen]);
+  }, [isCommandConsoleOpen, activeSubsystem]);
 
   const handleNavigate = (subsystem: Subsystem) => {
     if (subsystem === activeSubsystem) return;
@@ -305,92 +310,8 @@ export default function OSShell({ onReboot }: Props) {
           </div>
         </div>
 
-        {/* Center: Real-time Telemetry Strip */}
-        <div className="hidden xl:flex items-center gap-4 text-[10px] px-3 py-1 rounded-lg bg-cyan-950/30 border border-cyan-500/20">
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-cyan-500/80">CPU:</span>
-            <span className="text-white font-bold">28%</span>
-          </span>
-          <span className="text-cyan-700">|</span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-cyan-500/80">HBM3e:</span>
-            <span className="text-white font-bold">42.8 GB</span>
-          </span>
-          <span className="text-cyan-700">|</span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-cyan-500/80">H100 TENSOR:</span>
-            <span className="text-cyan-300 font-bold">71%</span>
-          </span>
-          <span className="text-cyan-700">|</span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-cyan-500/80">TOKEN SPEED:</span>
-            <span className="text-emerald-400 font-bold">184 t/s</span>
-          </span>
-        </div>
-
-        {/* Right: Cloud status & Audio / Voice Controls */}
         <div className="flex items-center gap-2">
-          {/* Supabase Link Chip */}
-          <button
-            onClick={() => handleNavigate('supabase')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all ${
-              activeSubsystem === 'supabase'
-                ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200'
-                : supabaseConnected
-                ? 'bg-cyan-950/40 border-emerald-500/40 text-emerald-300 hover:bg-cyan-900/60'
-                : 'bg-black/50 border-cyan-500/20 text-cyan-400/80 hover:text-white'
-            }`}
-            title="Supabase Cloud PostgreSQL Status"
-          >
-            <Database size={13} className={supabaseConnected ? 'text-emerald-400' : 'text-cyan-400'} />
-            <span className="hidden md:inline font-bold">
-              {supabaseConnected ? 'SUPABASE LINKED' : 'SUPABASE FALLBACK'}
-            </span>
-          </button>
-
-          {/* Autonomous Core & Watchdog Chip */}
-          <button
-            onClick={() => handleNavigate('autonomy')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all ${
-              activeSubsystem === 'autonomy'
-                ? 'bg-cyan-500/20 border-cyan-400 text-white font-bold'
-                : fallbackState.active && !fallbackState.dismissed
-                ? 'bg-amber-950/80 border-amber-400 text-amber-300 animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.3)]'
-                : fallbackState.manualOverrideActive
-                ? 'bg-red-950/80 border-red-400 text-red-200'
-                : watchdogStatus.status === 'REPAIRING'
-                ? 'bg-amber-950/60 border-amber-400/60 text-amber-300'
-                : 'bg-cyan-950/40 border-cyan-500/30 text-cyan-300 hover:text-white'
-            }`}
-            title="Autonomous Core & Watchdog Supervisor"
-          >
-            <ShieldAlert size={13} className={fallbackState.active ? 'text-amber-400' : 'text-cyan-400'} />
-            <span className="hidden sm:inline font-bold">
-              {fallbackState.manualOverrideActive
-                ? 'CORE: OVERRIDE'
-                : fallbackState.active
-                ? 'CORE: FALLBACK'
-                : watchdogStatus.status === 'REPAIRING'
-                ? 'CORE: HEALING'
-                : 'AUTONOMOUS CORE'}
-            </span>
-          </button>
-
-          {/* Omni Router Provider Chip */}
-          <button
-            onClick={() => handleNavigate('ai_core')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all ${
-              activeSubsystem === 'ai_core'
-                ? 'bg-cyan-500/20 border-cyan-400 text-white font-bold'
-                : 'bg-cyan-950/40 border-cyan-500/30 text-cyan-300 hover:text-white'
-            }`}
-            title="Omni LLM Router: Groq + Gemini + DeepSeek"
-          >
-            <Radio size={13} className="text-cyan-400 animate-pulse" />
-            <span className="hidden sm:inline font-bold">OMNI ROUTER</span>
-          </button>
-
+          <button onClick={()=>{setSettingsSection('general');setOrbitOpen(false);}} className="flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-400/20" title="Settings (Ctrl+,)"><Settings2 size={16}/>Settings</button>
           {/* Global Command Console Overlay Trigger */}
           <button
             onClick={() => {
@@ -405,57 +326,7 @@ export default function OSShell({ onReboot }: Props) {
             <span className="px-1 py-0.2 bg-black/60 border border-cyan-500/30 rounded text-[9px] text-cyan-400/80">⌘K</span>
           </button>
 
-          {/* Synthetic Voice Waveform & Toggle */}
-          <button
-            onClick={() => {
-              const state = voice.toggleVoice();
-              setIsVoiceEnabled(state);
-              sound.playTick();
-            }}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all ${
-              isVoiceEnabled
-                ? 'bg-cyan-950/60 border-cyan-400/50 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
-                : 'bg-black/50 border-cyan-900 text-cyan-700'
-            }`}
-            title={isVoiceEnabled ? 'Synthetic Voice Enabled (Click to Mute)' : 'Synthetic Voice Muted'}
-          >
-            {/* Live voice audio equalizer bars */}
-            <div className="flex items-center gap-0.5 h-3">
-              <span className={`w-0.5 rounded-full bg-cyan-400 transition-all ${isSpeaking ? 'h-3 animate-pulse' : 'h-1'}`} />
-              <span className={`w-0.5 rounded-full bg-cyan-400 transition-all ${isSpeaking ? 'h-4 animate-bounce' : 'h-1.5'}`} />
-              <span className={`w-0.5 rounded-full bg-cyan-400 transition-all ${isSpeaking ? 'h-2 animate-pulse' : 'h-1'}`} />
-            </div>
-            <span className="text-[11px] font-bold">
-              {isVoiceEnabled ? (isSpeaking ? 'SPEAKING' : 'VOICE ON') : 'VOICE OFF'}
-            </span>
-          </button>
-
-          {/* Sound Chimes Toggle */}
-          <button
-            onClick={() => {
-              const next = sound.toggleMute();
-              setIsMuted(next);
-            }}
-            className="p-1.5 rounded-lg border border-cyan-500/20 text-cyan-400/80 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
-            title={isMuted ? 'Unmute Sound Effects' : 'Mute Sound Effects'}
-          >
-            {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-          </button>
-
-          {/* Reboot Button */}
-          {onReboot && (
-            <button
-              onClick={() => {
-                sound.playWarp();
-                voice.speak('Initiating system reboot.');
-                onReboot();
-              }}
-              className="p-1.5 rounded-lg border border-cyan-500/20 text-cyan-400/80 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
-              title="Re-run Startup Sequence"
-            >
-              <RotateCcw size={15} />
-            </button>
-          )}
+          {isSpeaking && <button onClick={()=>voice.stop()} className="px-3 py-2 text-xs text-cyan-300">Stop speech</button>}
         </div>
       </header>
 
@@ -467,13 +338,14 @@ export default function OSShell({ onReboot }: Props) {
           else; shrinks to a corner icon once a room is chosen, and can be
           reopened at any time by clicking the avatar again. */}
       <div className="fixed inset-0 z-[35] pointer-events-none">
-        <OrbitRing
+        {orbitOpen && <OrbitRing
+          onOpenSettings={()=>{setSettingsSection('general');setOrbitOpen(false);}}
           activeSubsystem={orbitOpen ? null : activeSubsystem}
           onSelect={(subsystem) => {
             handleNavigate(subsystem);
             setOrbitOpen(false);
           }}
-        />
+        />}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto">
             <Avatar
@@ -487,8 +359,8 @@ export default function OSShell({ onReboot }: Props) {
       </div>
 
       {/* MODERN OS NAVIGATION SPACE SELECTOR (Tabs / Pills) */}
-      <nav className="w-full z-30 px-3 py-1.5 bg-black/60 border-b border-cyan-500/20 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
-        {NAV_ITEMS.map(item => {
+      <nav aria-label="Main workspace navigation" className="w-full z-30 px-3 py-1.5 bg-black/60 border-b border-cyan-500/20 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+        {NAV_ITEMS.filter(item => ['workspace','sandbox'].includes(item.id)).map(item => {
           const isActive = activeSubsystem === item.id;
           const Icon = item.icon;
 
@@ -512,6 +384,8 @@ export default function OSShell({ onReboot }: Props) {
             </button>
           );
         })}
+        <button onClick={()=>setSettingsSection('missions')} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Manage missions</button>
+        <span className="ml-auto hidden sm:block px-3 text-[10px] text-slate-500">{NAV_ITEMS.find(item=>item.id===activeSubsystem)?.label}</span>
       </nav>
 
       {/* MAIN VIEWPORT: COMPLETE NEW PAGE (NO OVERLAY, NO HOLOGRAPHIC HEAD) */}
@@ -556,28 +430,10 @@ export default function OSShell({ onReboot }: Props) {
           </button>
         </form>
 
-        {/* Quick action chips */}
-        <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-cyan-500/80">
-          <span>SHORTCUTS:</span>
-          {[
-            { name: 'Autonomous Core', id: 'autonomy' },
-            { name: 'Missions', id: 'mission_control' },
-            { name: 'Omni Router', id: 'ai_core' },
-            { name: 'Supabase', id: 'supabase' },
-            { name: 'Safety', id: 'governance' },
-            { name: 'Bible', id: 'bible' },
-          ].map(chip => (
-            <button
-              key={chip.name}
-              onClick={() => handleNavigate(chip.id as Subsystem)}
-              className="px-2 py-0.5 rounded bg-cyan-950/40 border border-cyan-500/20 text-cyan-300 hover:border-cyan-400 hover:text-white transition-all"
-            >
-              {chip.name}
-            </button>
-          ))}
-        </div>
+        <button onClick={()=>{setSettingsSection('general');setOrbitOpen(false);}} className="text-xs text-cyan-300 shrink-0">Settings & access</button>
       </footer>
 
+      {settingsSection && <SettingsWindow initialSection={settingsSection} onClose={()=>setSettingsSection(null)} onNavigate={handleNavigate} onReboot={onReboot}/>}
       {/* Global Command Console Overlay (⌘K / Ctrl+K) */}
       <GlobalCommandConsole
         isOpen={isCommandConsoleOpen}
