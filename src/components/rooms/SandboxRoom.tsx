@@ -29,7 +29,13 @@ export default function SandboxRoom() {
     }
   });
 
-  const handleRun = () => run(code, lang);
+  const handleRun = async () => {
+    try {
+      await run(code, lang);
+      const pending = await HITL.pending();
+      setHitlQueue(pending.records.filter(record => record.session_id === sessionId));
+    } catch (err) { console.error("Sandbox execution failed", err); }
+  };
 
   const handleBuild = async () => {
     if (!buildName.trim()) return;
@@ -44,7 +50,11 @@ export default function SandboxRoom() {
 
   const handleDecide = async (id: string, decision: "approved" | "rejected") => {
     await HITL.decide(id, decision);
+    const record = hitlQueue.find(h => h.hitl_id === id);
     setHitlQueue(q => q.filter(h => h.hitl_id !== id));
+    if (decision === "approved" && record?.trigger === "sandbox_execution" && record.session_id === sessionId) {
+      await run(String(record.artifact.code), String(record.artifact.lang), id);
+    }
   };
 
   return (
@@ -53,7 +63,7 @@ export default function SandboxRoom() {
       <div className="flex-1 flex flex-col border-r border-[#21262d]">
         {/* Lang tabs */}
         <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[#21262d] bg-[#0d1117]">
-          {["typescript", "javascript", "python", "bash"].map(l => (
+          {["typescript", "javascript"].map(l => (
             <button key={l} onClick={() => setLang(l)}
               className={`text-[10px] font-mono px-2 py-0.5 rounded transition-colors ${
                 lang === l ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30" : "text-zinc-500 hover:text-zinc-300"
@@ -69,7 +79,7 @@ export default function SandboxRoom() {
         <textarea
           value={code} onChange={e => setCode(e.target.value)}
           className="flex-1 bg-transparent text-zinc-200 font-mono text-xs p-3 resize-none outline-none placeholder-zinc-700"
-          placeholder={`// Write ${lang} code here\n// All executions are logged (rule-SB-001)\n// Writes restricted to server/sandbox/workspace/`}
+          placeholder={`// Write ${lang} code here\n// All executions are logged (rule-SB-001)\n// No filesystem or network access`}
           spellCheck={false}
         />
 
@@ -106,6 +116,7 @@ export default function SandboxRoom() {
                     <p className="text-zinc-600 font-mono text-[9px] mb-1.5">
                       {h.artifact.severity?.toUpperCase()} · {h.trigger}
                     </p>
+                    {h.trigger === "sandbox_execution" && <pre className="text-zinc-300 text-[9px] whitespace-pre-wrap max-h-40 overflow-auto">{String(h.artifact.code)}</pre>}
                     <div className="flex gap-1">
                       <button onClick={() => handleDecide(h.hitl_id, "approved")}
                         className="flex-1 flex items-center justify-center gap-1 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[9px] font-mono">
