@@ -81,11 +81,14 @@ export async function executeGroqWithRetry(
   
   const startTime = Date.now();
   let lastError: any = null;
+  let attemptsMade=0;
+  const attemptedModels=new Set<string>();
   const promptPreview = String(
     requestParams.messages[requestParams.messages.length - 1]?.content || ""
   ).slice(0, 80);
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    attemptsMade=attempt;attemptedModels.add(currentModel);
     const attemptStart = Date.now();
     try {
       const completion = await groq.chat.completions.create({
@@ -97,7 +100,7 @@ export async function executeGroqWithRetry(
       const attemptLatency = Date.now() - attemptStart;
       const totalLatency = Date.now() - startTime;
       const msg = completion.choices[0]?.message;
-      const content = msg?.content || msg?.reasoning || "";
+      const content = msg?.content || "";
       const tokensUsed = completion.usage?.total_tokens;
 
       recordGroqDebugLog({
@@ -131,9 +134,11 @@ export async function executeGroqWithRetry(
         `[GroqRetry] Attempt ${attempt}/${maxRetries} failed for model '${currentModel}' (Status ${statusCode}): ${errorMsg}`
       );
 
+      if(statusCode===401 || statusCode===403) break; // Credential failures cannot be repaired by retrying.
       // Handle 404 Model Not Found -> Immediately switch to next verified model
-      if (statusCode === 404 || errorMsg.includes("model_not_found") || errorMsg.includes("does not exist")) {
-        const nextModel = fallbackModels.find(m => m !== currentModel) || fallbackModels[0];
+      if (statusCode === 404 || /model_not_found|model_decommissioned|does not exist|decommissioned/i.test(errorMsg)) {
+        const nextModel = fallbackModels.find(m => !attemptedModels.has(m));
+        if(!nextModel)break;
         recordGroqDebugLog({
           id: `groq-fail-${Date.now()}-${attempt}`,
           timestamp: new Date().toISOString(),
@@ -154,9 +159,10 @@ export async function executeGroqWithRetry(
 
       // Handle 429 Rate Limit / Output Token Exceeded -> Clamp tokens and backoff
       if (statusCode === 429 || errorMsg.includes("Limit") || errorMsg.includes("OTPM")) {
-        currentMaxTokens = Math.max(150, Math.floor(currentMaxTokens * 0.65));
-        const retryAfterSec = Number(err?.headers?.["retry-after"] || 1);
-        const waitMs = Math.max(retryAfterSec * 1000, baseDelayMs * Math.pow(2, attempt - 1));
+        currentMaxTokens = Math.max(1, Math.floor(currentMaxTokens * 0.65));
+        const retryAfterSec = Number(err?.headers?.get?.("retry-after") ?? err?.headers?.["retry-after"] ?? 1);
+        const waitMs = Math.max((Number.isFinite(retryAfterSec)?retryAfterSec:1) * 1000, baseDelayMs * Math.pow(2, attempt - 1));
+        if(waitMs>maxDelayMs)break; // Surface long provider cooldowns instead of hanging a command.
 
         recordGroqDebugLog({
           id: `groq-ratelimit-${Date.now()}-${attempt}`,
@@ -208,16 +214,18 @@ export async function executeGroqWithRetry(
     id: `groq-fatal-${Date.now()}`,
     timestamp: new Date().toISOString(),
     model: currentModel,
-    attempt: maxRetries,
+    attempt: attemptsMade,
     maxAttempts: maxRetries,
     status: "failure",
     latencyMs: totalElapsed,
     statusCode: lastError?.status || 500,
     errorCode: lastError?.code || "RETRIES_EXHAUSTED",
-    errorMessage: `All ${maxRetries} Groq retries failed: ${lastError?.message || lastError}`,
+    errorMessage: `All ${attemptsMade} Groq attempts failed: ${lastError?.message || lastError}`,
     promptPreview,
   };
   recordGroqDebugLog(failureLog);
 
-  throw new Error(`[Groq Execution Failed after ${maxRetries} attempts in ${totalElapsed}ms]: ${lastError?.message || lastError}`);
+  const error = new Error(`[Groq request failed after ${attemptsMade} attempts]: ${String(lastError?.message || lastError).slice(0,500)}`);
+  Object.assign(error,{status:lastError?.status || lastError?.statusCode || 500,code:lastError?.code || "GROQ_REQUEST_FAILED"});
+  throw error;
 }

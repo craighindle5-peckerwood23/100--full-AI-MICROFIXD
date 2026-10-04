@@ -1,3 +1,4 @@
+import GroqConnectionPanel from './GroqConnectionPanel';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -45,6 +46,7 @@ const LANGGRAPH_NODES = [
 ];
 
 export default function AICoreRoom() {
+  const [inferenceError,setInferenceError]=useState('');
   const [query, setQuery] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeNodeIndex, setActiveNodeIndex] = useState<number>(1);
@@ -104,7 +106,7 @@ export default function AICoreRoom() {
     if (!query.trim() || isProcessing) return;
 
     sound.playCognitivePulse();
-    setIsProcessing(true);
+    setIsProcessing(true);setInferenceError('');
     const userQuery = query;
     setQuery('');
 
@@ -123,12 +125,12 @@ export default function AICoreRoom() {
 
       // Read response via voice
       if (voice.isEnabled()) {
-        const snippet = result.text.length > 200 ? result.text.slice(0, 190) + '...' : result.text;
-        voice.speak(snippet);
+        void voice.speak(result.text).catch(error=>setInferenceError(`Speech playback failed: ${error.message}`));
       }
     } catch (err: any) {
       sound.playAlert();
-      console.error('Omni Router inference error:', err);
+      setInferenceError(err instanceof Error?err.message:String(err));
+      setQuery(userQuery);
     } finally {
       setIsProcessing(false);
     }
@@ -184,7 +186,7 @@ export default function AICoreRoom() {
             }`}
           >
             <Key size={13} />
-            <span>{showKeyInputs ? 'Hide API Keys' : 'Configure API Keys'}</span>
+            <span>{showKeyInputs ? 'Hide connection' : 'Groq connection'}</span>
           </button>
 
           <button
@@ -201,256 +203,8 @@ export default function AICoreRoom() {
         </div>
       </div>
 
-      {/* API Key Configuration Drawer (Optional expandable) */}
-      <AnimatePresence>
-        {showKeyInputs && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden rounded-xl bg-black/80 border border-cyan-500/30 p-4 space-y-4 backdrop-blur-md"
-          >
-            <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2">
-              <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                <Sliders size={14} className="text-cyan-400" />
-                PROVIDER API CREDENTIALS & MODEL TARGETS
-              </span>
-              <span className="text-[10px] text-cyan-500/80">
-                Credentials saved securely in browser session
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Groq */}
-              <div className="p-3 rounded-lg bg-cyan-950/30 border border-cyan-500/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">Groq Cloud</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-500/30">
-                    Ultra Fast
-                  </span>
-                </div>
-                <div>
-                  <label className="text-[10px] text-cyan-400 block mb-0.5">GROQ_API_KEY</label>
-                  <input
-                    type="password"
-                    value={providers.groq?.apiKey || ''}
-                    onChange={e => handleKeyChange('groq', e.target.value)}
-                    placeholder="gsk_..."
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded px-2 py-1 text-xs text-white placeholder:text-cyan-800 focus:outline-none focus:border-cyan-400 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-cyan-400 block mb-0.5">MODEL</label>
-                  <select
-                    value={providers.groq?.model || 'qwen/qwen3.8-27b'}
-                    onChange={e => handleModelChange('groq', e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded px-2 py-1 text-xs text-white focus:outline-none font-mono"
-                  >
-                    <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b (Fastest LPU)</option>
-                    <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (Deep Reasoning)</option>
-                    <option value="openai/gpt-oss-20b">openai/gpt-oss-20b (Ultra Fast)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Gemini */}
-              <div className="p-3 rounded-lg bg-cyan-950/30 border border-cyan-500/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">Google Gemini</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-500/30">
-                    Multimodal
-                  </span>
-                </div>
-                <div>
-                  <label className="text-[10px] text-cyan-400 block mb-0.5">GEMINI_API_KEY</label>
-                  <input
-                    type="password"
-                    value={providers.gemini?.apiKey || ''}
-                    onChange={e => handleKeyChange('gemini', e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded px-2 py-1 text-xs text-white placeholder:text-cyan-800 focus:outline-none focus:border-cyan-400 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-cyan-400 block mb-0.5">MODEL</label>
-                  <select
-                    value={providers.gemini?.model || 'gemini-2.5-flash'}
-                    onChange={e => handleModelChange('gemini', e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded px-2 py-1 text-xs text-white focus:outline-none font-mono"
-                  >
-                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* DeepSeek */}
-              <div className="p-3 rounded-lg bg-cyan-950/30 border border-cyan-500/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">DeepSeek AI</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-500/30">
-                    Reasoning
-                  </span>
-                </div>
-                <div>
-                  <label className="text-[10px] text-cyan-400 block mb-0.5">DEEPSEEK_API_KEY</label>
-                  <input
-                    type="password"
-                    value={providers.deepseek?.apiKey || ''}
-                    onChange={e => handleKeyChange('deepseek', e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded px-2 py-1 text-xs text-white placeholder:text-cyan-800 focus:outline-none focus:border-cyan-400 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-cyan-400 block mb-0.5">MODEL</label>
-                  <select
-                    value={providers.deepseek?.model || 'deepseek-chat'}
-                    onChange={e => handleModelChange('deepseek', e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded px-2 py-1 text-xs text-white focus:outline-none font-mono"
-                  >
-                    <option value="deepseek-chat">deepseek-chat (V3)</option>
-                    <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Autonomous Fallback & Manual Override Control Bar */}
-      <div className="p-3.5 rounded-xl bg-black/60 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
-        <div className="flex items-center gap-2.5">
-          <ShieldAlert size={16} className={fallbackAlert.active ? 'text-amber-400 animate-bounce' : 'text-cyan-400'} />
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-white uppercase tracking-wider text-xs">
-                AUTONOMOUS CONNECTIVITY WATCHDOG & FALLBACK ENGINE
-              </span>
-              <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
-                fallbackAlert.manualOverrideActive
-                  ? 'bg-red-950 border border-red-500/50 text-red-300'
-                  : fallbackAlert.active
-                  ? 'bg-amber-950 border border-amber-500/50 text-amber-300 animate-pulse'
-                  : 'bg-emerald-950 border border-emerald-500/50 text-emerald-300'
-              }`}>
-                {fallbackAlert.manualOverrideActive
-                  ? 'MANUAL OVERRIDE LOCKED'
-                  : fallbackAlert.active
-                  ? 'FALLBACK CASCADE ACTIVE'
-                  : 'AUTONOMOUS SUPERVISION NOMINAL'}
-              </span>
-            </div>
-            <p className="text-[11px] text-cyan-500/80 mt-0.5">
-              {fallbackAlert.active 
-                ? `Switched from ${fallbackAlert.primaryProvider.toUpperCase()} to ${fallbackAlert.fallbackProvider.toUpperCase()} (${fallbackAlert.fallbackModel}) due to connectivity timeout.`
-                : 'Watches endpoints at 1.0Hz; automatically switches to neural fallback on socket failure with zero user downtime.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Undo Fallback */}
-          {fallbackAlert.active && (
-            <button
-              onClick={() => autonomousCore.undoFallback()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400 text-amber-200 text-xs font-bold transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-              title="Revert back to primary provider"
-            >
-              <RotateCcw size={13} />
-              <span>Undo Switch</span>
-            </button>
-          )}
-
-          {/* Manual Override Toggle */}
-          <button
-            onClick={() => autonomousCore.toggleManualOverride()}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
-              fallbackAlert.manualOverrideActive
-                ? 'bg-red-500/25 border-red-400 text-red-200 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
-                : 'bg-black/40 hover:bg-cyan-950/40 border-cyan-500/30 text-cyan-300'
-            }`}
-            title="Lock current model configuration and disable automatic cascade switching"
-          >
-            {fallbackAlert.manualOverrideActive ? <Lock size={13} className="text-red-400" /> : <Unlock size={13} />}
-            <span>{fallbackAlert.manualOverrideActive ? 'Manual Override (LOCKED)' : 'Manual Override'}</span>
-          </button>
-
-          {/* Test Connectivity Failure Button */}
-          <button
-            onClick={() => autonomousCore.injectSimulatedProblem('connectivity')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-500/40 text-cyan-200 text-xs font-bold transition-all"
-            title="Simulate network drop on primary LLM to test visual indicator & fallback"
-          >
-            <Zap size={13} className="text-amber-400" />
-            <span>Test Connectivity Alert</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Provider Status & Priority Fallback Ladder */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {priorityOrder.map((pId, index) => {
-          const p = providers[pId];
-          if (!p) return null;
-
-          return (
-            <div 
-              key={pId}
-              className="p-3 rounded-xl bg-black/60 border border-cyan-500/30 space-y-2 relative overflow-hidden backdrop-blur-md"
-            >
-              {/* Fallback priority badge */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-cyan-950 border border-cyan-400/40 text-[10px] font-bold text-white flex items-center justify-center">
-                    {index + 1}
-                  </span>
-                  <span className="font-bold text-xs text-white">{p.name}</span>
-                </div>
-                
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleMovePriority(index, 'up')}
-                    disabled={index === 0}
-                    className="text-[10px] px-1 rounded bg-cyan-950 border border-cyan-500/30 text-cyan-400 hover:text-white disabled:opacity-20"
-                    title="Move up priority"
-                  >
-                    &uarr;
-                  </button>
-                  <button
-                    onClick={() => handleMovePriority(index, 'down')}
-                    disabled={index === priorityOrder.length - 1}
-                    className="text-[10px] px-1 rounded bg-cyan-950 border border-cyan-500/30 text-cyan-400 hover:text-white disabled:opacity-20"
-                    title="Move down priority"
-                  >
-                    &darr;
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-[11px] text-cyan-300/80 truncate">
-                {p.model}
-              </div>
-
-              <div className="flex items-center justify-between border-t border-cyan-500/20 pt-2 text-[10px]">
-                <span className="flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    p.status === 'ONLINE' ? 'bg-emerald-400 animate-pulse' :
-                    p.status === 'STANDBY' ? 'bg-cyan-400' :
-                    p.status === 'KEY_MISSING' ? 'bg-amber-400' : 'bg-red-400'
-                  }`} />
-                  <span className="text-white font-mono">{p.status}</span>
-                </span>
-                <span className="text-cyan-500/70">
-                  {p.latencyMs ? `${p.latencyMs}ms` : 'Ready'}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {showKeyInputs && <GroqConnectionPanel/>}
+      {inferenceError && <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100 break-words">{inferenceError}</div>}
 
       {/* Main Interactive Inference & Execution Console */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

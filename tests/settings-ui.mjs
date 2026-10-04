@@ -16,7 +16,7 @@ if(!executablePath&&process.platform==='linux'&&process.arch==='x64'){
 }
 const browser=await chromium.launch({headless:true,executablePath,chromiumSandbox:process.getuid?.()!==0});
 try{
- const page=await browser.newPage({viewport:{width:1440,height:1000}});const base=`http://127.0.0.1:${server.address().port}`;let verified=false;
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});const base=`http://127.0.0.1:${server.address().port}`;let verified=false,commandAttempts=0;
  await page.addInitScript(()=>{localStorage.setItem('microfyxd_voice_enabled','false');localStorage.setItem('microfyxd_sound_muted','true');});
  await page.route('**/*',route=>{
    const request=route.request();const url=new URL(request.url());
@@ -24,23 +24,32 @@ try{
    if(url.pathname==='/api/classification/map'){
      verified=request.headers().authorization==='Bearer valid-test-token';return route.fulfill({status:verified?200:403,json:verified?{objects:[]}:{error:'Forbidden'}});
    }
+   if(url.pathname==='/api/command/run'){
+     commandAttempts++;if(!request.headers().authorization)return route.fulfill({status:403,json:{code:'AUTH_REQUIRED',error:'anonymous cannot execute'}});
+     assert.equal(request.postDataJSON().task,'test retained request');return route.fulfill({json:{success:true,output:'Command resumed',session_id:'ui-session',latency_ms:5,organs_used:['brain'],diagnostics:{warnings:[]}}});
+   }
+   if(url.pathname==='/api/groq/status')return route.fulfill({json:{configured:true,model:'test-model'}});
+   if(url.pathname==='/api/groq/check')return route.fulfill({json:{success:true,connected:true,model:'test-model',latency_ms:10}});
    if(url.pathname.startsWith('/api/'))return route.fulfill({json:{success:true,organs:[],logs:[],events:[],entries:[],records:[]}});
    return route.continue();
  });
  await page.goto(base);await page.getByText('Fast Boot (Skip)').click();
- const settings=page.getByRole('button',{name:'Settings',exact:true});await settings.click();
+ const settings=page.getByRole('button',{name:'Settings',exact:true});
+ await page.getByPlaceholder(/Command Carter/).fill('test retained request');await page.locator('footer').getByRole('button',{name:'Execute'}).click();
  const dialog=page.getByRole('dialog');await dialog.waitFor();
  assert.equal(await dialog.getByRole('tab').count(),8);
  await dialog.getByLabel('Admin or operator token').fill('wrong-token');await dialog.getByRole('button',{name:'Verify & connect'}).click();await dialog.getByText('Token not accepted.',{exact:false}).waitFor();
  assert.equal(await page.evaluate(()=>sessionStorage.getItem('microfixd_operator_token')),null);
  await dialog.getByLabel('Admin or operator token').fill('valid-test-token');await dialog.getByRole('button',{name:'Verify & connect'}).click();await dialog.getByText('Connected. Protected controls',{exact:false}).waitFor();assert.equal(verified,true);
  assert.equal(await page.evaluate(()=>sessionStorage.getItem('microfixd_operator_token')),'valid-test-token');
- await dialog.getByRole('tab',{name:'Engines & Router'}).click();await dialog.getByLabel('Recent records').selectOption('50');await dialog.getByRole('button',{name:'Save retrieval preferences'}).click();assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('microfixd_command_preferences')).retrieval.limit),50);
+ assert.equal(commandAttempts,2);
+ await dialog.getByRole('tab',{name:'Engines & Router'}).click();await dialog.getByRole('button',{name:'Test Groq connection'}).click();await dialog.getByText('Groq responded successfully',{exact:false}).waitFor();await dialog.getByLabel('Recent records').selectOption('50');await dialog.getByRole('button',{name:'Save retrieval preferences'}).click();assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('microfixd_command_preferences')).retrieval.limit),50);
  for(const name of ['Autonomy','Voice','Connections','Mission Control','Telemetry','Tools & Safety'])await dialog.getByRole('tab',{name,exact:true}).click();
  await dialog.getByRole('tab',{name:'General',exact:true}).click();await page.screenshot({path:'/tmp/microfixd-settings-desktop.png'});
- await page.keyboard.press('Escape');assert.equal(await dialog.count(),0);assert.equal(await settings.evaluate(e=>e===document.activeElement),true);
+ await page.keyboard.press('Escape');assert.equal(await dialog.count(),0);// Auth-triggered Settings restores focus to the command submit control.
+ assert.equal(await page.locator('footer').getByRole('button',{name:'Execute'}).evaluate(e=>e===document.activeElement || e.disabled),true);
  await page.setViewportSize({width:390,height:844});await settings.click();await dialog.getByRole('tab',{name:'Voice',exact:true}).click();
  assert.equal(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth),true);await page.screenshot({path:'/tmp/microfixd-settings-mobile.png'});
  await dialog.getByRole('tab',{name:'Mission Control',exact:true}).click();await dialog.getByRole('button',{name:/Mission Control Review goals/}).click();assert.equal(await dialog.count(),0);
- console.log('Settings UI passed: desktop/mobile, tabs, token verification, persistence, focus, Escape, and management navigation.');
+ console.log('Settings + authentication recovery UI passed: desktop/mobile, tabs, token verification, persistence, focus, Escape, and management navigation.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}

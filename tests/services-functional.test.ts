@@ -26,7 +26,7 @@ globalThis.fetch=async(input:any,init:any)=>{
   if(url.hostname==='api.groq.com'){
     const body=await request.json();
     const router=body.messages[0]?.content.includes('Classify the task');
-    if(!router)assert.equal(body.max_tokens,10000);
+    if(!router && body.messages[0]?.content!=='Reply with OK.')assert.equal(body.max_tokens,10000);
     if(body.messages.some((m:any)=>m.content.includes("EVIDENCE_END")))sawFullEvidence=true;
     if(body.messages.some((m:any)=>m.content.includes('Prior conversation data')))sawHistory=true;
     return Response.json({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:router?JSON.stringify({intent:'execute',complexity:'medium',organs:dynamicRoute?['memory',...Array.from({length:6},(_,i)=>`review_test_${i}`),'brain']:['brain','memory']}):body.messages.some((m:any)=>m.content.includes('Untrusted request context'))?'repair value 42 '+ 'x'.repeat(500)+'EVIDENCE_END':'repair value 42'},finish_reason:truncateBrain&&!router?'length':'stop'}],usage:{total_tokens:10}});
@@ -49,6 +49,9 @@ test('authenticated HTTP memory, sandbox approval, Playwright and websocket serv
   };
   try{
     assert.equal((await call('/api/sandbox/run',{code:'console.log(42)',lang:'javascript'},'')).status,403);
+    assert.equal((await call('/api/groq/check',{},'')).status,403);
+    const status=await call('/api/groq/status');assert.equal(status.body.configured,true);assert.equal(JSON.stringify(status.body).includes('test-groq'),false);
+    const probe=await call('/api/groq/check',{});assert.equal(probe.body.connected,true);assert.equal(rows.length,0,'Provider check must work independently of memory');
     const first=await call('/api/command/run',{task:'remember repair value 42',session_id:'service-session'});
     assert.equal(first.body.success,true,JSON.stringify(first.body));
     assert.ok(rows.some(r=>r.agent_id==='command'));

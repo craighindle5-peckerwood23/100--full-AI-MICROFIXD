@@ -109,6 +109,12 @@ export default function OSShell({ onReboot }: Props) {
   const [orbitOpen, setOrbitOpen] = useState(false);
   const [settingsSection,setSettingsSection]=useState<SettingsSection | null>(null);
 
+  useEffect(()=>{
+    const openAccess=()=>{setSettingsSection('general');setOrbitOpen(false);};
+    window.addEventListener('microfixd:auth-required',openAccess);
+    return ()=>window.removeEventListener('microfixd:auth-required',openAccess);
+  },[]);
+
   // Derive the avatar's visual/emotional state from real system signals
   // instead of a hardcoded value, so the "living" holographic entity
   // actually reflects autonomous core health, connectivity fallback, and
@@ -433,7 +439,7 @@ export default function OSShell({ onReboot }: Props) {
         <button onClick={()=>{setSettingsSection('general');setOrbitOpen(false);}} className="text-xs text-cyan-300 shrink-0">Settings & access</button>
       </footer>
 
-      {settingsSection && <SettingsWindow initialSection={settingsSection} onClose={()=>setSettingsSection(null)} onNavigate={handleNavigate} onReboot={onReboot}/>}
+      {settingsSection && <SettingsWindow initialSection={settingsSection} onClose={()=>{setSettingsSection(null);window.dispatchEvent(new Event("microfixd:auth-cancelled"));}} onNavigate={handleNavigate} onReboot={onReboot}/>}
       {/* Global Command Console Overlay (⌘K / Ctrl+K) */}
       <GlobalCommandConsole
         isOpen={isCommandConsoleOpen}
