@@ -47,6 +47,14 @@ export interface VoiceState {
   reset:            () => void;
 }
 
+function savedVoicePreferences():{language?:string;turnWaitMs?:number} {
+  try {
+    const value=JSON.parse(localStorage.getItem('microfixd_voice_preferences')||'{}');
+    return {language:['en-US','en-GB','es-US','fr-FR','de-DE'].includes(value.language)?value.language:'en-US',turnWaitMs:[800,1200,2000,3000].includes(value.turnWaitMs)?value.turnWaitMs:1200};
+  }catch{return {};}
+}
+const savedVoice=savedVoicePreferences();
+
 export const useVoiceStore = create<VoiceState>((set) => ({
   enabled:           false,
   mode:              "idle",
@@ -58,7 +66,7 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   ttsMethod:         "browser",
   lastSpeechAt:      0,
   silenceDuration:   0,
-  turnWaitMs:        1200,
+  turnWaitMs:        savedVoice.turnWaitMs ?? 1200,
   rmsLevel:          0,
   noiseThreshold:    0.02,
   voiceId:           "21m00Tcm4TlvDq8ikWAM",
@@ -72,6 +80,10 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   setInterim:    (interimTranscript) => set({ interimTranscript }),
   setSpeaking:   (isSpeaking, speakingText = "") => set({ isSpeaking, speakingText, mode: isSpeaking ? "speaking" : "idle" }),
   setRms:        (rmsLevel)      => set({ rmsLevel }),
-  setConfig:     (c)             => set(c),
+  setConfig: (c) => set(state=>{
+    const next={...state,...c};
+    try {localStorage.setItem('microfixd_voice_preferences',JSON.stringify({language:next.language,turnWaitMs:next.turnWaitMs}));}catch{}
+    return c;
+  }),
   reset:         ()              => set({ transcript: "", interimTranscript: "", mode: "idle", isListening: false }),
 }));
