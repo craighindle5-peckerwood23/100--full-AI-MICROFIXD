@@ -152,7 +152,8 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
           
           const declared = organActions?.[organId];
           const action = declared?.action || getDefaultActionForOrgan(organId);
-          const payload = declared?.payload || getDefaultPayloadForOrgan(organId, req.task);
+          const basePayload = declared?.payload || getDefaultPayloadForOrgan(organId, req.task);
+          const payload = { ...(basePayload as object), session_id: req.session_id };
 
           const executor = EXECUTORS[organId] || getExecutor(organId);
           const res = await executor(action, payload);
@@ -170,6 +171,8 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
         }
       })
     );
+
+    if (selectedOrgans.includes("brain") && !organResults.brain) throw new Error("Brain execution or durable memory failed; inspect organ:step_error");
 
     // If all failed, ensure at least brain executes fallback response
     if (Object.keys(organResults).length === 0) {
@@ -206,6 +209,11 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     if (!output) {
       output = `[MICROFYXD OS // CENTRAL COMMAND RESPONSE]\nObjective: ${req.task}\nExecution: Completed across [${organsUsed.join(", ")}].\n\nResult Summary:\n${organSummary}`;
     }
+
+    await getExecutor("memory")("store", {
+      session_id: req.session_id, organ: "command",
+      content: JSON.stringify({ task: req.task, output }),
+    });
 
     // ── Step 6: Feedback collection ───────────────────────────────────
     const feedback = await feedbackLoop.collect(req.session_id, req.task, output, organResults);

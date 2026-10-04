@@ -22,7 +22,7 @@
     "provider": "supabase",
     "serverVariables": [
       "SUPABASE_URL",
-      "SUPABASE_ANON_KEY"
+      "SUPABASE_SERVICE_ROLE_KEY"
     ],
     "browserVariables": [
       "VITE_SUPABASE_URL",
@@ -297,6 +297,12 @@
       "target": "core.wiring",
       "relation": "resolves",
       "node": "microfixd/langgraph/index.ts"
+    },
+    {
+      "source": "brain",
+      "target": "memory",
+      "relation": "recall_before_completion_and_store_after_completion",
+      "node": "server/organs/organs/brainOrgan.ts"
     }
   ],
   "classificationRoutes": {

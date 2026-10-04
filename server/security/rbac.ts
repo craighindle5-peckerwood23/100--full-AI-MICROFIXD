@@ -7,7 +7,7 @@
  * Token: Bearer in Authorization header (or X-Microfixd-Role for dev)
  */
 import { Request, Response, NextFunction } from "express";
-import { broadcast } from "../index";
+import { broadcast } from "../events";
 
 export type Role = "admin" | "operator" | "observer" | "system" | "anonymous";
 
@@ -48,18 +48,14 @@ function getRoleFromRequest(req: Request): Role {
   if (process.env.OPERATOR_TOKEN && token === process.env.OPERATOR_TOKEN) return "operator";
   if (process.env.SYSTEM_TOKEN && token === process.env.SYSTEM_TOKEN)     return "system";
 
-  // Development/Header role override
-  const devRole = req.headers["x-microfixd-role"] as Role;
-  if (devRole && devRole in ROLE_PERMISSIONS) return devRole;
-
-  // Default to operator so all systemic organs and command routes execute cleanly
-  return "operator";
+  return "anonymous";
 }
 
 export function rbacMiddleware(req: Request, res: Response, next: NextFunction): void {
   const role       = getRoleFromRequest(req);
   const routeBase  = Object.keys(ROUTE_PERMISSIONS).find(r => req.path.startsWith(r)) ?? req.path;
-  const required   = ROUTE_PERMISSIONS[routeBase] ?? "read";
+  const required = req.path.startsWith("/api/hitl") && req.method !== "GET"
+    ? "approve" : ROUTE_PERMISSIONS[routeBase] ?? (req.method === "GET" ? "read" : "execute");
   const perms      = ROLE_PERMISSIONS[role];
   const allowed    = perms.has("*") || perms.has(required);
 

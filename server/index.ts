@@ -16,6 +16,7 @@ import path          from "path";
 import { readFileSync } from "fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { playwrightRouter }  from "./playwright/playwrightRouter";
+import { executeMemoryOrgan } from "./organs/organs/memoryOrgan";
 import { sandboxRouter }     from "./sandbox/sandboxRouter";
 import { hitlRouter }        from "./hitl/hitlRouter";
 import { githubRouter }      from "./github/githubRouter";
@@ -63,7 +64,7 @@ const cognitiveOrgans = initOrgans();
 app.get("/readyz", (_, res) => {
   const configured = {
     admin: Boolean(process.env.ADMIN_TOKEN),
-    supabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+    supabase: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     llm: Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY),
   };
   const health = organRegistry.systemHealth();
@@ -85,14 +86,16 @@ app.get("/api/health", (_, res) => {
   });
 });
 
-app.get("/api/health/deep", (_, res) => {
+app.get("/api/health/deep", async (_, res) => {
+  let memoryReady = false;
+  try { await executeMemoryOrgan("health", {}); memoryReady = true; } catch {}
   const records = organRegistry.all();
   const configured = {
     admin: Boolean(process.env.ADMIN_TOKEN),
-    supabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+    supabase: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)),
     llm: Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.VITE_GEMINI_API_KEY),
   };
-  const ready = configured.admin && configured.supabase;
+  const ready = configured.admin && configured.supabase && memoryReady;
   res.status(ready ? 200 : 503).json({
     status: ready ? organRegistry.systemHealth() : "degraded",
     ready,
@@ -104,6 +107,7 @@ app.get("/api/health/deep", (_, res) => {
       pendingHumanApprovals: getPending().length,
     },
     configured,
+    memory: { durable: memoryReady, status: memoryReady ? "nominal" : "unavailable" },
   });
 });
 
