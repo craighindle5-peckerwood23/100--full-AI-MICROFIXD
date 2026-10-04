@@ -4,6 +4,8 @@
  * Used by all React hooks that talk to the server.
  */
 
+export class AuthenticationRequiredError extends Error {}
+
 const BASE = "/api";
 const OPERATOR_TOKEN_KEY = "microfixd_operator_token";
 
@@ -28,6 +30,7 @@ export async function api<T = unknown>(
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: resp.statusText }));
+    if((resp.status===401||resp.status===403) && (err.code==='AUTH_REQUIRED'||/anonymous/i.test(err.error||'')))throw new AuthenticationRequiredError('Operator access required');
     throw new Error((err as { error?: string }).error ?? `HTTP ${resp.status}`);
   }
   return resp.json() as Promise<T>;
