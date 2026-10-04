@@ -195,7 +195,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
             { role: "system", content: "You are Carter, Flagship Synthetic Intelligence Central Command of Microfyxd OS Level 6. Synthesize the organ outputs into a coherent, high-precision technical response. Be direct, authoritative, and structured." },
             { role: "user", content: `Task: ${req.task}\n\nOrgan outputs:\n${organSummary}` },
           ],
-          max_tokens: 500,
+          max_tokens: 2048,
           temperature: 0.6,
         }, { maxRetries: 3, baseDelayMs: 400 });
 
