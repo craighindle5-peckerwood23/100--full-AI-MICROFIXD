@@ -31,6 +31,7 @@ export interface VoiceState {
   noiseThreshold:   number;
 
   // Config
+  voiceStyle:       "natural" | "synthetic";
   voiceId:          string;
   language:         string;
   autoSubmit:       boolean; // submit on silence
@@ -43,14 +44,14 @@ export interface VoiceState {
   setInterim:       (t: string) => void;
   setSpeaking:      (v: boolean, text?: string) => void;
   setRms:           (r: number) => void;
-  setConfig:        (c: Partial<Pick<VoiceState, "voiceId" | "language" | "autoSubmit" | "wakeWord" | "noiseThreshold" | "turnWaitMs">>) => void;
+  setConfig:        (c: Partial<Pick<VoiceState, "voiceStyle" | "voiceId" | "language" | "autoSubmit" | "wakeWord" | "noiseThreshold" | "turnWaitMs">>) => void;
   reset:            () => void;
 }
 
-function savedVoicePreferences():{language?:string;turnWaitMs?:number} {
+function savedVoicePreferences():{language?:string;turnWaitMs?:number;voiceStyle?:"natural"|"synthetic"} {
   try {
     const value=JSON.parse(localStorage.getItem('microfixd_voice_preferences')||'{}');
-    return {language:['en-US','en-GB','es-US','fr-FR','de-DE'].includes(value.language)?value.language:'en-US',turnWaitMs:[800,1200,2000,3000].includes(value.turnWaitMs)?value.turnWaitMs:1200};
+    return {voiceStyle:value.voiceStyle==='synthetic'?'synthetic':'natural',language:['en-US','en-GB','es-US','fr-FR','de-DE'].includes(value.language)?value.language:'en-US',turnWaitMs:[800,1200,2000,3000].includes(value.turnWaitMs)?value.turnWaitMs:1200};
   }catch{return {};}
 }
 const savedVoice=savedVoicePreferences();
@@ -69,8 +70,9 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   turnWaitMs:        savedVoice.turnWaitMs ?? 1200,
   rmsLevel:          0,
   noiseThreshold:    0.02,
+  voiceStyle:        savedVoice.voiceStyle ?? "natural",
   voiceId:           "21m00Tcm4TlvDq8ikWAM",
-  language:          "en-US",
+  language:          savedVoice.language ?? "en-US",
   autoSubmit:        true,
   wakeWord:          "hey microfixd",
 
@@ -82,7 +84,7 @@ export const useVoiceStore = create<VoiceState>((set) => ({
   setRms:        (rmsLevel)      => set({ rmsLevel }),
   setConfig: (c) => set(state=>{
     const next={...state,...c};
-    try {localStorage.setItem('microfixd_voice_preferences',JSON.stringify({language:next.language,turnWaitMs:next.turnWaitMs}));}catch{}
+    try {localStorage.setItem('microfixd_voice_preferences',JSON.stringify({language:next.language,turnWaitMs:next.turnWaitMs,voiceStyle:next.voiceStyle}));}catch{}
     return c;
   }),
   reset:         ()              => set({ transcript: "", interimTranscript: "", mode: "idle", isListening: false }),
