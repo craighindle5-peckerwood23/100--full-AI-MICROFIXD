@@ -18,6 +18,7 @@ export interface ToolDefinition {
 }
 
 export const TOOL_REGISTRY: ToolDefinition[] = [
+  {name:"read_public_page",description:"Read a public web page as text through Jina Reader (third party). Never use for private, signed-in or credential-bearing URLs; use Playwright for authenticated pages.",parameters:{type:"object",properties:{url:{type:"string",description:"Public HTTP(S) page URL"}},required:["url"]},organ:"crawl_engine",action:"read_public_page"},
   // ── Browser / Playwright ──────────────────────────────────────────────
   {
     name: "navigate_browser",
