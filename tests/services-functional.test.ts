@@ -59,7 +59,11 @@ test('authenticated HTTP memory, sandbox approval, Playwright and websocket serv
     assert.equal((await call('/api/groq/check',{},'')).status,403);
     const status=await call('/api/groq/status');assert.equal(status.body.configured,true);assert.equal(JSON.stringify(status.body).includes('test-groq'),false);
     const probe=await call('/api/groq/check',{});assert.equal(probe.body.connected,true);assert.equal(rows.length,0,'Provider check must work independently of memory');
-    const first=await call('/api/command/run',{task:'remember repair value 42',session_id:'service-session'});
+    assert.equal((await call('/api/playwright/login',{url:'https://example.com'},'')).status,403);
+    const snippet=await call('/api/playwright/login-snippet',{url:'https://example.com/login',usernameSelector:'#user',passwordSelector:'#password',submitSelector:'#submit'});
+    assert.equal(snippet.body.success,true);assert.ok(snippet.body.snippet.includes('process.env.LOGIN_PASSWORD'));
+    assert.equal((await call('/api/playwright/login',{url:'http://example.com',username:'user',password:'secret'})).body.success,false);
+    const first=await call('/api/command/run' ,{task:'remember repair value 42',session_id:'service-session'});
     assert.equal(first.body.success,true,JSON.stringify(first.body));
     assert.ok(rows.some(r=>r.agent_id==='command'));
     assert.equal(sawFullEvidence,true);
