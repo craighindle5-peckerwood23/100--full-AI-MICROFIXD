@@ -49,7 +49,13 @@ export function roleForToken(token: string): Role {
 }
 function getRoleFromRequest(req: Request): Role {
   const auth = req.headers.authorization ?? "";
-  return /^Bearer /i.test(auth) ? roleForToken(auth.slice(7).trim()) : "anonymous";
+  if (/^Bearer /i.test(auth)) return roleForToken(auth.slice(7).trim());
+  // The standalone frontend's legacy credential is valid only for its adapter.
+  if (req.path === "/api/autonomy" || req.path.startsWith("/api/autonomy/")) {
+    const key = req.header("x-microfixd-admin-key")?.trim();
+    if (key && roleForToken(key) === "admin") return "admin";
+  }
+  return "anonymous";
 }
 
 export function rbacMiddleware(req: Request, res: Response, next: NextFunction): void {
