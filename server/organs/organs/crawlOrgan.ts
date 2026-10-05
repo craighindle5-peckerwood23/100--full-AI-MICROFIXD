@@ -2,11 +2,13 @@
  * Crawl Organ adapter — wires crawlEngine to organRouter.
  * Actions: start, get_session, list_sessions, scrape_fast, queue_status
  */
+import { readPublicPage } from "../../tools/publicPageReader";
 import { startCrawl, getCrawlSession, listCrawlSessions } from "../../crawl/crawlEngine";
 
 export async function executeCrawlOrgan(action: string, payload: unknown): Promise<unknown> {
   const p = payload as Record<string, unknown>;
   switch (action) {
+    case "read_public_page": return readPublicPage(String(p.url || ""));
     case "start": {
       const job = await startCrawl(
         String(p.url ?? ""), String(p.session_id ?? crypto.randomUUID()),

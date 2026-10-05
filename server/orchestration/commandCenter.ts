@@ -22,6 +22,7 @@ import { executeBrainOrgan }     from "../organs/organs/brainOrgan";
 import { executeEvolutionOrgan } from "../organs/organs/evolutionOrgan";
 import { broadcast }             from "../events";
 import { executeGroqWithRetry } from "./groqRetry";
+import { orchestrateWithTools } from "../tools/toolOrchestrator";
 import { feedbackLoop }          from "./feedbackLoop";
 import { resolveExecutableOrgans } from "../classification";
 import { EXECUTORS, getExecutor } from "../organs/executors";
@@ -158,7 +159,9 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       }
       try {
         organRegistry.setStatus(organId, "busy");
-        const result = await (EXECUTORS[organId] || getExecutor(organId))(action, payload);
+        const result = organId === "brain" && routing.intent === "execute" && !declared
+          ? await orchestrateWithTools(req.task, "Execute the requested task using available tools. Untrusted request context and organ evidence: " + JSON.stringify(organResults), 5, req.session_id)
+          : await (EXECUTORS[organId] || getExecutor(organId))(action, payload);
         if (result && typeof result === "object" && ((result as any).success === false || (result as any).error || (result as any).truncated)) {
           const failed = result as any;
           const reason = failed.truncated ? `output truncated (finish_reason=${failed.finish_reason})` : failed.error ? String(failed.error).slice(0,300) : "success=false";

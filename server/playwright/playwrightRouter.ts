@@ -151,3 +151,22 @@ playwrightRouter.post("/stop", async (req, res) => {
   await browserManager.stop();
   res.json({ success: true, message: "Browser stopped." });
 });
+
+// Explicit operator action: credentials never enter model prompts, memory or telemetry.
+playwrightRouter.post("/login", async (req,res)=>{
+  const {url,username,password,usernameSelector,passwordSelector,submitSelector,successSelector}=req.body;
+  try {
+    const result=await browserManager.login({url,username,password,usernameSelector,passwordSelector,submitSelector,successSelector});
+    res.json({success:true,...result});
+  } catch {res.status(400).json({success:false,error:"Login failed; verify HTTPS URL, selectors and credentials. MFA/CAPTCHA may require manual verification."});}
+});
+
+playwrightRouter.post("/login-snippet", (req,res)=>{
+  const {url,usernameSelector,passwordSelector,submitSelector}=req.body;
+  try {
+    if(new URL(url).protocol!=="https:" || ![usernameSelector,passwordSelector,submitSelector].every(v=>typeof v==="string"&&v.length))throw new Error();
+    const literal=(v:string)=>JSON.stringify(v);
+    const snippet=`await page.goto(${literal(url)});\nawait page.locator(${literal(usernameSelector)}).fill(process.env.LOGIN_USERNAME);\nawait page.locator(${literal(passwordSelector)}).fill(process.env.LOGIN_PASSWORD);\nawait page.locator(${literal(submitSelector)}).click();\n// Verify a signed-in page element; handle MFA/CAPTCHA manually.`;
+    res.json({success:true,snippet});
+  } catch {res.status(400).json({success:false,error:"HTTPS URL and login selectors required"});}
+});

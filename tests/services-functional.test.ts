@@ -8,7 +8,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY='test-server-key';
 process.env.ADMIN_TOKEN='test-admin';
 process.env.OPERATOR_TOKEN='test-operator';
 const originalFetch=globalThis.fetch;
-const rows:any[]=[];let failDatabase=false, sawHistory=false, sawFullEvidence=false, truncateBrain=false, dynamicRoute=false;
+const rows:any[]=[];let failDatabase=false, sawHistory=false, sawFullEvidence=false, truncateBrain=false, dynamicRoute=false, toolScenario=false;
 globalThis.fetch=async(input:any,init:any)=>{
   const request=input instanceof Request ? input : new Request(input,init);
   const url=new URL(request.url);
@@ -26,6 +26,13 @@ globalThis.fetch=async(input:any,init:any)=>{
   if(url.hostname==='api.groq.com'){
     const body=await request.json();
     const router=body.messages[0]?.content.includes('Classify the task');
+    if(toolScenario && body.tools){
+      const results=body.messages.filter((m:any)=>m.role==='tool');
+      if(!results.length)return Response.json({id:'tool-test',model:'test-model',choices:[{message:{role:'assistant',content:null,tool_calls:[{id:'bad',type:'function',function:{name:'store_memory',arguments:'invalid-json'}},{id:'recall',type:'function',function:{name:'recall_memory',arguments:JSON.stringify({query:'repair value'})}}]},finish_reason:'tool_calls'}]});
+      assert.equal(results.length,2);assert.ok(results.some((m:any)=>m.tool_call_id==='bad'&&m.content.includes('error')));
+      assert.ok(results.some((m:any)=>m.tool_call_id==='recall'&&m.content.includes('repair value')));
+      return Response.json({id:'tool-final',model:'test-model',choices:[{message:{role:'assistant',content:'Recall succeeded; invalid storage request failed.'},finish_reason:'stop'}]});
+    }
     if(!router && body.messages[0]?.content!=='Reply with OK.')assert.equal(body.max_tokens,10000);
     if(body.messages.some((m:any)=>m.content.includes("EVIDENCE_END")))sawFullEvidence=true;
     if(body.messages.some((m:any)=>m.content.includes('Prior conversation data')))sawHistory=true;
@@ -52,13 +59,23 @@ test('authenticated HTTP memory, sandbox approval, Playwright and websocket serv
     assert.equal((await call('/api/groq/check',{},'')).status,403);
     const status=await call('/api/groq/status');assert.equal(status.body.configured,true);assert.equal(JSON.stringify(status.body).includes('test-groq'),false);
     const probe=await call('/api/groq/check',{});assert.equal(probe.body.connected,true);assert.equal(rows.length,0,'Provider check must work independently of memory');
-    const first=await call('/api/command/run',{task:'remember repair value 42',session_id:'service-session'});
+    assert.equal((await call('/api/playwright/login',{url:'https://example.com'},'')).status,403);
+    const snippet=await call('/api/playwright/login-snippet',{url:'https://example.com/login',usernameSelector:'#user',passwordSelector:'#password',submitSelector:'#submit'});
+    assert.equal(snippet.body.success,true);assert.ok(snippet.body.snippet.includes('process.env.LOGIN_PASSWORD'));
+    assert.equal((await call('/api/playwright/login',{url:'http://example.com',username:'user',password:'secret'})).body.success,false);
+    const first=await call('/api/command/run' ,{task:'remember repair value 42',session_id:'service-session'});
     assert.equal(first.body.success,true,JSON.stringify(first.body));
     assert.ok(rows.some(r=>r.agent_id==='command'));
     assert.equal(sawFullEvidence,true);
     assert.deepEqual(first.body.diagnostics.stages.slice(-4),["verification","persistence","feedback","response"]);
     const second=await call('/api/command/run',{task:'recall repair value',session_id:'service-session'});
     assert.equal(second.body.success,true);assert.equal(sawHistory,true);
+    toolScenario=true;
+    const toolRun=await call('/api/tools/run',{message:'recall repair value',session_id:'service-session'});
+    toolScenario=false;
+    assert.equal(toolRun.body.success,true,JSON.stringify(toolRun.body));
+    assert.ok(rows.some(r=>r.agent_id==='tools'&&r.metadata.session_id==='service-session'));
+    assert.ok(rows.some(r=>r.agent_id==='feedback'&&r.metadata.session_id==='service-session'));
     dynamicRoute=true;
     const dynamic=await call('/api/command/run',{task:'test sequential dynamic routing',session_id:'dynamic-session'});
     assert.equal(dynamic.body.success,true,JSON.stringify(dynamic.body));dynamicRoute=false;

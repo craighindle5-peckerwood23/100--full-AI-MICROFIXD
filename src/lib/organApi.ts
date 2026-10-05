@@ -69,6 +69,9 @@ export const Memory = {
 };
 
 export const PlaywrightOrgan = {
+  fill: (selector:string,value:string) => api("POST","/playwright/fill",{selector,value}),
+  login: (input:{url:string;username:string;password:string;usernameSelector:string;passwordSelector:string;submitSelector:string;successSelector?:string}) => api("POST","/playwright/login",input),
+  loginSnippet: (input:{url:string;usernameSelector:string;passwordSelector:string;submitSelector:string}) => api("POST","/playwright/login-snippet",input),
   navigate:   (url: string)                         => OrganApi.execute("playwright", "navigate",   { url }),
   scrape:     (url: string, selector?: string)      => OrganApi.execute("playwright", "scrape",     { url, selector }),
   screenshot: ()                                    => OrganApi.execute("playwright", "screenshot", {}),

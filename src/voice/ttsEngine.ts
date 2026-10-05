@@ -71,7 +71,7 @@ export class TTSEngine {
       const timer=setTimeout(()=>finish(new Error('Playback end acknowledgment timed out')),120000);
       const play=async()=>{
         if(this.testPlayer){await this.testPlayer(text);return;}
-        if(useVoiceStore.getState().ttsMethod==='elevenlabs'){
+        if(useVoiceStore.getState().ttsMethod==='elevenlabs' && useVoiceStore.getState().voiceStyle!=='synthetic'){
           let result:{audio_base64?:string;content_type?:string}|undefined;
           try {result=await VoiceOrgan.synthesize(text,useVoiceStore.getState().voiceId) as typeof result;}
           catch(err){if(settled || epoch!==this.epoch)throw err;console.warn('[tts] Provider failed; using browser playback');}
@@ -98,7 +98,7 @@ export class TTSEngine {
     return new Promise((resolve,reject)=>{
       if(!this.isSupported){reject(new Error('Browser speech synthesis unavailable'));return;}
       const utterance=new SpeechSynthesisUtterance(text);this.utterance=utterance;
-      utterance.lang=useVoiceStore.getState().language;utterance.rate=0.95;utterance.pitch=1;
+      utterance.lang=useVoiceStore.getState().language;utterance.rate=useVoiceStore.getState().voiceStyle==='synthetic'?0.85:0.95;utterance.pitch=useVoiceStore.getState().voiceStyle==='synthetic'?0.55:1;
       const voices=window.speechSynthesis.getVoices();
       utterance.voice=voices.find(v=>v.lang===utterance.lang&&v.localService) || voices.find(v=>v.lang.startsWith(utterance.lang.split('-')[0])) || null;
       this.cleanupChunk=()=>{utterance.onend=null;utterance.onerror=null;this.utterance=null;};
