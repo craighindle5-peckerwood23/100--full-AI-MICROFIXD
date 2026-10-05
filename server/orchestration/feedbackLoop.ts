@@ -4,7 +4,7 @@
  * Feeds into evolution engine and overwatch.
  */
 import { organRegistry } from "../organs/organRegistry";
-import { broadcast }     from "../index";
+import { broadcast }     from "../events";
 
 export interface FeedbackReport {
   session_id:    string;
@@ -14,6 +14,8 @@ export interface FeedbackReport {
   bottleneck?:   string;
   ts:            string;
 }
+
+import { executeMemoryOrgan } from "../organs/organs/memoryOrgan";
 
 const history: FeedbackReport[] = [];
 
@@ -48,6 +50,7 @@ class FeedbackLoop {
       ts:           new Date().toISOString(),
     };
 
+    await executeMemoryOrgan("store", { session_id: sessionId, organ: "feedback", tags: ["learning", "feedback"], content: JSON.stringify({ task, output, report }) });
     history.push(report);
     if (history.length > 200) history.shift();
 
