@@ -44,6 +44,19 @@ class BrowserManager {
   async scrape(url:string,selector='body'):Promise<{text:string;url:string;title:string}>{const nav=await this.navigate(url);return {text:await this.getText(selector),url:nav.url,title:nav.title};}
   async findLinks(url?:string):Promise<string[]>{if(url)await this.navigate(url);return (await this.getPage()).evaluate(()=>Array.from(document.querySelectorAll('a[href]')).map(a=>(a as HTMLAnchorElement).href).filter(h=>/^https?:/.test(h)).slice(0,50));}
   async fillAndSubmit(selector:string,value:string,submitSelector:string):Promise<{success:boolean}>{await this.fill(selector,value);return this.click(submitSelector);}
+  async login(p:{url:string;username:string;password:string;usernameSelector:string;passwordSelector:string;submitSelector:string;successSelector?:string}):Promise<{submitted:boolean;authenticated:boolean;requires_verification:boolean}> {
+    if(new URL(p.url).protocol!=='https:')throw new Error('Login requires HTTPS');
+    if(!p.username || !p.password || !p.usernameSelector || !p.passwordSelector || !p.submitSelector)throw new Error('Login credentials and selectors required');
+    await this.navigate(p.url);
+    const page=await this.getPage();
+    if(new URL(page.url()).origin!==new URL(p.url).origin)throw new Error('Login redirected to a different origin; confirm that login URL first');
+    await this.fill(p.usernameSelector,p.username);
+    await this.fill(p.passwordSelector,p.password);
+    await this.click(p.submitSelector);
+    let authenticated=false;
+    if(p.successSelector){try{await page.locator(p.successSelector).waitFor({state:'visible',timeout:10000});authenticated=true;}catch{}}
+    return {submitted:true,authenticated,requires_verification:!authenticated};
+  }
   async getCurrentState():Promise<{url:string;title:string;status:string;engine:string}>{
     if(!this.page)return {url:'',title:'',status:'idle',engine:'playwright_chromium_native'};
     return {url:this.page.url(),title:await this.page.title(),status:'active',engine:'playwright_chromium_native'};
