@@ -31,7 +31,7 @@ toolsRouter.post("/run", async (req, res) => {
   const { message, system_prompt } = req.body;
   if (!message) return res.status(400).json({ error: "message required" });
   try {
-    const result = await orchestrateWithTools(message, system_prompt);
+    const result = await orchestrateWithTools(message, system_prompt, 5, String(req.body.session_id || "default"));
     res.json({ success: true, ...result });
   } catch (err) {
     res.status(500).json({ success: false, error: String(err) });
