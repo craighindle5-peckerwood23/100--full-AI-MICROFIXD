@@ -58,14 +58,10 @@ export const autonomyRouter = Router();
 // ── Auth bridge ─────────────────────────────────────────────────────────────
 
 function requireTvAdmin(req: Request, res: Response, next: NextFunction): void {
-  const key = req.header("x-microfixd-admin-key");
-  if (!process.env.ADMIN_TOKEN) {
-    // No admin token configured: the deep-health endpoint already reports
-    // configured.admin=false; allow reads so the OS can still boot.
-    return next();
-  }
-  if (key && key === process.env.ADMIN_TOKEN) return next();
-  res.status(401).json({ error: "Unauthorized." });
+  // Global RBAC validates either Bearer auth or the scoped legacy admin header.
+  // Never allow the adapter to become unauthenticated when ADMIN_TOKEN is absent.
+  if ((req as Request & { microfixdRole?: string }).microfixdRole === "admin") return next();
+  res.status(403).json({ code: "PERMISSION_DENIED", error: "Administrator access required." });
 }
 
 autonomyRouter.use(requireTvAdmin);
