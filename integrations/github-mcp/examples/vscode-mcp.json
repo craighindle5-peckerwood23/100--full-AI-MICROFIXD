@@ -1,0 +1,1 @@
+{"inputs":[{"type":"promptString","id":"microfixd-mcp-url","description":"Deployed Microfixd MCP URL ending in /mcp"},{"type":"promptString","id":"microfixd-mcp-token","description":"Microfixd MCP read token","password":true}],"servers":{"microfixd-github":{"type":"http","url":"${input:microfixd-mcp-url}","headers":{"Authorization":"Bearer ${input:microfixd-mcp-token}"}}}}

@@ -1,0 +1,28 @@
+name: GitHub MCP checks
+on:
+  pull_request:
+    paths:
+      - 'integrations/github-mcp/**'
+      - '.github/workflows/github-mcp.yml'
+  push:
+    paths:
+      - 'integrations/github-mcp/**'
+      - '.github/workflows/github-mcp.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: integrations/github-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: integrations/github-mcp/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
