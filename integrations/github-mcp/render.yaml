@@ -1,57 +1,77 @@
-# Dedicated MCP deployment; existing Microfixd OS service stays as configured.
+# Provider secrets are entered on the web service; the indexer references them.
 envVarGroups:
-  - name: microfixd-mcp-shared
-    envVars:
-      - key: NODE_VERSION
-        value: 22.14.0
-      - key: GITHUB_OWNER
-        value: craighindle5-peckerwood23
-      - key: GITHUB_REPO
-        value: 100--full-AI-MICROFIXD
-      - key: GITHUB_REF
-        value: main
-      - key: GITHUB_TOKEN
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: MCP_TENANT
-        value: microfixd
+- name: microfixd-mcp-shared
+  envVars:
+  - key: NODE_VERSION
+    value: 22.14.0
+  - key: GITHUB_OWNER
+    value: craighindle5-peckerwood23
+  - key: GITHUB_REPO
+    value: 100--full-AI-MICROFIXD
+  - key: GITHUB_REF
+    value: main
+  - key: MCP_TENANT
+    value: microfixd
 services:
-  - type: web
-    name: microfixd-mcp
-    runtime: node
-    plan: free
-    rootDir: integrations/github-mcp
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
-    healthCheckPath: /health
-    envVars:
-      - fromGroup: microfixd-mcp-shared
-      - key: MCP_TOKEN
-        generateValue: true
-      - key: MCP_WRITE_TOKEN
-        generateValue: true
-      - key: MCP_ALLOW_WRITES
-        value: "false"
-      - key: MCP_ALLOWED_ORIGINS
-        sync: false
-      - key: MICROFIXD_BACKEND_URL
-        sync: false
-      - key: MICROFIXD_BACKEND_TOKEN
-        sync: false
-  - type: cron
-    name: microfixd-architecture-index
-    runtime: node
-    plan: starter
-    rootDir: integrations/github-mcp
-    schedule: "0 9 * * *"
-    buildCommand: npm ci && npm run build
-    startCommand: npm run index
-    envVars:
-      - fromGroup: microfixd-mcp-shared
-      - key: MCP_INDEX_VECTORS
-        value: "true"
+- type: web
+  name: microfixd-mcp
+  runtime: node
+  plan: free
+  rootDir: integrations/github-mcp
+  buildCommand: npm ci --include=dev && npm run build
+  startCommand: npm start
+  healthCheckPath: /health
+  envVars:
+  - fromGroup: microfixd-mcp-shared
+  - key: MCP_TOKEN
+    generateValue: true
+  - key: MCP_WRITE_TOKEN
+    generateValue: true
+  - key: MCP_ALLOW_WRITES
+    value: 'false'
+  - key: MCP_ALLOWED_ORIGINS
+    sync: false
+  - key: MICROFIXD_BACKEND_URL
+    sync: false
+  - key: MICROFIXD_BACKEND_TOKEN
+    sync: false
+  - key: GITHUB_TOKEN
+    sync: false
+  - key: SUPABASE_URL
+    sync: false
+  - key: SUPABASE_SERVICE_ROLE_KEY
+    sync: false
+  - key: OPENAI_API_KEY
+    sync: false
+- type: cron
+  name: microfixd-architecture-index
+  runtime: node
+  plan: starter
+  rootDir: integrations/github-mcp
+  schedule: 0 9 * * *
+  buildCommand: npm ci --include=dev && npm run build
+  startCommand: npm run index
+  envVars:
+  - fromGroup: microfixd-mcp-shared
+  - key: MCP_INDEX_VECTORS
+    value: 'true'
+  - key: GITHUB_TOKEN
+    fromService:
+      type: web
+      name: microfixd-mcp
+      envVarKey: GITHUB_TOKEN
+  - key: SUPABASE_URL
+    fromService:
+      type: web
+      name: microfixd-mcp
+      envVarKey: SUPABASE_URL
+  - key: SUPABASE_SERVICE_ROLE_KEY
+    fromService:
+      type: web
+      name: microfixd-mcp
+      envVarKey: SUPABASE_SERVICE_ROLE_KEY
+  - key: OPENAI_API_KEY
+    fromService:
+      type: web
+      name: microfixd-mcp
+      envVarKey: OPENAI_API_KEY
