@@ -1,0 +1,119 @@
+{
+  "source_archive": "microfixd_project-upgraded-specs.zip",
+  "archive_sha256": "84cc4ca996903dc6ad41b57c565db09986763eb3a67004f9f4ab06c332477e49",
+  "baseline_commit": "aa385fdca8481860d4b0b390d787ccba5e16d5c1",
+  "scope": "requirements only; archive code not installed",
+  "files": [
+    {
+      "path": "package.json",
+      "bytes": 2373,
+      "sha256": "61c72fb72bc608395a21476d6d69efe76ae9796b7e1a7fc3c30f582ecdf0b64d",
+      "comparison": "changed"
+    },
+    {
+      "path": "tsconfig.json",
+      "bytes": 508,
+      "sha256": "e93e15c3794e43a117964ea191ae985cbedea70c41d3d82b2e20aa8d07374fe4",
+      "comparison": "changed"
+    },
+    {
+      "path": "microfixd/backend/core/governance/engine.ts",
+      "bytes": 17426,
+      "sha256": "cc7909e0c6e18c3c1d6e9198d4ecf67ec93377caaba7f1eeac12fde1e76772f5",
+      "comparison": "changed"
+    },
+    {
+      "path": "microfixd/core/autonomy/missionStateMachine.ts",
+      "bytes": 8900,
+      "sha256": "42940e1f36d179da620ba05ef67063eac95e4398f44a8a62da72ba7590b31223",
+      "comparison": "changed"
+    },
+    {
+      "path": "microfixd/core/memory/supabaseMemory.ts",
+      "bytes": 7236,
+      "sha256": "bc3c2a8c4ace119abac19bf9f4f497dea4616a09dd99d1adc93dc68e386e85c8",
+      "comparison": "changed"
+    },
+    {
+      "path": "scripts/verify-deploy.mjs",
+      "bytes": 2314,
+      "sha256": "e8394d834914b6326da61af97882ca2eecbb218f22daa8a3cd81e74dfd864cc5",
+      "comparison": "added"
+    },
+    {
+      "path": "server/index.ts",
+      "bytes": 12104,
+      "sha256": "ebda3dcbbc2159306d8319c7c35ecc704cfb17b3c78cdec8ae0b804f5a9961fb",
+      "comparison": "changed"
+    },
+    {
+      "path": "server/email/emailRouter.ts",
+      "bytes": 1009,
+      "sha256": "c9f80dd700a1141f1450900d98c17743c5e99b4799724a613d8643f5bb025bd3",
+      "comparison": "added"
+    },
+    {
+      "path": "server/email/emailService.ts",
+      "bytes": 3835,
+      "sha256": "d27de8c59ad633175e3a103310e8ba1e4d16cfb21812d7fd0bfb9a4472debe13",
+      "comparison": "added"
+    },
+    {
+      "path": "server/hitl/hitlManager.ts",
+      "bytes": 4356,
+      "sha256": "586b19feab10cb5f71e725fcf8ab667354517b36a1bda6d54bc5aa1a425198fd",
+      "comparison": "changed"
+    },
+    {
+      "path": "server/hitl/hitlRouter.ts",
+      "bytes": 1641,
+      "sha256": "b58293a140ae9264cd60a74550d0dd573584beaff7bb1fb60f892bbd0724324b",
+      "comparison": "changed"
+    },
+    {
+      "path": "server/missions/missionRouter.ts",
+      "bytes": 1465,
+      "sha256": "18ef9ed6d1cf83fd265467bdf6f4426000fdc3459f37f5d217c13cc0a047d818",
+      "comparison": "added"
+    },
+    {
+      "path": "server/orchestration/groqRetry.ts",
+      "bytes": 7909,
+      "sha256": "405bd086125b508e8c3c1ddf0ab809b168ea90eb0a53fd547d3bce9d7034ae9f",
+      "comparison": "changed"
+    },
+    {
+      "path": "server/organs/organRouter.ts",
+      "bytes": 10955,
+      "sha256": "fddb25767ccc9baf1bd57483417b6ac76504b1159b753c1abdef7e91121d8e27",
+      "comparison": "changed"
+    },
+    {
+      "path": "server/organs/organs/memoryOrgan.ts",
+      "bytes": 7856,
+      "sha256": "236e07a917d3da509148075db04beb6d1b15a0f2ec7dcd75c830b4ef5eac5a0d",
+      "comparison": "changed"
+    },
+    {
+      "path": "server/security/rbac.ts",
+      "bytes": 5140,
+      "sha256": "5e868fa4b34acae11ac8bc4733dbe7a2871b653dcd026837b6d6fa2716ba3de0",
+      "comparison": "changed"
+    },
+    {
+      "path": "supabase/migrations/0002_semantic_memory_tenant.sql",
+      "bytes": 2257,
+      "sha256": "8f2edbca89a770ec4172646d1c661b0837f4ffc84068ea777204461354055413",
+      "comparison": "added"
+    },
+    {
+      "path": "tests/groq-recovery.test.ts",
+      "bytes": 2071,
+      "sha256": "e5ac3d54fc636b8f4bda27017b1e8a3f256d828e2f5d077f6d623dd9a9c5954a",
+      "comparison": "changed"
+    }
+  ],
+  "archive_file_count": 301,
+  "unchanged_file_count": 283,
+  "inventory_scope": "New or changed archive files against the integration baseline; unchanged files counted but omitted"
+}
