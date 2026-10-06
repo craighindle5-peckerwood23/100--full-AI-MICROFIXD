@@ -71,7 +71,7 @@ export async function executeGroqWithRetry(
   totalLatencyMs: number;
   attempts: number;
 }> {
-  const maxRetries = options.maxRetries ?? 3;
+  const maxRetries = options.maxRetries ?? 5;
   const baseDelayMs = options.baseDelayMs ?? 400;
   const maxDelayMs = options.maxDelayMs ?? 3000;
   const fallbackModels = options.fallbackModels ?? VERIFIED_GROQ_MODELS;
@@ -157,12 +157,43 @@ export async function executeGroqWithRetry(
         continue;
       }
 
+      // Input limits cannot be repaired by reducing output tokens. Keep the
+      // complete prompt and try a distinct model with its own token budget.
+      const inputLimit = /input tokens per minute|ITPM/i.test(errorMsg);
+      const outputLimit = /output tokens per minute|OTPM/i.test(errorMsg);
+      if ((statusCode === 413 || statusCode === 429) && !outputLimit) {
+        const nextModel = fallbackModels.find(m => !attemptedModels.has(m));
+        if (nextModel) {
+          recordGroqDebugLog({
+            id: `groq-limit-${Date.now()}-${attempt}`,
+            timestamp: new Date().toISOString(), model: currentModel,
+            attempt, maxAttempts: maxRetries, status: "fallback",
+            latencyMs: attemptLatency, statusCode,
+            errorCode: inputLimit ? "INPUT_TOKEN_LIMIT" : "RATE_LIMIT_EXCEEDED",
+            errorMessage: errorMsg, promptPreview, fallbackModel: nextModel,
+          });
+          currentModel = nextModel;
+          continue;
+        }
+        // An oversized input will never fit this model on a later retry.
+        if (statusCode === 413 || /request too large/i.test(errorMsg)) break;
+      }
+
       // Handle 429 Rate Limit / Output Token Exceeded -> Clamp tokens and backoff
       if (statusCode === 429 || errorMsg.includes("Limit") || errorMsg.includes("OTPM")) {
-        currentMaxTokens = Math.max(1, Math.floor(currentMaxTokens * 0.65));
+        const reportedLimit = outputLimit
+          ? Number(errorMsg.match(/Limit\s+(\d+)/i)?.[1]) : NaN;
+        currentMaxTokens = Math.max(1, Math.min(
+          Math.floor(currentMaxTokens * 0.65),
+          Number.isFinite(reportedLimit) ? Math.floor(reportedLimit * 0.9) : currentMaxTokens
+        ));
         const retryAfterSec = Number(err?.headers?.get?.("retry-after") ?? err?.headers?.["retry-after"] ?? 1);
-        const waitMs = Math.max((Number.isFinite(retryAfterSec)?retryAfterSec:1) * 1000, baseDelayMs * Math.pow(2, attempt - 1));
-        if(waitMs>maxDelayMs)break; // Surface long provider cooldowns instead of hanging a command.
+        const waitMs = outputLimit && /request too large/i.test(errorMsg) ? 0 : Math.max((Number.isFinite(retryAfterSec)?retryAfterSec:1) * 1000, baseDelayMs * Math.pow(2, attempt - 1));
+        if(waitMs>maxDelayMs) {
+          const nextModel = fallbackModels.find(m => !attemptedModels.has(m));
+          if (nextModel) { currentModel = nextModel; continue; }
+          break; // Surface long provider cooldowns when every model is exhausted.
+        }
 
         recordGroqDebugLog({
           id: `groq-ratelimit-${Date.now()}-${attempt}`,
