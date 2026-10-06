@@ -4,10 +4,12 @@ on:
     paths:
       - 'integrations/github-mcp/**'
       - '.github/workflows/github-mcp.yml'
+      - 'tsconfig.json'
   push:
     paths:
       - 'integrations/github-mcp/**'
       - '.github/workflows/github-mcp.yml'
+      - 'tsconfig.json'
 permissions:
   contents: read
 jobs:
@@ -23,6 +25,18 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: integrations/github-mcp/package-lock.json
-      - run: npm ci
+      - run: npm ci --include=dev
       - run: npm run build
       - run: npm test
+  os-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --include=dev
+      - run: npm run build
+      - run: npm run validate:classification

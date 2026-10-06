@@ -37,7 +37,7 @@ Sandbox forwards to the existing Microfixd `/api/sandbox/run` using `MICROFIXD_B
 
 ## Render
 
-Use this directory's render.yaml as a dedicated Blueprint. It defines the MCP web service and a nightly 09:00 UTC indexer (02:00 PDT / 01:00 PST). The cron uses a paid starter plan; embedding calls also incur costs. Configure shared secrets and install the SQL before deployment. Review the actual hostname, read/write settings and provider permissions before connecting clients. Existing OS render.yaml is unchanged.
+Use this directory's render.yaml as a dedicated Blueprint. It defines the MCP web service and a nightly 09:00 UTC indexer (02:00 PDT / 01:00 PST). The cron uses a paid starter plan; embedding calls also incur costs. Enter GITHUB_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and OPENAI_API_KEY on the MCP web service during initial Blueprint creation. The cron references these service environment values; the shared group contains only non-secret settings. For an existing Blueprint, set new secrets manually in the web service Environment tab before syncing. Install the SQL before deployment. Review the actual hostname, read/write settings and provider permissions before connecting clients. Existing OS render.yaml is unchanged.
 
 ## Validate
 
@@ -47,3 +47,5 @@ npm test
 ```
 
 Protocol tests use the SDK client against actual local HTTP transport with fake GitHub data. They verify initialize/discovery/calls, read authentication, origin rejection and blocked writes. Provider/database mocks do not establish live credential validity.
+
+The root OS TypeScript project excludes this independent package. Validate the OS before installing this package's dependencies to detect accidental dependency coupling. Render builds explicitly include dev dependencies needed for TypeScript declarations.
