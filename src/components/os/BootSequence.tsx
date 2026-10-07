@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
+import { useBrand } from '../../branding/BrandProvider';
 import { 
   FastForward, 
   Cpu, 
@@ -20,20 +21,24 @@ interface DiagnosticStep {
   icon: React.ElementType;
 }
 
-const DIAGNOSTIC_STEPS: DiagnosticStep[] = [
-  { label: 'Hardware POST & Tensor Engine', detail: '8x NVIDIA H100 SXM5 / 640GB HBM3e memory map verified', threshold: 18, icon: Cpu },
-  { label: 'Microkernel Initialization', detail: 'Microfyxd Zero-Trust Kernel v6.2.0 loaded into ring-0', threshold: 38, icon: Activity },
-  { label: 'Supabase Cloud Backend Link', detail: 'Connecting to distributed PostgreSQL & persistent logs', threshold: 58, icon: Database },
-  { label: 'Omni LLM Router Matrix', detail: 'Juggling Groq, Gemini & DeepSeek API key fallback chains', threshold: 78, icon: Radio },
-  { label: 'Synthetic Voice Feedback Subsystem', detail: 'Web Speech & neural synthesis pipeline mounted', threshold: 92, icon: Mic },
-  { label: 'Constitutional Safety & Federation', detail: 'Chapter 15 Ethical Directives & MCP peer mesh active', threshold: 100, icon: ShieldCheck }
-];
+function buildDiagnosticSteps(bootKernelLabel: string): DiagnosticStep[] {
+  return [
+    { label: 'Hardware POST & Tensor Engine', detail: '8x NVIDIA H100 SXM5 / 640GB HBM3e memory map verified', threshold: 18, icon: Cpu },
+    { label: 'Microkernel Initialization', detail: `${bootKernelLabel} loaded into ring-0`, threshold: 38, icon: Activity },
+    { label: 'Supabase Cloud Backend Link', detail: 'Connecting to distributed PostgreSQL & persistent logs', threshold: 58, icon: Database },
+    { label: 'Omni LLM Router Matrix', detail: 'Juggling Groq, Gemini & DeepSeek API key fallback chains', threshold: 78, icon: Radio },
+    { label: 'Synthetic Voice Feedback Subsystem', detail: 'Web Speech & neural synthesis pipeline mounted', threshold: 92, icon: Mic },
+    { label: 'Constitutional Safety & Federation', detail: 'Chapter 15 Ethical Directives & MCP peer mesh active', threshold: 100, icon: ShieldCheck }
+  ];
+}
 
 interface BootSequenceProps {
   onComplete?: () => void;
 }
 
 export default function BootSequence({ onComplete }: BootSequenceProps = {}) {
+  const brand = useBrand();
+  const DIAGNOSTIC_STEPS = React.useMemo(() => buildDiagnosticSteps(brand.bootKernelLabel), [brand.bootKernelLabel]);
   const [bootCompleted, setBootCompleted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentStatus, setCurrentStatus] = useState('SYSTEM BOOT INITIATED // POWER ON RESET');
@@ -64,7 +69,7 @@ export default function BootSequence({ onComplete }: BootSequenceProps = {}) {
         setLogs(prev => [...prev, '[0.0120] CPU: 64 Core Synthetic Tensor Vector Units online at 4.2GHz']);
       } else if (currentP >= 35 && currentP < 38) {
         sound.playTick();
-        setCurrentStatus('KERNEL RING-0 ONLINE // MICROFYXD MICROKERNEL 6.2');
+        setCurrentStatus(`KERNEL RING-0 ONLINE // ${brand.shortName.toUpperCase()} MICROKERNEL 6.2`);
         setLogs(prev => [...prev, '[0.0482] KERNEL: Microkernel v6.2.0 initialized. Zero-trust isolation active.']);
       } else if (currentP >= 55 && currentP < 58) {
         sound.playTick();
@@ -88,7 +93,7 @@ export default function BootSequence({ onComplete }: BootSequenceProps = {}) {
 
         // Speak boot completion
         setTimeout(() => {
-          voice.speak('Microfyxd OS Kernel 6.2 loaded. Synthetic voice feedback active. All systems nominal.');
+          voice.speak(`${brand.productName} Kernel 6.2 loaded. Synthetic voice feedback active. All systems nominal.`);
         }, 300);
 
         setTimeout(() => {
@@ -138,7 +143,7 @@ export default function BootSequence({ onComplete }: BootSequenceProps = {}) {
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_12px_rgba(6,182,212,1)]" />
           <div className="text-xs tracking-widest text-cyan-200">
-            <span className="font-bold">MICROFYXD OS</span>
+            <span className="font-bold">{brand.productName.toUpperCase()}</span>
             <span className="text-cyan-500/80 ml-2">// KERNEL v6.2.0 POST</span>
           </div>
         </div>
@@ -186,7 +191,7 @@ export default function BootSequence({ onComplete }: BootSequenceProps = {}) {
         {/* Status Text */}
         <div className="text-center space-y-1">
           <h1 className="text-lg md:text-xl font-bold tracking-wider text-white">
-            MICROFYXD SYNTHETIC OS
+            {brand.productName.toUpperCase()}
           </h1>
           <p className="text-xs text-cyan-400/80 tracking-widest h-5">
             {currentStatus}
@@ -285,7 +290,7 @@ export default function BootSequence({ onComplete }: BootSequenceProps = {}) {
 
       {/* Bottom Footer Info */}
       <div className="w-full z-20 text-center text-[10px] text-cyan-500/50 flex items-center justify-between">
-        <span>MICROFYXD OS // SYNTHETIC INTELLIGENCE RUNTIME</span>
+        <span>{brand.productName.toUpperCase()} // SYNTHETIC INTELLIGENCE RUNTIME</span>
         <span className="hidden sm:inline">LEVEL 6 CERTIFIED COGNITIVE LATTICE</span>
         <span>BUILD 2026.09-L6</span>
       </div>

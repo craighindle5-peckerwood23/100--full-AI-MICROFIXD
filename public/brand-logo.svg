@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    Default placeholder brand mark. Swap this file (keep the same filename,
+    "brand-logo.svg") with your own logo to re-skin the product — no code
+    changes needed. See src/branding/brand.config.ts for the rest of the
+    white-label settings (name, tagline, colors).
+  -->
+  <circle cx="32" cy="32" r="30" fill="#0d1117" stroke="#22d3ee" stroke-width="2"/>
+  <path d="M20 32 L28 42 L44 22" fill="none" stroke="#22d3ee" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

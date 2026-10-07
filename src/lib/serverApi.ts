@@ -8,6 +8,7 @@ export class AuthenticationRequiredError extends Error {}
 
 const BASE = "/api";
 const OPERATOR_TOKEN_KEY = "microfixd_operator_token";
+const SUPABASE_SESSION_TOKEN_KEY = "microfixd_supabase_access_token";
 
 export async function api<T = unknown>(
   method:  "GET" | "POST" | "DELETE" | "PUT",
@@ -16,9 +17,12 @@ export async function api<T = unknown>(
 ): Promise<T> {
   // The operator supplies the server-side token in Settings. Keep it in
   // sessionStorage so it is not committed, persisted across browser sessions,
-  // or injected into the production bundle.
+  // or injected into the production bundle. When accounts mode is enabled
+  // (src/lib/auth.ts) and no manual operator token is set, fall back to the
+  // signed-in user's Supabase session token — the server's RBAC layer
+  // (server/security/rbac.ts) accepts either.
   const token = typeof window !== "undefined"
-    ? window.sessionStorage.getItem(OPERATOR_TOKEN_KEY)
+    ? (window.sessionStorage.getItem(OPERATOR_TOKEN_KEY) || window.sessionStorage.getItem(SUPABASE_SESSION_TOKEN_KEY))
     : null;
   const resp = await fetch(`${BASE}${path}`, {
     method,

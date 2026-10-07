@@ -10,6 +10,7 @@ import {
   BarChart2, Settings, Brain, Zap, AlertTriangle, Search
 } from "lucide-react";
 import type { RoomId } from "./MicrofixdOS";
+import { useBrand } from "../../branding/BrandProvider";
 
 const ROOMS: { id: RoomId; label: string; icon: React.ReactNode }[] = [
   { id: "chat",       label: "Chat",       icon: <Brain size={13} /> },
@@ -33,6 +34,7 @@ interface TopBarProps {
 export default function TopBar({
   room, onRoomChange, onMenuToggle, onCommandPalette, serverConnected, hitlPending,
 }: TopBarProps) {
+  const brand = useBrand();
   return (
     <div className="flex items-center h-10 px-3 gap-2 bg-[#0d1117] border-b border-[#21262d] flex-shrink-0 z-50">
 
@@ -45,7 +47,7 @@ export default function TopBar({
       {/* Identity lock badge */}
       <div className="flex items-center gap-1.5 px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full">
         <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_4px_#22d3ee]" />
-        <span className="text-cyan-400 text-[10px] font-semibold tracking-widest">◈ MICROFIXD L7</span>
+        <span className="text-cyan-400 text-[10px] font-semibold tracking-widest">{brand.topBarBadge}</span>
       </div>
 
       {/* Room tabs */}

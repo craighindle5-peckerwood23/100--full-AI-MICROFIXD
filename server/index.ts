@@ -41,6 +41,9 @@ import { getPending }        from "./hitl/hitlManager";
 import { initOrgans }        from "../microfixd/langgraph/organs";
 import { ClassificationError, getClassificationMap, resolveTypedObject } from "./classification";
 import dispatchRouter from "../microfixd/backend/routes/agents/dispatch";
+import { getBrandConfig } from "./branding";
+import { securityHeaders } from "./security/securityHeaders";
+import { rateLimiter } from "./security/rateLimiter";
 
 const PORT   = Number(process.env.PORT) || 3000;
 const HOST   = "0.0.0.0";
@@ -49,6 +52,7 @@ export const server = http.createServer(app);
 export const wss = new WebSocketServer({ server, path: "/ws" });
 
 // ── Middleware ─────────────────────────────────────────────────────────────
+app.use(securityHeaders);
 const allowedOrigins = (process.env.CORS_ORIGINS ?? "")
   .split(",")
   .map((origin) => origin.trim())
@@ -89,6 +93,9 @@ app.get("/api/health", (_, res) => {
     services: ["playwright", "sandbox", "hitl", "github", "mcp", "organs", "command", "crawl", "tools", "security", "execution", "skin", "crossai"],
   });
 });
+
+app.get("/api/branding", (_, res) => res.json(getBrandConfig()));
+app.get("/health", (_, res) => res.redirect(307, "/api/health"));
 
 app.get("/api/health/deep", async (_, res) => {
   let memoryReady = false;
@@ -131,8 +138,25 @@ app.get("/api/mcp/manifest", (_, res) => {
 // Every operational API below this line is authenticated and role-gated.
 app.use((req, res, next) => {
   // Serve the public UI and its assets without a token. Gate operational APIs only.
-  if (req.path === "/api" || req.path.startsWith("/api/")) return rbacMiddleware(req, res, next);
+  if (req.path === "/api" || req.path.startsWith("/api/")) {
+    rbacMiddleware(req, res, (err?: unknown) => {
+      if (err) return next(err);
+      rateLimiter(req, res, next);
+    });
+    return;
+  }
   next();
+});
+
+app.get("/api/registry", (_, res) => {
+  try {
+    const topology = JSON.parse(readFileSync(path.resolve(process.cwd(), "microfixd/topology.json"), "utf-8"));
+    const wiring = JSON.parse(readFileSync(path.resolve(process.cwd(), "microfixd/wiring.json"), "utf-8"));
+    const organs = organRegistry.all();
+    res.json({ total: organs.length, organs, topology, wiring });
+  } catch (error) {
+    res.status(503).json({ code: "REGISTRY_UNAVAILABLE", error: String(error) });
+  }
 });
 
 app.get("/api/classification/map", (_, res) => res.json(getClassificationMap()));

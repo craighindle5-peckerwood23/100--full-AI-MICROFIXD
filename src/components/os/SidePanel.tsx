@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ServerHealth } from "../../lib/serverApi";
 import type { RoomId } from "./MicrofixdOS";
+import { useBrand } from "../../branding/BrandProvider";
 
 const NAV_ITEMS: { id: RoomId; label: string; icon: React.ReactNode }[] = [
   { id: "chat",       label: "Chat Room",    icon: <Brain size={12} /> },
@@ -37,6 +38,7 @@ interface SidePanelProps {
 }
 
 export default function SidePanel({ activeRoom, onRoomChange }: SidePanelProps) {
+  const brand = useBrand();
   const [organStatus, setOrganStatus] = useState<Record<string, string>>({});
 
   // Poll server health every 2s
@@ -104,7 +106,7 @@ export default function SidePanel({ activeRoom, onRoomChange }: SidePanelProps) 
       <div className="p-2 border-t border-[#21262d]">
         <div className="text-[9px] text-zinc-600 font-mono">
           <div>gemini-2.0-flash-exp</div>
-          <div className="text-zinc-700">Microfixd v7 · L7 Arcana</div>
+          <div className="text-zinc-700">{brand.versionLabel}</div>
         </div>
       </div>
     </div>
