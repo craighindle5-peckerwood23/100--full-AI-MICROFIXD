@@ -37,8 +37,8 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
     return {success:true,response_id:p.response_id,state:ack.metadata.state,cmdId:output.metadata.cmdId};
   }
   if (action === "context") {
-    const requested = Math.max(1,Math.min(100,Number(p.limit ?? process.env.MEMORY_RETRIEVAL_LIMIT) || 30));
-    const max_chars = Math.max(1000,Math.min(100000,Number(p.max_chars ?? process.env.MEMORY_CONTEXT_MAX_CHARS) || 60000));
+    const requested = Math.max(1,Math.min(100,Number(p.limit ?? process.env.MEMORY_RETRIEVAL_LIMIT) || 10));
+    const max_chars = Math.max(1000,Math.min(100000,Number(p.max_chars ?? process.env.MEMORY_CONTEXT_MAX_CHARS) || 8000));
     const result = await executeMemoryOrgan(p.query ? "search" : "recent",{session_id:session,limit:requested,query:p.query});
     const selected:any[]=[];let used=2;
     for(const memory of result.memories){

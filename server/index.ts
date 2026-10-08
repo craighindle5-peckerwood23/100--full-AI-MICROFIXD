@@ -44,6 +44,7 @@ import dispatchRouter from "../microfixd/backend/routes/agents/dispatch";
 import { getBrandConfig } from "./branding";
 import { securityHeaders } from "./security/securityHeaders";
 import { rateLimiter } from "./security/rateLimiter";
+import { verifySupabaseSession } from "./security/supabaseAuth";
 
 const PORT   = Number(process.env.PORT) || 3000;
 const HOST   = "0.0.0.0";
@@ -226,11 +227,13 @@ wss.on("connection", (ws) => {
   const timer = setTimeout(() => { if (!authenticated) ws.close(1008, "Authentication required"); }, 5000);
   ws.once("close", () => clearTimeout(timer));
 
-  ws.on("message", (data) => {
+  ws.on("message", (data) => { void (async () => {
     try {
       const msg = JSON.parse(data.toString());
       if (!authenticated) {
-        if (msg.type !== "authenticate" || roleForToken(String(msg.payload?.token || "")) === "anonymous") {
+        const token = String(msg.payload?.token || "");
+        const authorized = roleForToken(token) !== "anonymous" || Boolean(await verifySupabaseSession(token));
+        if (msg.type !== "authenticate" || !authorized) {
           ws.close(1008, "Invalid authentication"); return;
         }
         authenticated = true; clearTimeout(timer); registerWsClient(ws);
@@ -240,7 +243,7 @@ wss.on("connection", (ws) => {
     } catch (err) {
       ws.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
     }
-  });
+  })().catch(() => ws.close(1008, "Authentication failed")); });
 
   ws.on("close", () => {
     unregisterWsClient(ws);

@@ -34,3 +34,11 @@ test('output quota retries below the provider reported limit',async()=>{
  const seen:number[]=[];const client={chat:{completions:{create:async(p:any)=>{seen.push(p.max_tokens);if(seen.length===1)throw Object.assign(new Error('Request too large on output tokens per minute (OTPM): Limit 1000, Requested 10000'),{status:429,headers:{'retry-after':'0'}});return success;}}}};
  await executeGroqWithRetry(client as any,{messages:[],max_tokens:10000},{baseDelayMs:0});assert.deepEqual(seen,[10000,900]);
 });
+test('output quota respects remaining tokens already used this minute',async()=>{
+ const seen:number[]=[];const client={chat:{completions:{create:async(p:any)=>{seen.push(p.max_tokens);if(seen.length===1)throw Object.assign(new Error('Rate limit reached on output tokens per minute (OTPM): Limit 1000, Used 739, Requested 317. Please try again in 0s.'),{status:429,headers:{'retry-after':'0'}});return success;}}}};
+ await executeGroqWithRetry(client as any,{messages:[],max_tokens:512},{baseDelayMs:0});assert.deepEqual(seen,[512,234]);
+});
+test('default output budget fits the observed free tier minute limit',async()=>{
+ let requested=0;const client={chat:{completions:{create:async(p:any)=>{requested=p.max_tokens;return success;}}}};
+ await executeGroqWithRetry(client as any,{messages:[]});assert.equal(requested,512);
+});

@@ -27,6 +27,7 @@ import {
   Command, 
   Mic, 
   Sparkles,
+  Globe,
   CheckCircle2,
   Server,
   ShieldAlert,
@@ -55,6 +56,7 @@ import ConstitutionalRoom from '../rooms/ConstitutionalRoom';
 import FederationRoom from '../rooms/FederationRoom';
 import BibleRoom from '../rooms/BibleRoom';
 import WorldThinkingOversightRoom from '../rooms/WorldThinkingOversightRoom';
+import PlaywrightRoom from '../rooms/PlaywrightRoom';
 import FallbackAlertBanner from './FallbackAlertBanner';
 import GlobalCommandConsole from './GlobalCommandConsole';
 import FloatingCommandPalette from './FloatingCommandPalette';
@@ -75,6 +77,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'world_thinking', label: 'World Thinking & Oversight', hotkey: 'W', icon: Brain },
   { id: 'mission_control', label: 'Mission Control', hotkey: '1', icon: Rocket },
   { id: 'ai_core', label: 'Omni Router', hotkey: '2', icon: Radio },
+  { id: 'playwright', label: 'Browser', hotkey: 'P', icon: Globe },
   { id: 'agents', label: 'Agent Matrix', hotkey: '3', icon: Users },
   { id: 'sandbox', label: 'Sandbox', hotkey: '4', icon: Box },
   { id: 'workspace', label: 'Workspace', hotkey: '5', icon: Terminal },
@@ -260,6 +263,8 @@ export default function OSShell({ onReboot }: Props) {
         return <MissionControlRoom />;
       case 'ai_core':
         return <AICoreRoom />;
+      case 'playwright':
+        return <PlaywrightRoom />;
       case 'agents':
         return <AgentsRoom />;
       case 'sandbox':

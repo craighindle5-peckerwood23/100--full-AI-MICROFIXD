@@ -64,11 +64,17 @@ export function getSessionToken(): string | null {
 }
 
 function persistToken(token: string) {
-  if (typeof window !== "undefined") window.sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+    window.dispatchEvent(new Event("microfixd:auth-changed"));
+  }
 }
 
 function clearToken() {
-  if (typeof window !== "undefined") window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    window.dispatchEvent(new Event("microfixd:auth-changed"));
+  }
 }
 
 /** Re-hydrates the session token from Supabase's own stored session on page load. */

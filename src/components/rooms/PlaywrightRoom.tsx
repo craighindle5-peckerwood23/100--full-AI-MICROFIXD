@@ -98,6 +98,7 @@ export default function PlaywrightRoom() {
               <RefreshCw size={20} className="text-cyan-400 animate-spin" />
             </div>
           )}
+          {state.error && <div role="alert" className="absolute bottom-3 left-3 right-3 rounded border border-red-700 bg-red-950/95 p-2 text-xs text-red-200">{state.error}</div>}
         </div>
       </div>
 

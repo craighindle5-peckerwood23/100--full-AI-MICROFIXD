@@ -38,7 +38,7 @@ import WorldThinkingPanel from '../thinking/WorldThinkingPanel';
 
 const LANGGRAPH_NODES = [
   { id: 'ingest', name: 'Input Parsing', type: 'Ingestion' },
-  { id: 'omni_route', name: 'Omni Router (Groq/Gemini/DeepSeek)', type: 'LLM Selector' },
+  { id: 'omni_route', name: 'Omni Router (server providers)', type: 'LLM Selector' },
   { id: 'retrieve', name: 'Memory Retrieval', type: 'Vector Search' },
   { id: 'reason', name: 'LangGraph Reasoning', type: 'Cognitive' },
   { id: 'constitutional', name: 'Constitutional Safety Gate', type: 'Safety Filter' },
@@ -156,11 +156,11 @@ export default function AICoreRoom() {
               OMNI LLM ROUTER & COGNITIVE ENGINE
             </h1>
             <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 font-bold">
-              GROQ &bull; GEMINI &bull; DEEPSEEK
+              GROQ &bull; GEMINI &bull; OPENROUTER &bull; CLOUDFLARE
             </span>
           </div>
           <p className="text-xs text-cyan-500/80 mt-1">
-            Intelligent multi-model key juggling, latency-optimized cascade fallbacks, and real-time synthetic voice feedback.
+            Server-side provider fallback with verified responses and voice feedback.
           </p>
         </div>
 

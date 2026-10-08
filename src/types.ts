@@ -16,7 +16,8 @@ export type Subsystem =
   | 'governance'
   | 'federation'
   | 'world_thinking'
-  | 'bible';
+  | 'bible'
+  | 'playwright';
 
 export type AvatarState = 'idle' | 'processing' | 'alert' | 'success' | 'learning';
 

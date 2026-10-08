@@ -15,6 +15,7 @@ import { Router } from "express";
 import Groq       from "groq-sdk";
 import Anthropic  from "@anthropic-ai/sdk";
 import OpenAI     from "openai";
+import { GoogleGenAI } from "@google/genai";
 
 export const crossAIRouter = Router();
 
@@ -37,6 +38,18 @@ async function callProvider(to: string, messages: {role: string; content: string
         const msg = r.choices[0]?.message;
         content = msg?.content || msg?.reasoning || "";
         model   = r.model;
+        break;
+      }
+      case "gemini": {
+        if (!process.env.GEMINI_API_KEY?.trim()) throw new Error("GEMINI_API_KEY is not configured on the server");
+        const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY.trim()});
+        model = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+        const prompt = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n");
+        const r = await ai.models.generateContent({model,contents:prompt,
+          config:{maxOutputTokens:Math.max(1,Math.min(Number(opts.max_tokens) || 512,16384)),temperature:opts.temperature}});
+        if (r.candidates?.[0]?.finishReason === "MAX_TOKENS") throw new Error("Gemini response reached its token limit");
+        content = r.text || "";
+        if (!content.trim()) throw new Error("Gemini returned no answer");
         break;
       }
       case "claude": {
@@ -74,7 +87,7 @@ crossAIRouter.get("/providers", (req, res) => {
       { id: "openai",    available: !!process.env.OPENAI_API_KEY,     model: "gpt-4o" },
       { id: "copilot",   available: !!process.env.AZURE_OPENAI_API_KEY, model: "azure/gpt-4o" },
       { id: "devin",     available: !!process.env.DEVIN_API_KEY,      model: "devin-v1", skeleton: !process.env.DEVIN_API_KEY },
-      { id: "gemini",    available: !!process.env.VITE_GEMINI_API_KEY, model: "gemini-2.0-flash-exp" },
+      { id: "gemini",    available: !!process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
     ],
   });
 });

@@ -3,11 +3,11 @@ services:
     name: microfixd-full-ai
     runtime: node
     plan: free
-    buildCommand: npm ci && npx playwright install --with-deps chromium && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
-        value: 22.14.0
+        value: 22.17.0
       - key: NODE_ENV
         value: production
       # Add these in the Render dashboard (Environment tab) rather than

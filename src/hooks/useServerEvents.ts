@@ -34,7 +34,7 @@ export function useServerEvents(onEvent?: Handler) {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({type:"authenticate",payload:{token:window.sessionStorage.getItem("microfixd_operator_token") || ""}}));
+      ws.send(JSON.stringify({type:"authenticate",payload:{token:window.sessionStorage.getItem("microfixd_operator_token") || window.sessionStorage.getItem("microfixd_supabase_access_token") || ""}}));
     };
 
     ws.onmessage = (e) => {

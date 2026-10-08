@@ -9,8 +9,13 @@ class BrowserManager {
     if(this.page)return;
     if(this.starting)return this.starting;
     this.starting=(async()=>{
-      const browser=await chromium.launch({headless,executablePath:process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-        chromiumSandbox: process.env.PLAYWRIGHT_CHROMIUM_SANDBOX !== 'false', args:['--disable-dev-shm-usage']});
+      const packaged = !process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && process.env.NODE_ENV === 'production';
+      const serverlessChromium = packaged ? (await import('@sparticuz/chromium')).default : null;
+      const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+        || (serverlessChromium ? await serverlessChromium.executablePath() : undefined);
+      const browser=await chromium.launch({headless,executablePath,
+        chromiumSandbox: !packaged && process.env.PLAYWRIGHT_CHROMIUM_SANDBOX !== 'false',
+        args: serverlessChromium ? [...serverlessChromium.args, '--disable-dev-shm-usage'] : ['--disable-dev-shm-usage']});
       try {
         const context=await browser.newContext({viewport:{width:1280,height:800}});
         this.context=context;this.page=await context.newPage();this.browser=browser;

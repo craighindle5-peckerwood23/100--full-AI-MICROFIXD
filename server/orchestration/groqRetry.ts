@@ -77,7 +77,7 @@ export async function executeGroqWithRetry(
   const fallbackModels = options.fallbackModels ?? VERIFIED_GROQ_MODELS;
   
   let currentModel = requestParams.model || fallbackModels[0];
-  let currentMaxTokens = Math.max(1, Math.min(Number(requestParams.max_tokens) || 10000, 16384));
+  let currentMaxTokens = Math.max(1, Math.min(Number(requestParams.max_tokens) || 512, 16384));
   
   const startTime = Date.now();
   let lastError: any = null;
@@ -183,11 +183,17 @@ export async function executeGroqWithRetry(
       if (statusCode === 429 || errorMsg.includes("Limit") || errorMsg.includes("OTPM")) {
         const reportedLimit = outputLimit
           ? Number(errorMsg.match(/Limit\s+(\d+)/i)?.[1]) : NaN;
+        const reportedUsed = outputLimit
+          ? Number(errorMsg.match(/Used\s+(\d+)/i)?.[1]) : NaN;
+        const available = Number.isFinite(reportedLimit) && Number.isFinite(reportedUsed)
+          ? Math.max(0, reportedLimit - reportedUsed) : NaN;
         currentMaxTokens = Math.max(1, Math.min(
           Math.floor(currentMaxTokens * 0.65),
-          Number.isFinite(reportedLimit) ? Math.floor(reportedLimit * 0.9) : currentMaxTokens
+          Number.isFinite(reportedLimit) ? Math.floor(reportedLimit * 0.9) : currentMaxTokens,
+          Number.isFinite(available) && available > 0 ? Math.floor(available * 0.9) : currentMaxTokens
         ));
-        const retryAfterSec = Number(err?.headers?.get?.("retry-after") ?? err?.headers?.["retry-after"] ?? 1);
+        const waitHint = Number(errorMsg.match(/try again in\s+([\d.]+)s/i)?.[1]);
+        const retryAfterSec = Number(err?.headers?.get?.("retry-after") ?? err?.headers?.["retry-after"] ?? (Number.isFinite(waitHint) ? waitHint : 1));
         const waitMs = outputLimit && /request too large/i.test(errorMsg) ? 0 : Math.max((Number.isFinite(retryAfterSec)?retryAfterSec:1) * 1000, baseDelayMs * Math.pow(2, attempt - 1));
         if(waitMs>maxDelayMs) {
           const nextModel = fallbackModels.find(m => !attemptedModels.has(m));

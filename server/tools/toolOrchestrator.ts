@@ -13,6 +13,7 @@ import { runCode } from "../sandbox/codeRunner";
  *   5. Final answer returned to user
  */
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 import { TOOL_REGISTRY, getToolsForGroq, getTool } from "./toolRegistry";
 import { organRegistry } from "../organs/organRegistry";
 import { executePlaywrightOrgan } from "../organs/organs/playwrightOrgan";
@@ -44,6 +45,8 @@ const ORGAN_EXECUTORS: Record<string, (action: string, payload: unknown) => Prom
 };
 
 export interface OrchestrationResult {
+  tokens_used: number;
+  provider: 'groq' | 'openrouter';
   final_answer:  string;
   tools_called:  { name: string; result: unknown; latency_ms: number }[];
   total_latency: number;
@@ -57,7 +60,9 @@ export async function orchestrateWithTools(
   sessionId = "default",
 ): Promise<OrchestrationResult> {
   const groq = getGroqClient();
-  if (!groq) throw new Error("GROQ_API_KEY is not configured on the server");
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!groq && !openRouterKey) throw new Error("Tool calling requires GROQ_API_KEY or OPENROUTER_API_KEY on the server");
+  const openRouter = openRouterKey ? new OpenAI({apiKey:openRouterKey,baseURL:'https://openrouter.ai/api/v1',maxRetries:0}) : null;
   const recalled = await executeMemoryOrgan("context", { session_id: sessionId });
   const t0       = Date.now();
   const toolsCalled: OrchestrationResult["tools_called"] = [];
@@ -69,17 +74,27 @@ export async function orchestrateWithTools(
 
   let finalAnswer = "";
   let model       = "";
+  let tokensUsed  = 0;
+  let provider: 'groq' | 'openrouter' = groq ? 'groq' : 'openrouter';
 
   for (let iter = 0; iter < maxIterations; iter++) {
-    const completion = await groq.chat.completions.create({
-      model:       groqConfiguration().model,
-      messages,
-      tools:       getToolsForGroq() as Groq.Chat.ChatCompletionTool[],
-      tool_choice: "auto",
-      max_tokens:  Math.max(1, Math.min(Number(process.env.RESPONSE_MAX_TOKENS) || 10000, 16384)),
-    });
+    const params = {model: provider === 'groq' ? groqConfiguration().model : 'openrouter/free',
+      messages,tools:getToolsForGroq() as Groq.Chat.ChatCompletionTool[],tool_choice:'auto' as const,
+      max_tokens:Math.max(1,Math.min(Number(process.env.RESPONSE_MAX_TOKENS) || 512,16384))};
+    let completion: Groq.Chat.ChatCompletion;
+    if (provider === 'groq') {
+      try {completion = await groq!.chat.completions.create(params);}
+      catch (error) {
+        if (!openRouter || ![429,500,502,503,504].includes(Number((error as any)?.status))) throw error;
+        provider = 'openrouter';
+        completion = await openRouter.chat.completions.create({...params,model:'openrouter/free'} as any) as unknown as Groq.Chat.ChatCompletion;
+      }
+    } else {
+      completion = await openRouter!.chat.completions.create(params as any) as unknown as Groq.Chat.ChatCompletion;
+    }
 
     model = completion.model;
+    tokensUsed += completion.usage?.total_tokens || 0;
     const choice  = completion.choices[0];
     if (!choice || choice.finish_reason === "length") throw new Error("Tool output truncated or empty");
     const message = choice.message;
@@ -142,6 +157,8 @@ export async function orchestrateWithTools(
   if (!finalAnswer.trim()) throw new Error("Tool iteration limit reached without a final answer");
   await executeMemoryOrgan("store", { session_id: sessionId, organ: "tools", content: JSON.stringify({ task: userMessage, output: finalAnswer, tools: toolsCalled }) });
   return {
+    tokens_used: tokensUsed,
+    provider,
     final_answer:  finalAnswer,
     tools_called:  toolsCalled,
     total_latency: Date.now() - t0,

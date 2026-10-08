@@ -6,7 +6,7 @@ import { autonomousCore } from '../autonomy/autonomousCore';
 
 import { fetchGroqWithRetry } from './groqRetry';
 
-export type LLMProviderId = 'gemini' | 'groq' | 'deepseek' | 'synthetic_kernel';
+export type LLMProviderId = 'gemini' | 'groq' | 'openrouter' | 'cloudflare' | 'deepseek' | 'synthetic_kernel';
 
 export interface ProviderConfig {
   id: LLMProviderId;
@@ -64,7 +64,7 @@ class OmniLLMRouter {
       apiKey: '',
       enabled: true,
       status: 'STANDBY',
-      totalTokensProcessed: 14200
+      totalTokensProcessed: 0
     },
     gemini: {
       id: 'gemini',
@@ -73,8 +73,10 @@ class OmniLLMRouter {
       apiKey: '',
       enabled: true,
       status: 'STANDBY',
-      totalTokensProcessed: 28400
+      totalTokensProcessed: 0
     },
+    openrouter: {id:'openrouter',name:'OpenRouter Free',model:'openrouter/free',apiKey:'',enabled:true,status:'STANDBY',totalTokensProcessed:0},
+    cloudflare: {id:'cloudflare',name:'Cloudflare Workers AI',model:'@cf/meta/llama-3.1-8b-instruct-fp8',apiKey:'',enabled:true,status:'STANDBY',totalTokensProcessed:0},
     deepseek: {
       id: 'deepseek',
       name: 'DeepSeek AI',
@@ -82,7 +84,7 @@ class OmniLLMRouter {
       apiKey: '',
       enabled: true,
       status: 'STANDBY',
-      totalTokensProcessed: 9600
+      totalTokensProcessed: 0
     },
     synthetic_kernel: {
       id: 'synthetic_kernel',
@@ -90,12 +92,12 @@ class OmniLLMRouter {
       model: 'microfyxd-l6-autonomous',
       apiKey: 'built-in',
       enabled: true,
-      status: 'ONLINE',
-      totalTokensProcessed: 98000
+      status: 'STANDBY',
+      totalTokensProcessed: 0
     }
   };
 
-  private priorityOrder: LLMProviderId[] = ['groq', 'gemini', 'deepseek', 'synthetic_kernel'];
+  private priorityOrder: LLMProviderId[] = ['groq', 'gemini', 'openrouter', 'cloudflare'];
   private history: RouterHistoryItem[] = [];
 
   constructor() {
@@ -111,24 +113,13 @@ class OmniLLMRouter {
         Object.keys(parsed).forEach(k => {
           const key = k as LLMProviderId;
           if (this.providers[key]) {
-            this.providers[key] = { ...this.providers[key], ...parsed[key] };
+            // Legacy browser-stored keys cannot configure the server and must
+            // never be copied back into state or persisted again.
+            const {apiKey: _discard, status: _oldStatus, ...preferences} = parsed[key];
+            this.providers[key] = {...this.providers[key],...preferences,apiKey:''};
           }
         });
-      }
-
-      // Check for environment variables
-      const envGemini = (import.meta as any).env?.VITE_GEMINI_API_KEY || (import.meta as any).env?.GEMINI_API_KEY;
-      if (envGemini && !this.providers.gemini.apiKey) {
-        this.providers.gemini.apiKey = envGemini;
-      }
-      const envGroq = (import.meta as any).env?.VITE_GROQ_API_KEY;
-      if (envGroq) {
-        this.providers.groq.apiKey = envGroq;
-        this.providers.groq.status = 'ONLINE';
-      }
-      const envDeepSeek = (import.meta as any).env?.VITE_DEEPSEEK_API_KEY;
-      if (envDeepSeek && !this.providers.deepseek.apiKey) {
-        this.providers.deepseek.apiKey = envDeepSeek;
+        localStorage.removeItem('microfyxd_omni_providers');
       }
 
       const savedOrder = localStorage.getItem('microfyxd_omni_priority');
@@ -148,7 +139,6 @@ class OmniLLMRouter {
   public saveConfig() {
     if (typeof window === 'undefined') return;
     try {
-      localStorage.setItem('microfyxd_omni_providers', JSON.stringify(this.providers));
       localStorage.setItem('microfyxd_omni_priority', JSON.stringify(this.priorityOrder));
       localStorage.setItem('microfyxd_omni_history', JSON.stringify(this.history.slice(0, 50)));
     } catch (e) {
@@ -170,11 +160,9 @@ class OmniLLMRouter {
   }
 
   public setApiKey(provider: LLMProviderId, key: string) {
-    if (this.providers[provider]) {
-      this.providers[provider].apiKey = key.trim();
-      this.providers[provider].status = key.trim() ? 'ONLINE' : 'KEY_MISSING';
-      this.saveConfig();
-    }
+    // Provider credentials belong in the Render service environment. Browser
+    // storage cannot safely or effectively configure backend inference.
+    throw new Error(`Configure ${provider} in the server environment, not this browser`);
   }
 
   public setModel(provider: LLMProviderId, model: string) {
@@ -210,12 +198,12 @@ class OmniLLMRouter {
   ): Promise<RouterExecutionResult> {
     const result = await runSystemCommand(prompt, { response_instruction: systemInstruction });
     const execution: RouterExecutionResult = {
-      text: result.output, providerUsed: 'groq', modelUsed: result.diagnostics?.model || 'groq',
+      text: result.output, providerUsed: (result.diagnostics?.provider || 'groq') as LLMProviderId, modelUsed: result.diagnostics?.model || 'unknown',
       latencyMs: result.latency_ms, tokensEstimated: result.groq_tokens || 0,
       fallbackChain: (result.diagnostics?.warnings || []).map((error: string) => ({provider:'groq' as const,status:'failed' as const,error})),
       timestamp: result.ts,
     };
-    this.history.unshift({id:crypto.randomUUID(),prompt,response:result.output,provider:'groq',model:execution.modelUsed,latencyMs:execution.latencyMs,fallbackOccurred:execution.fallbackChain.length>0,timestamp:result.ts});
+    this.history.unshift({id:crypto.randomUUID(),prompt,response:result.output,provider:execution.providerUsed,model:execution.modelUsed,latencyMs:execution.latencyMs,fallbackOccurred:execution.providerUsed!=='groq',timestamp:result.ts});
     this.history=this.history.slice(0,50);this.saveConfig();
     return execution;
   }
@@ -311,7 +299,7 @@ class OmniLLMRouter {
       speech: String(result.output),
       responseId: result.response_id, sessionId: result.session_id,
       detailedAnswer: result.output + (warnings.length ? '\n\nProvider notice: ' + warnings.join('; ') : ''),
-      providerUsed: 'groq', latencyMs: result.latency_ms, organsUsed: result.organs_used,
+      providerUsed: (result.diagnostics?.provider || 'groq') as LLMProviderId, latencyMs: result.latency_ms, organsUsed: result.organs_used,
     };
   }
 }
