@@ -118,14 +118,17 @@ router.post("/dispatch", async (req: Request, res: Response): Promise<any> => {
  */
 router.post("/dispatch-all", async (req: Request, res: Response): Promise<any> => {
   try {
-    const { task = "Execute autonomous multi-agent pipeline building and system updates", bypass = false } = req.body || {};
+    if ((req as Request & {microfixdRole?:string}).microfixdRole !== 'admin') {
+      return sendJson(res,403,{status:'error',error:'Administrator access required for the full pipeline.'});
+    }
+    const { task = "Execute autonomous multi-agent pipeline building and system updates" } = req.body || {};
     const t0 = Date.now();
 
     // Check Dual-Key authorization
     const dualKey = governanceEngine.getDualKeyStatus();
     const isAuthorized = dualKey.isDualKeyAuthorized || governanceEngine.isBypassMode();
 
-    if (!isAuthorized && !bypass) {
+    if (!isAuthorized) {
       return sendJson(res, 403, {
         status: "error",
         error: "Pipeline Build & Self-Evolving System Updates require Dual-Key Authorization (Step 1 System Check + Step 2 Human Approval).",
@@ -216,6 +219,9 @@ router.post("/dual-key/system-check", async (_req: Request, res: Response): Prom
  */
 router.post("/dual-key/human-approve", (req: Request, res: Response): any => {
   try {
+    if ((req as Request & {microfixdRole?:string}).microfixdRole !== 'admin') {
+      return sendJson(res,403,{status:'error',error:'Administrator access required for human approval.'});
+    }
     const { approver = "Lead Operator", durationMs = 3600000 } = req.body || {};
     const status = governanceEngine.grantHumanApproval(approver, durationMs);
     return sendJson(res, 200, {

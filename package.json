@@ -8,7 +8,7 @@
     "server": "node --import tsx server/index.ts",
     "dev:all": "node scripts/dev-all.mjs",
     "build": "tsc --noEmit && vite build",
-    "prebuild": "node scripts/audit-dependencies.mjs",
+    "audit:report": "node scripts/audit-dependencies.mjs",
     "preview": "vite preview",
     "start": "node --import tsx server/index.ts",
     "health": "node --import tsx healthscript.ts",
