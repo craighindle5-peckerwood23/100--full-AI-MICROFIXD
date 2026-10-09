@@ -1,6 +1,6 @@
 /** Real Chromium actions only. No simulated successes or host-side evaluation. */
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
-class BrowserManager {
+export class BrowserManager {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private page: Page | null = null;
