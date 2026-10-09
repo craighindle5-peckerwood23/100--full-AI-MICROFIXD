@@ -67,11 +67,12 @@ export async function verifySupabaseSession(token: string): Promise<Authenticate
       // Valid Supabase account, but no profile row (trigger didn't run, or
       // the account predates the accounts_schema.sql migration). Default to
       // the lowest-privilege role rather than failing open.
-      return { userId: userData.user.id, email: userData.user.email ?? null, role: "observer", tenantId: "default" };
+      return null;
     }
 
     const role = VALID_ROLES.includes(profile.role as Role) ? (profile.role as Role) : "observer";
-    const tenantId = typeof profile.tenant_id === "string" && profile.tenant_id.trim() ? profile.tenant_id : "default";
+    if(typeof profile.tenant_id!=="string"||!profile.tenant_id.trim())return null;
+    const tenantId = profile.tenant_id;
     return { userId: userData.user.id, email: profile.email ?? userData.user.email ?? null, role, tenantId };
   } catch {
     return null;

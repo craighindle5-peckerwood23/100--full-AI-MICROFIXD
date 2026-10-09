@@ -25,6 +25,13 @@ export default function MissionControlRoom() {
   const [newTitle,setNewTitle]=useState('');
   const [newObjective,setNewObjective]=useState('');
   const [error,setError]=useState('');
+  const [allowedTools,setAllowedTools]=useState<string[]>([]);
+  const [browserOrigins,setBrowserOrigins]=useState('');
+  const [tokenBudget,setTokenBudget]=useState(32000);
+  const [reservedTokens,setReservedTokens]=useState(0);
+  const [approvals,setApprovals]=useState<any[]>([]);
+  const [toolRuns,setToolRuns]=useState<any[]>([]);
+  const [reconciliation,setReconciliation]=useState('');
   const [submitting,setSubmitting]=useState(false);
   const [submissionKey,setSubmissionKey]=useState<string|null>(null);
   const mapMission=(m:DurableMission):Mission=>({id:m.mission_id,codeName:m.mission_id,title:m.objective.slice(0,80),objective:m.objective,status:m.status==='succeeded'?'completed':m.status==='waiting'?'paused':m.status as Mission['status'],progress:m.status==='succeeded'?100:0,priority:'HIGH',assignedSquad:[],nodes:[],logs:[`Persisted state: ${m.status}`],createdAt:m.created_at});
@@ -34,25 +41,38 @@ export default function MissionControlRoom() {
       const result=await api<{missions:DurableMission[]}>('GET','/planner/missions');
       if(stopped)return;
       const mapped=result.missions.map(mapMission);
-      if(selectedMissionId){const detail=await api<{mission:DurableMission;tasks:Task[];artifacts:Artifact[]}>('GET',`/planner/missions/${selectedMissionId}`);
+      if(selectedMissionId){const detail=await api<{mission:DurableMission;tasks:Task[];artifacts:Artifact[];approvals:any[];tool_runs:any[];messages:any[];budget:{reserved_tokens:number}|null}>('GET',`/planner/missions/${selectedMissionId}`);
+       if(!stopped){setReservedTokens(detail.budget?.reserved_tokens??0);setApprovals(detail.approvals);setToolRuns(detail.tool_runs);}
        const current=mapped.find(m=>m.id===selectedMissionId);
        if(current){current.nodes=detail.tasks.map(t=>({id:t.task_id,label:String(t.input_context.objective??'Task'),type:'task',status:t.status==='succeeded'?'completed':t.status==='running'?'running':'pending',assignedAgent:t.agent_id??'Planner'}));
         current.progress=detail.tasks.length?Math.round(detail.tasks.filter(t=>t.status==='succeeded').length/detail.tasks.length*100):0;
-        current.logs=detail.artifacts.filter(a=>a.subtask_id).map(a=>JSON.stringify(a.content));}}
+        current.logs=[...detail.messages.map(m=>JSON.stringify(m.content)),...detail.artifacts.filter(a=>a.subtask_id).map(a=>JSON.stringify(a.content))];}}
       if(!stopped){setMissions(mapped);setError('');if(!selectedMissionId&&mapped.length)setSelectedMissionId(mapped[0].id);}
     }catch(e){if(!stopped)setError(e instanceof Error?e.message:'Mission service unavailable');}};
     void refresh();const timer=setInterval(()=>void refresh(),5000);return()=>{stopped=true;clearInterval(timer);};
   },[selectedMissionId]);
   const currentMission=missions.find(m=>m.id===selectedMissionId)??missions[0]??{id:'',codeName:'',title:'No submitted missions',objective:'Submit a mission to begin durable execution.',status:'queued',progress:0,priority:'HIGH',assignedSquad:[],nodes:[],logs:[],createdAt:''} as Mission;
-  const handleToggleState=()=>{};
-  const advanceStep=()=>{};
+  const decide=async(a:any,decision:string)=>{try{await api('POST',`/planner/missions/${selectedMissionId}/approvals/${a.subtask_id}/decide`,{request_hash:a.request_hash,decision});setApprovals(prev=>prev.filter(p=>p.request_hash!==a.request_hash));setError('');}catch(e){setError(String(e));}};
+  const reconcile=async(run:any)=>{try{const result=JSON.parse(reconciliation);await api('POST',`/planner/missions/${selectedMissionId}/reconcile/${run.subtask_id}`,{request_hash:run.request_hash,result});setReconciliation('');setError('');}catch(e){setError(String(e));}};
   const handleCreateMission=async(e:React.FormEvent)=>{e.preventDefault();if(submitting||!newObjective.trim())return;setSubmitting(true);
    const key=submissionKey??crypto.randomUUID();setSubmissionKey(key);
-   try{const m=await api<DurableMission>('POST','/planner/missions',{objective:newObjective},{'Idempotency-Key':key});setMissions(prev=>[mapMission(m),...prev.filter(v=>v.id!==m.mission_id)]);setSelectedMissionId(m.mission_id);setShowNewModal(false);setNewObjective('');setNewTitle('');setSubmissionKey(null);setError('');}catch(e){setError(e instanceof Error?e.message:'Submission failed');}finally{setSubmitting(false);}};
+   try{const m=await api<DurableMission>('POST','/planner/missions',{objective:newObjective,max_tokens:tokenBudget,tool_permissions:allowedTools,browser_origins:browserOrigins.split(',').map(v=>v.trim()).filter(Boolean)},{'Idempotency-Key':key});setMissions(prev=>[mapMission(m),...prev.filter(v=>v.id!==m.mission_id)]);setSelectedMissionId(m.mission_id);setShowNewModal(false);setNewObjective('');setNewTitle('');setSubmissionKey(null);setError('');}catch(e){setError(e instanceof Error?e.message:'Submission failed');}finally{setSubmitting(false);}};
 
   return (
     <div className="h-full flex flex-col gap-4 font-mono text-cyan-400">
       {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
+      {approvals.filter(a=>a.status==='pending').map(a=><div key={a.request_hash} className="border border-yellow-500/40 rounded p-3 text-xs">
+        <p>Human approval required for the exact action below. Expires: {a.expires_at}</p><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(a.request,null,2)}</pre>
+        {new Date(a.expires_at).getTime()<=Date.now()&&<button className="px-3 py-2" onClick={()=>void api('POST',`/planner/missions/${selectedMissionId}/approvals/${a.subtask_id}/renew`,{request_hash:a.request_hash}).catch(e=>setError(String(e)))}>Renew expired approval request</button>}
+        <button className="px-3 py-2" onClick={()=>void decide(a,'approved')}>Approve action</button><button className="px-3 py-2" onClick={()=>void decide(a,'rejected')}>Reject action</button>
+      </div>)}
+      {currentMission.status==='paused'&&toolRuns.filter(r=>r.status!=='succeeded').map(run=><div key={run.subtask_id} className="border border-red-500/40 rounded p-3 text-xs">
+        <p>Action outcome requires administrator reconciliation. Confirm the external result before resuming.</p><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify(run.request,null,2)}</pre>
+        <textarea aria-label="Verified tool result JSON" className="w-full bg-black border p-2" value={reconciliation} onChange={e=>setReconciliation(e.target.value)} placeholder={'{"raw":{},"normalized":{"result":{}},"evidence":{"confirmation":"What you verified"}}'} />
+        <button className="px-3 py-2" onClick={()=>void reconcile(run)}>Submit verified result and resume</button>
+      </div>)}
+      <p className="text-xs">Mission tokens charged or reserved: {reservedTokens}</p>
+      {currentMission.status==='paused'&&<div className="flex gap-2 text-xs"><input aria-label="Mission token budget" type="number" min={1} max={100000} value={tokenBudget} onChange={e=>setTokenBudget(Number(e.target.value))} className="bg-black border p-2"/><button onClick={()=>void api('POST',`/planner/missions/${selectedMissionId}/resume`,{max_tokens:tokenBudget}).then(()=>setError('')).catch(e=>setError(String(e)))}>Retry paused mission</button></div>}
       {/* Top Banner Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-3">
         <div className="flex items-center gap-3">
@@ -247,10 +267,10 @@ export default function MissionControlRoom() {
           <motion.div 
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="w-full max-w-md bg-black border border-cyan-500/40 rounded-2xl p-5 shadow-[0_0_50px_rgba(6,182,212,0.3)]"
+            className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-black border border-cyan-500/40 rounded-2xl p-5 shadow-[0_0_50px_rgba(6,182,212,0.3)]"
           >
             <h3 className="text-base font-bold text-white mb-1">PLAN NEW SYNTHETIC MISSION</h3>
-            <p className="text-xs text-cyan-400/60 mb-4">Carter Cognitive Engine will decompose objective into an autonomous DAG.</p>
+            <p className="text-xs text-cyan-400/60 mb-4">The server plans bounded steps and saves execution progress.</p>
             <form onSubmit={handleCreateMission} className="space-y-3">
               <div>
                 <label className="text-xs text-cyan-300 block mb-1">Mission Title</label>
@@ -273,6 +293,9 @@ export default function MissionControlRoom() {
                   className="w-full bg-cyan-950/20 border border-cyan-500/30 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 resize-none"
                 />
               </div>
+              <fieldset className="text-xs space-y-1"><legend>Allowed tools</legend>{['scan_for_security_issues','read_public_page','navigate_browser','scrape_url','take_screenshot','click_element'].map(name=><label key={name} className="block"><input type="checkbox" checked={allowedTools.includes(name)} onChange={e=>setAllowedTools(prev=>e.target.checked?[...prev,name]:prev.filter(v=>v!==name))}/> {name.replaceAll('_',' ')}</label>)}</fieldset>
+              <label className="block text-xs">Allowed browser origins, separated by commas<input aria-label="Allowed browser origins" value={browserOrigins} onChange={e=>setBrowserOrigins(e.target.value)} className="w-full bg-black border p-2"/></label>
+              <label className="block text-xs">Mission token budget<input aria-label="New mission token budget" type="number" min={1} max={100000} value={tokenBudget} onChange={e=>setTokenBudget(Number(e.target.value))} className="w-full bg-black border p-2"/></label>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"

@@ -1,5 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+export function canonicalJSON(value: unknown): string {
+ if(Array.isArray(value))return '['+value.map(canonicalJSON).join(',')+']';
+ if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(k=>JSON.stringify(k)+':'+canonicalJSON(value[k])).join(',')+'}';
+ const text=JSON.stringify(value);if(text===undefined)throw new Error('INVALID_JSON');return text;
+}
+export function contentHash(value: unknown): string {return createHash('sha256').update(canonicalJSON(value)).digest('hex');}
 export type UUID = string;
 export type JSONValue = null | boolean | number | string | JSONValue[] | { [key: string]: JSONValue };
 export type JSONObject = { [key: string]: JSONValue };
@@ -46,6 +52,7 @@ export interface SubtaskRepository {
   getSubtasks(taskId: UUID): Promise<Subtask[]>;
   updateSubtaskStatus(id: UUID, status: Subtask['status']): Promise<void>;
   incrementSubtaskAttempts(id: UUID): Promise<void>;
+  setSubtaskAttempts(id: UUID, attempts: number): Promise<void>;
   setSubtaskOutputs(id: UUID, raw: JSONValue, normalized: JSONValue): Promise<void>;
 }
 export interface ArtifactRepository {
@@ -74,7 +81,7 @@ export class SupervisorService {
   evaluateTaskOutputs(task: Task, artifacts: Artifact[]): SupervisorDecision {
     const eligible = artifacts.filter(a => a.tenant_id === task.tenant_id && a.task_id === task.task_id
       && a.mission_id === task.mission_id && Object.keys(a.evidence).length > 0
-      && this.validate(a.content, task.expected_output_schema));
+      && a.hash===contentHash(a.content) && this.validate(a.content, task.expected_output_schema));
     if (!eligible.length) return { approved: false, canonical_artifact_id: null, reason: 'No schema-valid output with evidence' };
     return { approved: true, canonical_artifact_id: this.selectCanonicalArtifact(eligible).artifact_id, reason: 'Validated output' };
   }
@@ -110,6 +117,9 @@ export interface PlannerDependencies {
   // Append error events durably; never include keys or credentials.
   recordError(context: ExecutionContext, error: unknown, attempt: number): Promise<void>;
   retryable(error: unknown): boolean;
+  onTaskDecision?(task: Task, decision: SupervisorDecision, artifacts: Artifact[]): Promise<void>;
+  recoverAgent?(subtask: Subtask, context: ExecutionContext): Promise<ExecutionResult | null>;
+  recoverTool?(subtask: Subtask, context: ExecutionContext): Promise<ExecutionResult | null>;
   budget: Budget;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -119,7 +129,7 @@ function makeArtifact(m: Mission, task: UUID | null, subtask: UUID | null, conte
   if (serialized === undefined) throw new Error('INVALID_ARTIFACT_CONTENT');
   return { artifact_id: artifactId(m.mission_id, subtask ?? 'final'), mission_id: m.mission_id,
     tenant_id: m.tenant_id, task_id: task, subtask_id: subtask, type: subtask ? 'json' : 'mission_result',
-    content, evidence, hash: createHash('sha256').update(serialized).digest('hex') };
+    content, evidence, hash: contentHash(content) };
 }
 export class PlannerService {
   private supervisor: SupervisorService;
@@ -143,14 +153,14 @@ export class PlannerService {
       if (!tasks.length) {
         let plan: PlannedTask[];
         try { plan = await this.d.plan(current); } catch (error) {
-          await r.updateMissionStatus(current.mission_id, 'failed');
+          await r.updateMissionStatus(current.mission_id, ['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) ? 'waiting' : 'failed');
           return r.getMission(current.mission_id);
         }
         const count = plan.reduce((n, t) => n + t.subtasks.length, 0);
         const allowed = current.constraints.tool_permissions;
         if (!plan.length || count > this.d.budget.max_subtasks || plan.some(t => !t.subtasks.length
           || !Object.keys(t.expected_output_schema).length || t.tool_permissions.some(p => !Array.isArray(allowed) || !allowed.includes(p))))
-          throw new Error('INVALID_OR_OVER_BUDGET_PLAN');
+          {await r.updateMissionStatus(current.mission_id,'failed');return r.getMission(current.mission_id);}
         await this.d.transaction(async tx => {
           for (const p of plan) {
             const task: Task = { ...p, task_id: randomUUID(), mission_id: current.mission_id,
@@ -169,15 +179,10 @@ export class PlannerService {
         if (task.status === 'blocked' || task.status === 'failed') {
           await r.updateMissionStatus(current.mission_id, 'waiting'); return r.getMission(current.mission_id);
         }
-        await r.updateTaskStatus(task.task_id, 'running');
-        await r.incrementTaskAttempts(task.task_id);
+        if(task.status!=='succeeded'){await r.updateTaskStatus(task.task_id, 'running');await r.incrementTaskAttempts(task.task_id);}
         const subtasks = await r.getSubtasks(task.task_id);
         for (const sub of subtasks) {
           if (sub.status === 'succeeded') continue;
-          if (sub.status === 'running' && sub.tool_request) {
-            await this.d.transaction(async tx => { await tx.updateSubtaskStatus(sub.subtask_id, 'waiting_input'); await tx.updateTaskStatus(task.task_id, 'blocked'); await tx.updateMissionStatus(current.mission_id, 'waiting'); });
-            return r.getMission(current.mission_id);
-          }
           if (sub.status === 'waiting_input' || sub.status === 'failed') {
             await r.updateTaskStatus(task.task_id, 'blocked'); await r.updateMissionStatus(current.mission_id, 'waiting');
             return r.getMission(current.mission_id);
@@ -186,6 +191,24 @@ export class PlannerService {
             subtask_id: sub.subtask_id, idempotency_key: `${current.tenant_id}:${sub.subtask_id}`,
             constraints: current.constraints, tool_permissions: task.tool_permissions };
           let completed = false;
+          const recover=sub.tool_request?this.d.recoverTool:this.d.recoverAgent;
+          if (recover) {
+            let recovered: ExecutionResult | null;
+            try { recovered = await recover(sub, context); } catch (error) {
+              if ((error as {code?:string})?.code !== 'RECONCILIATION_REQUIRED') throw error;
+              await this.d.transaction(async tx => {await tx.updateSubtaskStatus(sub.subtask_id,'waiting_input');await tx.updateTaskStatus(task.task_id,'blocked');await tx.updateMissionStatus(current.mission_id,'waiting');});
+              return r.getMission(current.mission_id);
+            }
+            if (recovered) {
+              if (!this.d.validate(recovered.normalized, task.expected_output_schema)||!recovered.evidence||!Object.keys(recovered.evidence).length) throw new Error('INVALID_RECOVERED_OUTPUT');
+              await this.d.transaction(async tx => {
+                await tx.setSubtaskOutputs(sub.subtask_id,recovered.raw,recovered.normalized);
+                await tx.createArtifact(makeArtifact(current,task.task_id,sub.subtask_id,recovered.normalized,recovered.evidence));
+                await tx.updateSubtaskStatus(sub.subtask_id,'succeeded');
+              });
+              continue;
+            }
+          }
           for (let attempt = sub.attempts + 1; attempt <= this.d.budget.max_attempts; attempt++) {
             await this.d.transaction(async tx => { await tx.incrementSubtaskAttempts(sub.subtask_id); await tx.updateSubtaskStatus(sub.subtask_id, 'running'); });
             let output: ExecutionResult;
@@ -198,6 +221,10 @@ export class PlannerService {
                 throw new Error('INVALID_OUTPUT_OR_MISSING_EVIDENCE');
             } catch (error) {
               await this.d.recordError(context, error, attempt);
+              if (['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) || (error as {code?:string})?.code === 'WAITING_APPROVAL' || (error as {code?:string})?.code === 'RECONCILIATION_REQUIRED') {
+                await this.d.transaction(async tx => {if((error as {code?:string})?.code!=='RECONCILIATION_REQUIRED')await tx.setSubtaskAttempts(sub.subtask_id,attempt-1);await tx.updateSubtaskStatus(sub.subtask_id,'waiting_input');await tx.updateTaskStatus(task.task_id,'blocked');await tx.updateMissionStatus(current.mission_id,'waiting');});
+                return r.getMission(current.mission_id);
+              }
               if (!this.d.retryable(error) || attempt === this.d.budget.max_attempts) break;
               await r.updateSubtaskStatus(sub.subtask_id, 'queued');
               await (this.d.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(Math.min(60000, this.d.budget.backoff_ms * 2 ** (attempt - 1)));
@@ -219,6 +246,7 @@ export class PlannerService {
         }
         const artifacts = (await r.getArtifacts(current.mission_id)).filter(a => a.task_id === task.task_id);
         const decision = this.supervisor.evaluateTaskOutputs(task, artifacts);
+        await this.d.onTaskDecision?.(task, decision, artifacts);
         if (!decision.approved) { await r.updateTaskStatus(task.task_id, 'blocked'); await r.updateMissionStatus(current.mission_id, 'waiting'); return r.getMission(current.mission_id); }
         canonical.push(artifacts.find(a => a.artifact_id === decision.canonical_artifact_id)!);
         await r.updateTaskStatus(task.task_id, 'succeeded');
@@ -263,6 +291,7 @@ export class DatabaseRepositories implements Repositories {
   createSubtask(s: Subtask) { return this.insert('subtasks', s.subtask_id, s); }
   getSubtasks(task_id: UUID) { return this.db.list<Subtask>('subtasks', { task_id }, this.tenantId); }
   updateSubtaskStatus(id: UUID, status: Subtask['status']) { return this.db.patch('subtasks', id, { status }, this.tenantId); }
+  setSubtaskAttempts(id: UUID, attempts: number) { return this.db.patch('subtasks',id,{attempts},this.tenantId); }
   incrementSubtaskAttempts(id: UUID) { return this.db.increment('subtasks', id, 'attempts', this.tenantId); }
   setSubtaskOutputs(id: UUID, raw_output: JSONValue, normalized_output: JSONValue) { return this.db.patch('subtasks', id, { raw_output, normalized_output }, this.tenantId); }
   createArtifact(a: Artifact) { return this.insert('artifacts', a.artifact_id, a); }

@@ -350,5 +350,14 @@
     "core.voiceEmotion": "microfixd/core/voice/voiceEmotionOrgan.ts",
     "core.voiceGrammar": "microfixd/core/voice/voiceCommandGrammarEngine.ts",
     "core.wiring": "microfixd/core/wiring/unifiedWiring.ts"
+  },
+  "executionSpine": {
+    "submission": "/api/planner/missions",
+    "worker": "server/planner/plannerRouter.ts",
+    "stateMachine": "server/planner/executionSpine.ts",
+    "storage": "server/planner/supabaseRuntime.ts",
+    "protectedTools": "server/planner/governedTools.ts",
+    "durableOnly": true,
+    "approvalRequiredFor": "all_tools_except_explicit_read_allowlist"
   }
 }

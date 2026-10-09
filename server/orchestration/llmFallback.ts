@@ -20,14 +20,17 @@ export async function completeTextWithFallback(
   messages: Groq.Chat.ChatCompletionMessageParam[],
   maxTokens: number,
   temperature = 0.3,
+  preferredProvider?: TextResult['provider'],
+  options?: {beforeAttempt?: (provider: TextResult['provider']) => Promise<void>},
 ): Promise<TextResult> {
-  const groq = getGroqClient();
+  const groq = !preferredProvider || preferredProvider === 'groq' ? getGroqClient() : null;
   let groqError: unknown;
   if (groq) {
+    await options?.beforeAttempt?.('groq');
     try {
       const result = await executeGroqWithRetry(groq, {
         model: groqConfiguration().model, messages, max_tokens: maxTokens, temperature,
-      }, {maxRetries: 3});
+      }, {maxRetries: options?.beforeAttempt ? 1 : 3});
       return {content: result.content, model: result.modelUsed, provider: 'groq',
         tokensUsed: result.completion.usage?.total_tokens || 0,
         truncated: result.completion.choices[0]?.finish_reason === 'length'};
@@ -40,18 +43,23 @@ export async function completeTextWithFallback(
   const failures: string[] = [];
   const prompt = messages.map(message => `${message.role.toUpperCase()}: ${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`).join('\n\n');
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
-  if (geminiKey) try {
+  if (geminiKey && (!preferredProvider || preferredProvider === 'gemini')) {
+    await options?.beforeAttempt?.('gemini');
+    try {
     const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
     const response = await new GoogleGenAI({apiKey: geminiKey}).models.generateContent({model,contents:prompt,
-      config:{maxOutputTokens:maxTokens,temperature}});
+      config:{maxOutputTokens:maxTokens,temperature,...(options?.beforeAttempt&&model==='gemini-2.5-flash'?{thinkingConfig:{thinkingBudget:0}}:{})}});
     const content = response.text || '';
     const truncated = response.candidates?.[0]?.finishReason === 'MAX_TOKENS';
     if (!content.trim() || truncated) throw new Error('Gemini returned an empty or truncated answer');
     return {content,model,provider:'gemini',tokensUsed:response.usageMetadata?.totalTokenCount || 0,truncated:false};
   } catch (error) { failures.push(`Gemini: ${String(error).slice(0,160)}`); }
+  }
 
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (openRouterKey) try {
+  if (openRouterKey && (!preferredProvider || preferredProvider === 'openrouter')) {
+    await options?.beforeAttempt?.('openrouter');
+    try {
     // openrouter/free only selects zero-priced models. A different model is
     // deliberately not configurable here, so this path cannot spend credits.
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions',{
@@ -66,10 +74,13 @@ export async function completeTextWithFallback(
     if (!content.trim() || choice.finish_reason === 'length') throw new Error('OpenRouter returned an empty or truncated answer');
     return {content,model:data.model || 'openrouter/free',provider:'openrouter',tokensUsed:data.usage?.total_tokens || 0,truncated:false};
   } catch (error) { failures.push(`OpenRouter: ${String(error).slice(0,160)}`); }
+  }
 
   const cfToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
   const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
-  if (cfToken && cfAccount) try {
+  if (cfToken && cfAccount && (!preferredProvider || preferredProvider === 'cloudflare')) {
+    await options?.beforeAttempt?.('cloudflare');
+    try {
     const model = '@cf/meta/llama-3.1-8b-instruct-fp8';
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cfAccount)}/ai/run/${model}`,{
       method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${cfToken}`},
@@ -82,7 +93,8 @@ export async function completeTextWithFallback(
     if (!data.success || !content.trim()) throw new Error('Cloudflare returned no answer');
     return {content,model,provider:'cloudflare',tokensUsed:0,truncated:false};
   } catch (error) { failures.push(`Cloudflare: ${String(error).slice(0,160)}`); }
+  }
 
-  if (failures.length) throw new Error(`All configured fallback providers failed: ${failures.join('; ')}`);
+  if (failures.length) throw Object.assign(new Error('ALL_PROVIDERS_UNAVAILABLE'),{code:'PROVIDERS_EXHAUSTED'});
   throw groqError || new Error('No server-side LLM provider configured');
 }

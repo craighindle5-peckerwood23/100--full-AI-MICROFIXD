@@ -44,3 +44,48 @@ test('tenant-scoped bus includes broadcasts and excludes other recipients',async
   assert.equal((await bus.getMessagesForAgent(agent,f.mission.mission_id)).length,2);
   await assert.rejects(new DatabaseRepositories(f.db,'b').getMission(f.mission.mission_id));
 });
+test('approval pauses and resumes the same subtask without duplicating tasks',async()=>{
+ const f=fixture();let approved=false;
+ const real=f.deps.executeTool;
+ f.deps.executeTool=async()=>{if(!approved)throw Object.assign(Error('approval'),{code:'WAITING_APPROVAL'});return real();};
+ const planner=new PlannerService(f.deps);
+ assert.equal((await planner.planAndExecuteMission(f.mission)).status,'waiting');
+ const task=(await f.repository.getTasks(f.mission.mission_id))[0];const sub=(await f.repository.getSubtasks(task.task_id))[0];
+ assert.equal(sub.status,'waiting_input');assert.equal(f.calls(),0);
+ approved=true;
+ await f.repository.updateSubtaskStatus(sub.subtask_id,'queued');await f.repository.updateTaskStatus(task.task_id,'queued');await f.repository.updateMissionStatus(f.mission.mission_id,'queued');
+ assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'succeeded');assert.equal(f.calls(),1);assert.equal((await f.repository.getTasks(f.mission.mission_id)).length,1);
+});
+test('restart recovery reuses a completed tool ledger result without repeating the action',async()=>{
+ const f=fixture();let commitFailed=true;
+ const transaction=f.deps.transaction;
+ f.deps.transaction=async work=>transaction(async r=>{const original=r.setSubtaskOutputs.bind(r);r.setSubtaskOutputs=async(...args)=>{if(commitFailed){commitFailed=false;throw Error('worker terminated before commit');}return original(...args);};try{return await work(r);}finally{r.setSubtaskOutputs=original;}});
+ let cached:any;
+ const execute=f.deps.executeTool;f.deps.executeTool=async()=>{cached=await execute();return cached;};
+ await assert.rejects(new PlannerService(f.deps).planAndExecuteMission(f.mission));
+ const recovered=new PlannerService({...f.deps,recoverTool:async()=>cached});
+ assert.equal((await recovered.planAndExecuteMission(f.mission)).status,'succeeded');assert.equal(f.calls(),1);
+});
+test('unknown external outcome pauses for reconciliation instead of replay',async()=>{
+ const f=fixture();f.deps.executeTool=async()=>{throw Object.assign(Error('unknown outcome'),{code:'RECONCILIATION_REQUIRED'});};
+ assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');
+ const task=(await f.repository.getTasks(f.mission.mission_id))[0];assert.equal((await f.repository.getSubtasks(task.task_id))[0].status,'waiting_input');
+});
+test('approval waits do not consume the execution retry budget',async()=>{
+ const f=fixture();f.deps.executeTool=async()=>{throw Object.assign(Error('approval'),{code:'WAITING_APPROVAL'});};
+ await new PlannerService(f.deps).planAndExecuteMission(f.mission);
+ const task=(await f.repository.getTasks(f.mission.mission_id))[0];assert.equal((await f.repository.getSubtasks(task.task_id))[0].attempts,0);
+});
+test('token exhaustion pauses without retrying the provider',async()=>{
+ const f=fixture();let calls=0;f.deps.executeTool=async()=>{calls++;throw Object.assign(Error('budget'),{code:'TOKEN_BUDGET_EXHAUSTED'});};
+ assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal(calls,1);
+});
+test('invalid normalized output never becomes an artifact or a success',async()=>{
+ const f=fixture();f.deps.validate=()=>false;
+ assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal((await f.repository.getArtifacts(f.mission.mission_id)).length,0);
+});
+test('agent output recovery does not invoke another model',async()=>{
+ const f=fixture();const planned=await f.deps.plan();planned[0].subtasks[0].tool_request=null as any;f.deps.plan=async()=>planned;
+ const p=new PlannerService({...f.deps,recoverAgent:async()=>({raw:{ok:true},normalized:{ok:true},evidence:{provider:'persisted'}})});
+ assert.equal((await p.planAndExecuteMission(f.mission)).status,'succeeded');assert.equal(f.calls(),0);
+});

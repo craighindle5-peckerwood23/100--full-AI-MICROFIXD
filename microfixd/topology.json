@@ -706,6 +706,16 @@
       "id": "core.wiring",
       "kind": "organ",
       "source": "microfixd/core/wiring/unifiedWiring.ts"
+    },
+    {
+      "id": "planner_service",
+      "kind": "runtime",
+      "source": "server/planner/supabaseRuntime.ts"
+    },
+    {
+      "id": "agent_bus",
+      "kind": "runtime",
+      "source": "server/planner/executionSpine.ts"
     }
   ]
 }
