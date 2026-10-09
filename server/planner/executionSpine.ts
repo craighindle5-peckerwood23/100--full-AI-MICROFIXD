@@ -6,6 +6,7 @@ export function canonicalJSON(value: unknown): string {
  const text=JSON.stringify(value);if(text===undefined)throw new Error('INVALID_JSON');return text;
 }
 export function contentHash(value: unknown): string {return createHash('sha256').update(canonicalJSON(value)).digest('hex');}
+export const EXECUTION_POLICY_VERSION = 'spine-2026-10-09.1';
 export type UUID = string;
 export type JSONValue = null | boolean | number | string | JSONValue[] | { [key: string]: JSONValue };
 export type JSONObject = { [key: string]: JSONValue };
@@ -129,7 +130,7 @@ function makeArtifact(m: Mission, task: UUID | null, subtask: UUID | null, conte
   if (serialized === undefined) throw new Error('INVALID_ARTIFACT_CONTENT');
   return { artifact_id: artifactId(m.mission_id, subtask ?? 'final'), mission_id: m.mission_id,
     tenant_id: m.tenant_id, task_id: task, subtask_id: subtask, type: subtask ? 'json' : 'mission_result',
-    content, evidence, hash: contentHash(content) };
+    content, evidence: {...evidence, policy_version: EXECUTION_POLICY_VERSION, constraints_hash: contentHash(m.constraints), objective_hash: contentHash(m.objective)}, hash: contentHash(content) };
 }
 export class PlannerService {
   private supervisor: SupervisorService;
@@ -245,7 +246,10 @@ export class PlannerService {
           }
         }
         const artifacts = (await r.getArtifacts(current.mission_id)).filter(a => a.task_id === task.task_id);
-        const decision = this.supervisor.evaluateTaskOutputs(task, artifacts);
+        const verified = artifacts.filter(a => this.supervisor.evaluateTaskOutputs(task, [a]).approved);
+        const complete = subtasks.length > 0 && subtasks.every(sub => verified.some(a => a.subtask_id === sub.subtask_id));
+        const decision: SupervisorDecision = complete ? this.supervisor.evaluateTaskOutputs(task, verified)
+          : {approved:false, canonical_artifact_id:null, reason:'Missing or invalid evidence for a required subtask'};
         await this.d.onTaskDecision?.(task, decision, artifacts);
         if (!decision.approved) { await r.updateTaskStatus(task.task_id, 'blocked'); await r.updateMissionStatus(current.mission_id, 'waiting'); return r.getMission(current.mission_id); }
         canonical.push(artifacts.find(a => a.artifact_id === decision.canonical_artifact_id)!);
@@ -254,7 +258,7 @@ export class PlannerService {
       // Deterministic assembly avoids an additional model call and retains every verified output.
       const artifacts = await r.getArtifacts(current.mission_id);
       const final = makeArtifact(current, null, null, { outputs: artifacts.filter(a => a.subtask_id !== null).map(a => ({ artifact_id: a.artifact_id, content: a.content })),
-        canonical_artifacts: canonical.map(a => a.artifact_id) }, { artifact_ids: artifacts.filter(a => a.subtask_id !== null).map(a => a.artifact_id) });
+        canonical_artifacts: canonical.map(a => a.artifact_id) }, { artifact_ids: artifacts.filter(a => a.subtask_id !== null).map(a => a.artifact_id), provenance: artifacts.filter(a => a.subtask_id !== null).map(a => ({artifact_id:a.artifact_id, task_id:a.task_id, subtask_id:a.subtask_id, content_hash:a.hash, evidence_hash:contentHash(a.evidence)})) });
       await this.d.transaction(async tx => { await tx.createArtifact(final); await tx.attachResultArtifact(current.mission_id, final.artifact_id);
         await tx.updateMissionStatus(current.mission_id, 'succeeded'); });
       return r.getMission(current.mission_id);

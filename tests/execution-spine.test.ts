@@ -89,3 +89,27 @@ test('agent output recovery does not invoke another model',async()=>{
  const p=new PlannerService({...f.deps,recoverAgent:async()=>({raw:{ok:true},normalized:{ok:true},evidence:{provider:'persisted'}})});
  assert.equal((await p.planAndExecuteMission(f.mission)).status,'succeeded');assert.equal(f.calls(),0);
 });
+
+ test('final result records policy fingerprints and source evidence hashes',async()=>{
+ const f=fixture();await new PlannerService(f.deps).planAndExecuteMission(f.mission);
+ const artifacts=await f.repository.getArtifacts(f.mission.mission_id);
+ const final=artifacts.find(a=>a.type==='mission_result')!;
+ assert.equal(final.evidence.policy_version,'spine-2026-10-09.1');
+ assert.match(String(final.evidence.constraints_hash),/^[a-f0-9]{64}$/);
+ const provenance=final.evidence.provenance as any[];
+ assert.equal(provenance.length,1);assert.equal(provenance[0].artifact_id,artifacts.find(a=>a.subtask_id)!.artifact_id);
+ assert.match(provenance[0].evidence_hash,/^[a-f0-9]{64}$/);
+ });
+ test('restart cannot finalize a succeeded subtask whose artifact was lost',async()=>{
+ const f=fixture();const plan=await f.deps.plan();plan[0].subtasks.push({...plan[0].subtasks[0]});f.deps.plan=async()=>plan;
+ const original=f.deps.executeTool;let calls=0;
+ f.deps.executeTool=async()=>{if(++calls>=2)throw Error('crash');return original();};
+ await new PlannerService(f.deps).planAndExecuteMission(f.mission);
+ const task=(await f.repository.getTasks(f.mission.mission_id))[0];
+ const subs=await f.repository.getSubtasks(task.task_id);
+ // Simulate durable state corruption: a success checkpoint without its evidence.
+ for(const sub of subs)await f.repository.updateSubtaskStatus(sub.subtask_id,'succeeded');
+ await f.repository.updateTaskStatus(task.task_id,'queued');await f.repository.updateMissionStatus(f.mission.mission_id,'queued');
+ assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');
+ assert.equal((await f.repository.getMission(f.mission.mission_id)).result_artifact_id,null);
+ });
