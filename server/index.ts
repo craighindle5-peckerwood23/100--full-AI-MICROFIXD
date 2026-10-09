@@ -1,3 +1,4 @@
+import { plannerRouter, startPlannerWorker } from './planner/plannerRouter';
 import {getGroqClient,groqConfiguration} from './orchestration/groqRuntime';
 import {executeGroqWithRetry} from './orchestration/groqRetry';
 /**
@@ -174,6 +175,7 @@ app.post("/api/classification/resolve", (req, res) => {
 });
 
 // ── REST routes ────────────────────────────────────────────────────────────
+app.use("/api/planner", plannerRouter);
 app.use("/api/agents",     dispatchRouter);
 app.use("/api/playwright", playwrightRouter);
 app.use("/api/sandbox",    sandboxRouter);
@@ -281,6 +283,8 @@ if (
   process.argv[1] &&
   (process.argv[1].endsWith("server/index.ts") || process.argv[1].endsWith("server.ts"))
 ) {
+  const stopPlanner = startPlannerWorker();
+  server.once("close", stopPlanner);
   server.listen(PORT, HOST, () => {
     console.log(`\n🧠 Microfixd Backend Server`);
     console.log(`   REST: http://${HOST}:${PORT}/api`);

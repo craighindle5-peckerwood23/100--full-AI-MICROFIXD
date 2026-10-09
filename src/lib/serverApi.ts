@@ -14,6 +14,7 @@ export async function api<T = unknown>(
   method:  "GET" | "POST" | "DELETE" | "PUT",
   path:    string,
   body?:   unknown,
+  extraHeaders: Record<string,string> = {},
 ): Promise<T> {
   // The operator supplies the server-side token in Settings. Keep it in
   // sessionStorage so it is not committed, persisted across browser sessions,
@@ -28,6 +29,7 @@ export async function api<T = unknown>(
     method,
     headers: {
       "Content-Type": "application/json",
+      ...extraHeaders,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body:    body ? JSON.stringify(body) : undefined,
