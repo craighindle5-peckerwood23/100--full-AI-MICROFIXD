@@ -39,6 +39,6 @@ Execution API writes require `execute`; observer monitoring does not grant missi
 An optional ISO timestamp `deadline_at` prevents planning or new subtask attempts after expiration.
 This is a boundary deadline, not forced termination of an in-flight external action. Existing adapter timeouts remain in force.
 Expired missions wait for operator intervention; automatic resume does not extend their deadline.
-`GET /api/execution/missions/:id/audit` checks tenant/parent links, content hashes, required subtask artifacts, success completeness, policy fingerprints, and final evidence hashes.
+`GET /api/planner/missions/:id/audit` checks tenant/parent links, content hashes, required subtask artifacts, success completeness, policy fingerprints, and final evidence hashes.
 Historical artifacts without provenance are reported as unverifiable rather than silently upgraded.
 Hashes detect inconsistency; they are not signatures or proof against a privileged database attacker.

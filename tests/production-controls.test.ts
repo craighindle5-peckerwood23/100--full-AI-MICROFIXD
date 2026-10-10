@@ -13,7 +13,7 @@ function fixture(){
  return {tasks:[task],subs:[sub],artifacts:[source,final]};
 }
 test('execution writes require execute permission while reads allow monitoring',()=>{
- for(const method of ['POST','PUT','PATCH','DELETE'])assert.equal(routePermission('/api/execution/missions',method,'monitor'),'execute');
+ for(const base of ['/api/execution','/api/planner'])for(const method of ['POST','PUT','PATCH','DELETE'])assert.equal(routePermission(base+'/missions',method,'monitor'),'execute');
  assert.equal(routePermission('/api/execution/missions','GET','monitor'),'monitor');assert.equal(routePermission('/api/hitl/decide','POST','monitor'),'approve');
 });
 test('complete mission audit verifies evidence lineage',()=>{const f=fixture();assert.equal(auditMission(mission,f.tasks,f.subs,f.artifacts).verified,true);});
