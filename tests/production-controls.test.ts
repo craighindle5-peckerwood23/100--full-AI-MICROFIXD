@@ -9,7 +9,7 @@ function fixture(){
  const sub:Subtask={subtask_id:'sub',task_id:'task',tenant_id:'t',agent_id:null,tool_request:null,input:{},status:'succeeded',attempts:1,raw_output:{ok:true},normalized_output:{ok:true}};
  const evidence={policy_version:'v1',constraints_hash:contentHash(mission.constraints),objective_hash:contentHash(mission.objective)};
  const source:Artifact={artifact_id:'source',mission_id:'m',tenant_id:'t',task_id:'task',subtask_id:'sub',type:'json',content:{ok:true},evidence,hash:contentHash({ok:true})};
- const final:Artifact={artifact_id:'final',mission_id:'m',tenant_id:'t',task_id:null,subtask_id:null,type:'mission_result',content:{outputs:[]},evidence:{...evidence,provenance:[{artifact_id:'source',task_id:'task',subtask_id:'sub',content_hash:source.hash,evidence_hash:contentHash(evidence)}]},hash:contentHash({outputs:[]})};
+ const final:Artifact={artifact_id:'final',mission_id:'m',tenant_id:'t',task_id:null,subtask_id:null,type:'mission_result',content:{outputs:[{artifact_id:'source',content:{ok:true}}],canonical_artifacts:['source']},evidence:{...evidence,provenance:[{artifact_id:'source',task_id:'task',subtask_id:'sub',content_hash:source.hash,evidence_hash:contentHash(evidence)}]},hash:contentHash({outputs:[{artifact_id:'source',content:{ok:true}}],canonical_artifacts:['source']})};
  return {tasks:[task],subs:[sub],artifacts:[source,final]};
 }
 test('execution writes require execute permission while reads allow monitoring',()=>{
@@ -31,4 +31,10 @@ test('deadline handles expiry and fails closed for invalid persisted values',()=
  assert.equal(deadlineExceeded(mission),false);assert.equal(deadlineExceeded({...mission,constraints:{deadline_at:'invalid'}}),true);
  assert.equal(deadlineExceeded({...mission,constraints:{deadline_at:'2026-01-01T00:00:00Z'}},Date.parse('2026-01-01T00:00:00Z')),true);
  assert.equal(deadlineExceeded({...mission,constraints:{deadline_at:'2026-01-01T00:00:00Z'}},Date.parse('2025-01-01T00:00:00Z')),false);
+});
+
+test('audit rejects a final answer disconnected from verified source outputs',()=>{
+ const f=fixture();f.artifacts[1].content={outputs:[],canonical_artifacts:[]};f.artifacts[1].hash=contentHash(f.artifacts[1].content);
+ const issues=auditMission(mission,f.tasks,f.subs,f.artifacts).issues;
+ assert.ok(issues.some(i=>i.code==='FINAL_OUTPUT_LINK_MISMATCH'));assert.ok(issues.some(i=>i.code==='CANONICAL_TASK_LINK_MISMATCH'));
 });
