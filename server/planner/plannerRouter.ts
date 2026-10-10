@@ -4,6 +4,7 @@ import { validatePlan, validateSchema, createPlannerRuntime, plannerClient } fro
 import { ENABLED_TOOLS } from './governedTools';
 import {canonicalJSON} from './executionSpine';
 import type { Mission } from './executionSpine';
+import {auditMission} from './missionAudit';
 export const plannerRouter=Router();
 const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex').slice(0,32);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 plannerRouter.post('/missions',async(req,res)=>{
@@ -11,7 +12,8 @@ plannerRouter.post('/missions',async(req,res)=>{
   const tenant=(req as any).microfixdTenantId;
   const key=req.header('Idempotency-Key');
   if(!tenant||!key||key.length>200||typeof req.body.objective!=='string'||!req.body.objective.trim()||req.body.objective.length>16000)return res.status(400).json({code:'INVALID_MISSION'});
-  const mission:Mission={mission_id:uuid(`${tenant}:${key}`),tenant_id:tenant,created_by:(req as any).microfixdUserId??'operator',created_at:new Date().toISOString(),objective:req.body.objective.trim(),constraints:{max_tokens:Number.isInteger(req.body.max_tokens)?Math.max(1,Math.min(100000,req.body.max_tokens)):32000,browser_origins:Array.isArray(req.body.browser_origins)?req.body.browser_origins.filter((v:unknown)=>{try{return typeof v==='string'&&new URL(v).origin===v&&v.startsWith('https://');}catch{return false;}}):[],tool_permissions:Array.isArray(req.body.tool_permissions)?req.body.tool_permissions.filter((t:unknown)=>typeof t==='string'&&ENABLED_TOOLS.includes(t)):[],...(req.body.plan?{plan:req.body.plan}:{})},status:'queued',result_artifact_id:null};
+  if(req.body.deadline_at!==undefined&&(typeof req.body.deadline_at!=='string'||!Number.isFinite(Date.parse(req.body.deadline_at))||Date.parse(req.body.deadline_at)<=Date.now()))return res.status(400).json({code:'INVALID_DEADLINE'});
+  const mission:Mission={mission_id:uuid(`${tenant}:${key}`),tenant_id:tenant,created_by:(req as any).microfixdUserId??'operator',created_at:new Date().toISOString(),objective:req.body.objective.trim(),constraints:{...(req.body.deadline_at?{deadline_at:req.body.deadline_at}:{}),max_tokens:Number.isInteger(req.body.max_tokens)?Math.max(1,Math.min(100000,req.body.max_tokens)):32000,browser_origins:Array.isArray(req.body.browser_origins)?req.body.browser_origins.filter((v:unknown)=>{try{return typeof v==='string'&&new URL(v).origin===v&&v.startsWith('https://');}catch{return false;}}):[],tool_permissions:Array.isArray(req.body.tool_permissions)?req.body.tool_permissions.filter((t:unknown)=>typeof t==='string'&&ENABLED_TOOLS.includes(t)):[],...(req.body.plan?{plan:req.body.plan}:{})},status:'queued',result_artifact_id:null};
   if(req.body.plan)validatePlan(req.body.plan,mission);
   const client=plannerClient(),owner=randomUUID();
   const {data:claimed,error}=await client.rpc('spine_lease',{p_tenant:tenant,p_mission:mission.mission_id,p_owner:owner,p_release:false});
@@ -25,6 +27,15 @@ plannerRouter.post('/missions',async(req,res)=>{
 });
 plannerRouter.get('/missions',async(req,res)=>{
  try{const {data,error}=await plannerClient().from('spine_rows').select('data').eq('tenant_id',(req as any).microfixdTenantId).eq('kind','missions').order('sequence',{ascending:false}).limit(50);if(error)throw error;res.json({missions:data.map(r=>r.data)});}catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
+});
+plannerRouter.get('/missions/:id/audit',async(req,res)=>{
+ try{const tenant=(req as any).microfixdTenantId;if(!tenant)return res.status(403).json({code:'AUTH_REQUIRED'});
+ const {repository}=createPlannerRuntime(plannerClient(),tenant,req.params.id);
+ const mission=await repository.getMission(req.params.id),tasks=await repository.getTasks(req.params.id);
+ const subtasks=(await Promise.all(tasks.map(t=>repository.getSubtasks(t.task_id)))).flat();
+ const artifacts=await repository.getArtifacts(req.params.id);
+ res.json(auditMission(mission,tasks,subtasks,artifacts));
+ }catch{res.status(503).json({code:'AUDIT_UNAVAILABLE'});}
 });
 plannerRouter.get('/missions/:id',async(req,res)=>{
  try{const tenant=(req as any).microfixdTenantId,client=plannerClient();const {repository}=createPlannerRuntime(client,tenant,req.params.id);

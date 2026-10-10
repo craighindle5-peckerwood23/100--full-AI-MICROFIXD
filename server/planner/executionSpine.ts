@@ -124,6 +124,7 @@ export interface PlannerDependencies {
   budget: Budget;
   sleep?: (ms: number) => Promise<void>;
 }
+export function deadlineExceeded(mission:Mission,now=Date.now()):boolean {const deadline=mission.constraints.deadline_at;return deadline!==undefined&&(typeof deadline!=='string'||!Number.isFinite(Date.parse(deadline))||now>=Date.parse(deadline));}
 const artifactId = (mission: UUID, unit: UUID) => createHash('sha256').update(`${mission}:${unit}`).digest('hex').slice(0, 32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
 function makeArtifact(m: Mission, task: UUID | null, subtask: UUID | null, content: JSONValue, evidence: JSONObject): Artifact {
   const serialized = JSON.stringify(content);
@@ -150,6 +151,7 @@ export class PlannerService {
       if (current.tenant_id !== mission.tenant_id) throw new Error('TENANT_MISMATCH');
       if (['succeeded', 'failed', 'waiting'].includes(current.status)) return current;
       if (!current.objective) throw new Error('EMPTY_OBJECTIVE');
+      if(deadlineExceeded(current)){await r.updateMissionStatus(current.mission_id,'waiting');return r.getMission(current.mission_id);}
       let tasks = await r.getTasks(current.mission_id);
       if (!tasks.length) {
         let plan: PlannedTask[];
@@ -211,6 +213,7 @@ export class PlannerService {
             }
           }
           for (let attempt = sub.attempts + 1; attempt <= this.d.budget.max_attempts; attempt++) {
+            if(deadlineExceeded(current)){await this.d.recordError(context,Object.assign(new Error('MISSION_DEADLINE_EXCEEDED'),{code:'MISSION_DEADLINE_EXCEEDED'}),sub.attempts);await this.d.transaction(async tx=>{await tx.updateTaskStatus(task.task_id,'blocked');await tx.updateMissionStatus(current.mission_id,'waiting');});return r.getMission(current.mission_id);}
             await this.d.transaction(async tx => { await tx.incrementSubtaskAttempts(sub.subtask_id); await tx.updateSubtaskStatus(sub.subtask_id, 'running'); });
             let output: ExecutionResult;
             try {

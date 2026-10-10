@@ -113,3 +113,9 @@ test('agent output recovery does not invoke another model',async()=>{
  assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');
  assert.equal((await f.repository.getMission(f.mission.mission_id)).result_artifact_id,null);
  });
+
+test('expired mission performs no planning or external effects',async()=>{
+ const f=fixture();f.mission.constraints.deadline_at='2000-01-01T00:00:00Z';
+ f.deps.plan=async()=>{throw Error('must not plan');};
+ assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),0);
+});

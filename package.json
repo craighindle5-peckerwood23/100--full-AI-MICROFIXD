@@ -16,11 +16,11 @@
     "validate:classification": "node --import tsx scripts/validate-classification.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts tests/voice-delivery.test.ts tests/groq-recovery.test.ts tests/public-page-reader.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts",
+    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts tests/voice-delivery.test.ts tests/groq-recovery.test.ts tests/public-page-reader.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts",
     "test:services": "node scripts/test-services.mjs",
     "test:website": "npm run build && node --import tsx --test tests/public-website.test.ts",
     "test:settings": "npm run build && node tests/settings-ui.mjs",
-    "test:spine": "node --import tsx --test tests/execution-spine.test.ts tests/planner-runtime.test.ts"
+    "test:spine": "node --import tsx --test tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

@@ -7,6 +7,7 @@
  * Token: Bearer in Authorization header; caller-supplied role headers are ignored
  */
 import { Request, Response, NextFunction } from "express";
+import { routePermission } from "./routePermission";
 import { broadcast } from "../events";
 import { verifySupabaseSession } from "./supabaseAuth";
 import { persistAuditEntry } from "./auditPersistence";
@@ -95,8 +96,7 @@ export function rbacMiddleware(req: Request, res: Response, next: NextFunction):
 function enforceRole(req: Request, res: Response, next: NextFunction, resolved: ResolvedRole): void {
   const role       = resolved.role;
   const routeBase  = Object.keys(ROUTE_PERMISSIONS).find(r => req.path.startsWith(r)) ?? req.path;
-  const required = req.path.startsWith("/api/hitl/decide") && req.method !== "GET"
-    ? "approve" : ROUTE_PERMISSIONS[routeBase] ?? (req.method === "GET" ? "read" : "execute");
+  const required = routePermission(req.path, req.method, ROUTE_PERMISSIONS[routeBase] ?? (req.method === "GET" ? "read" : "execute"));
   const perms      = ROLE_PERMISSIONS[role];
   const allowed = role !== "anonymous" && (perms.has("*") || perms.has(required));
 
