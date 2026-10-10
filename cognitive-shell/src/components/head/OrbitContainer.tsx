@@ -1,0 +1,1 @@
+import React from'react';import{useOrbitPhysics}from'../../hooks/useOrbitPhysics';export function OrbitContainer({children}:{children:React.ReactNode}){const ref=useOrbitPhysics();return <div className="mx-orbit"><div className="mx-orbit-ring"/><div ref={ref} className="mx-orbit-body">{children}</div></div>}
