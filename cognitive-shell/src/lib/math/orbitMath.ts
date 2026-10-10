@@ -1,0 +1,1 @@
+export const orbitPoint=(t:number,rx:number,ry:number)=>({x:Math.cos(t)*rx,y:Math.sin(t)*ry});
