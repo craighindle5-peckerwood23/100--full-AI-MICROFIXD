@@ -1,0 +1,1 @@
+import type{TelemetryEvent}from '../../integration/ShellAPI';export function telemetryToIndicators(e:TelemetryEvent){return{status:e.state??e.type??'ONLINE',agents:Math.max(0,e.agents??0),signal:Math.max(0,Math.min(100,e.signal??100)),severity:e.severity??'info'}}
