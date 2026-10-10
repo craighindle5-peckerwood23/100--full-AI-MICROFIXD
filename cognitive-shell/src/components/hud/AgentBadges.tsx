@@ -1,0 +1,1 @@
+import React from'react';export const AgentBadges=({count}:{count:number})=><div className="mx-badge">ACTIVE AGENTS <b>{count}</b></div>;
