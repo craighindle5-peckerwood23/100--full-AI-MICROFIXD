@@ -1,0 +1,1 @@
+import type{TelemetryEvent}from '../../integration/ShellAPI';export function telemetryToPose(e:TelemetryEvent){return{yaw:0,pitch:/error/i.test(e.type)?-4:0,attention:/idle/i.test(e.state??'')?.45:1,mouth:/speak|voice/i.test(e.type)?'speaking' as const:'idle' as const}}
