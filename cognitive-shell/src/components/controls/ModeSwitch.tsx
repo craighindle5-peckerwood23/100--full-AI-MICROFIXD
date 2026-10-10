@@ -1,0 +1,1 @@
+import React from'react';export const ModeSwitch=({mode,onChange}:{mode:string;onChange:(m:string)=>void})=><select value={mode} onChange={e=>onChange(e.target.value)}><option value="mission">MISSION</option><option value="ai">AI</option><option value="agents">AGENTS</option><option value="lab">LAB</option><option value="system">SYSTEM</option></select>;
