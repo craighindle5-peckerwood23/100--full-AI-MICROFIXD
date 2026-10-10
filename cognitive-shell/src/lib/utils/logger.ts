@@ -1,0 +1,1 @@
+export const shellLogger={info:(...a:unknown[])=>console.info('[cognitive-shell]',...a),warn:(...a:unknown[])=>console.warn('[cognitive-shell]',...a),error:(...a:unknown[])=>console.error('[cognitive-shell]',...a)};
