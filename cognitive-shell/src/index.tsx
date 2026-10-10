@@ -1,0 +1,1 @@
+export{initShell,attachChannels}from'./integration/ShellMount';export type{ShellConfig,ShellHandle,ShellChannels,ShellCommand,TelemetryEvent,TelemetryStream,ShellViewModel}from'./integration/ShellAPI';
