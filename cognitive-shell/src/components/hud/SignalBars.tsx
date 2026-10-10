@@ -1,0 +1,1 @@
+import React from'react';export const SignalBars=({value}:{value:number})=><div className="mx-signal" aria-label={`signal ${value}%`}><span style={{width:`${value}%`}}/></div>;
