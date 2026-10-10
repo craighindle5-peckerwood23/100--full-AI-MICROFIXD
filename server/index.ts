@@ -1,3 +1,4 @@
+import {runStartupProbe} from './organs/startupProbe';
 import { plannerRouter, startPlannerWorker } from './planner/plannerRouter';
 import {getGroqClient,groqConfiguration} from './orchestration/groqRuntime';
 import {executeGroqWithRetry} from './orchestration/groqRetry';
@@ -286,6 +287,7 @@ if (
   const stopPlanner = startPlannerWorker();
   server.once("close", stopPlanner);
   server.listen(PORT, HOST, () => {
+    if(process.env.MICROFIXD_STARTUP_PROBES==='1')void runStartupProbe().catch(()=>console.error('[system-probe] failed'));
     console.log(`\n🧠 Microfixd Backend Server`);
     console.log(`   REST: http://${HOST}:${PORT}/api`);
     console.log(`   WS:   ws://${HOST}:${PORT}/ws`);

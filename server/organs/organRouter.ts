@@ -8,7 +8,9 @@
 import { Router }        from "express";
 import { organRegistry } from "./organRegistry";
 import { getSystemSnapshot } from "./organMetrics";
-import { EXECUTORS, getExecutor } from "./executors";
+import {randomUUID} from "node:crypto";
+import {dispatchOrgan} from "./dispatch";
+import {probeCanary} from "./probes";
 
 export const organRouter = Router();
 
@@ -29,85 +31,24 @@ organRouter.get("/all", (req, res) => {
   });
 });
 
-// ── POST /api/organs/load-all — load, handshake, and register all 235+ organs ──
-organRouter.post("/load-all", async (req, res) => {
-  const t0 = Date.now();
-  const all = organRegistry.all();
-  const loaded: { id: string; name: string; layer: string; status: string; latency_ms: number }[] = [];
-
-  const results = await Promise.allSettled(
-    all.map(async (organ) => {
-      const start = performance.now();
-      try {
-        const executor = getExecutor(organ.id);
-        await executor("health", { handshake: true, ts: Date.now() });
-        const latency = Math.round(performance.now() - start);
-        organRegistry.setStatus(organ.id, "active");
-        organRegistry.recordExec(organ.id, true, latency, "load_handshake");
-        return { id: organ.id, name: organ.name, layer: organ.layer, status: "active", latency_ms: latency };
-      } catch (err: any) {
-        const latency = Math.round(performance.now() - start);
-        organRegistry.setStatus(organ.id, "error", String(err));
-        organRegistry.recordExec(organ.id, false, latency, "load_handshake_failed", String(err));
-        return { id: organ.id, name: organ.name, layer: organ.layer, status: "error", latency_ms: latency };
-      }
-    })
-  );
-
-  for (const r of results) {
-    if (r.status === "fulfilled") loaded.push(r.value);
-  }
-
-  const byLayer: Record<string, number> = {};
-  for (const o of loaded) {
-    byLayer[o.layer] = (byLayer[o.layer] || 0) + 1;
-  }
-
-  res.json({
-    success: true,
-    totalLoaded: loaded.length,
-    durationMs: Date.now() - t0,
-    byLayer,
-    systemHealth: organRegistry.systemHealth(),
-    organs: loaded,
-  });
+// Read-only probes exercise routing without executing arbitrary organ actions.
+organRouter.get('/probe-canary',(_req,res)=>res.json(probeCanary.snapshot()));
+organRouter.post('/load-all',async(req,res)=>{
+ const started=performance.now();
+ const request_id=typeof req.body?.request_id==='string'?req.body.request_id:randomUUID();
+ const results=await Promise.all(organRegistry.all().map(async organ=>{try{return {id:organ.id,success:true,result:await dispatchOrgan(organ.id,'probe',{request_id},(req as any).microfixdTenantId)};}catch{return {id:organ.id,success:false,error:'PROBE_FAILED'};}}));
+ const byLayer:Record<string,number>={};for(const organ of organRegistry.all())byLayer[organ.layer]=(byLayer[organ.layer]??0)+1;
+ res.json({success:results.every(r=>r.success),totalLoaded:results.length,durationMs:Math.round(performance.now()-started),byLayer,systemHealth:organRegistry.systemHealth(),organs:organRegistry.all().map(organ=>({id:organ.id,name:organ.name,layer:organ.layer,status:organ.status})),request_id,probe_only:true,results});
 });
-
-// ── POST /api/organs/batch — parallel batch execution across organs ────────
-organRouter.post("/batch", async (req, res) => {
-  const { calls } = req.body;
-  if (!Array.isArray(calls)) {
-    return res.status(400).json({ error: "calls array of { id, action, payload } required" });
-  }
-
-  const t0 = Date.now();
-  const results = await Promise.all(
-    calls.map(async (c: { id: string; action?: string; payload?: unknown }) => {
-      const callStart = performance.now();
-      const organ = organRegistry.get(c.id);
-      if (!organ) return { id: c.id, success: false, error: `Organ '${c.id}' not found` };
-      if (organ.isolated) return { id: c.id, success: false, error: `Organ '${c.id}' is isolated` };
-
-      try {
-        const executor = getExecutor(c.id);
-        const result = await executor(c.action || "execute", c.payload || {});
-        const latency = Math.round(performance.now() - callStart);
-        organRegistry.recordExec(c.id, true, latency, c.action || "execute");
-        return { id: c.id, success: true, latency_ms: latency, result };
-      } catch (err: any) {
-        const latency = Math.round(performance.now() - callStart);
-        organRegistry.recordExec(c.id, false, latency, c.action || "execute", String(err));
-        return { id: c.id, success: false, latency_ms: latency, error: err?.message || String(err) };
-      }
-    })
-  );
-
-  res.json({
-    success: true,
-    totalCalls: calls.length,
-    totalDurationMs: Date.now() - t0,
-    results,
-  });
+organRouter.post('/batch',async(req,res)=>{
+ const calls=req.body?.calls;if(!Array.isArray(calls)||!calls.length||calls.length>256||calls.some(c=>!c||typeof c.id!=='string'||typeof c.action!=='string'))return res.status(400).json({code:'INVALID_BATCH'});
+ const results=await Promise.all(calls.map(async c=>{try{return {id:c.id,success:true,result:await dispatchOrgan(c.id,c.action,c.payload??{},(req as any).microfixdTenantId)};}catch{return {id:c.id,success:false,error:'EXECUTION_FAILED'};}}));
+ res.json({success:results.every(r=>r.success),totalCalls:calls.length,results});
+});
+organRouter.post('/broadcast',async(req,res)=>{
+ const ids=req.body?.organ_ids;if(!Array.isArray(ids)||!ids.length||ids.length>256||ids.some(id=>typeof id!=='string')||typeof req.body.action!=='string')return res.status(400).json({code:'INVALID_BROADCAST'});
+ const results=await Promise.all(ids.map(async id=>{try{return {id,success:true,result:await dispatchOrgan(id,req.body.action,req.body.payload??{},(req as any).microfixdTenantId)};}catch{return {id,success:false,error:'EXECUTION_FAILED'};}}));
+ res.json({success:results.every(r=>r.success),results});
 });
 
 // ── GET /api/organs/snapshot — system snapshot ────────────────────────────
@@ -152,59 +93,15 @@ organRouter.get("/:id", (req, res) => {
   });
 });
 
-// ── POST /api/organs/:id — direct execution alias ─────────────────────────
-organRouter.post("/:id", async (req, res) => {
-  const { id } = req.params;
-  const { action = "execute", payload = {} } = req.body;
-  const organ = organRegistry.get(id);
-  if (!organ) return res.status(404).json({ error: `Organ '${id}' not found` });
-  if (organ.isolated) return res.status(503).json({ error: `Organ '${id}' is isolated` });
-
-  const t0 = Date.now();
-  organRegistry.setStatus(id, "busy");
-
-  try {
-    const executor = getExecutor(id);
-    const result   = await executor(action, payload);
-    const latency  = Date.now() - t0;
-    organRegistry.recordExec(id, true, latency, action);
-    organRegistry.setStatus(id, "active");
-    res.json({ success: true, organ: id, action, result, latency_ms: latency });
-  } catch (err: any) {
-    const latency = Date.now() - t0;
-    const errMsg  = err?.message || String(err);
-    organRegistry.recordExec(id, false, latency, action, errMsg);
-    organRegistry.setStatus(id, "error", errMsg);
-    res.status(500).json({ success: false, organ: id, action, error: errMsg, latency_ms: latency });
-  }
-});
-
-// ── POST /api/organs/:id/execute — THE MAIN CALL ─────────────────────────
-organRouter.post("/:id/execute", async (req, res) => {
-  const { id } = req.params;
-  const { action = "default", payload = {} } = req.body;
-  const organ = organRegistry.get(id);
-  if (!organ) return res.status(404).json({ error: `Organ '${id}' not found` });
-  if (organ.isolated) return res.status(503).json({ error: `Organ '${id}' is isolated` });
-
-  const t0 = Date.now();
-  organRegistry.setStatus(id, "busy");
-
-  try {
-    const executor = getExecutor(id);
-    const result   = await executor(action, payload);
-    const latency  = Date.now() - t0;
-    organRegistry.recordExec(id, true, latency, action);
-    organRegistry.setStatus(id, "active");
-    res.json({ success: true, organ: id, action, result, latency_ms: latency });
-  } catch (err: any) {
-    const latency = Date.now() - t0;
-    const errMsg  = err?.message || String(err);
-    organRegistry.recordExec(id, false, latency, action, errMsg);
-    organRegistry.setStatus(id, "error", errMsg);
-    res.status(500).json({ success: false, organ: id, action, error: errMsg, latency_ms: latency });
-  }
-});
+const execute:import('express').RequestHandler=async(req,res)=>{
+ const id=req.params.id,action=req.body?.action??'execute';
+ if(typeof action!=='string')return void res.status(400).json({code:'INVALID_ACTION'});
+ if(!organRegistry.get(id))return void res.status(404).json({code:'UNKNOWN_ORGAN'});
+ if(organRegistry.get(id)?.isolated)return void res.status(503).json({code:'ORGAN_ISOLATED'});
+ try{res.json({success:true,organ:id,action,result:await dispatchOrgan(id,action,req.body?.payload??{},(req as any).microfixdTenantId)});}catch{res.status(500).json({success:false,code:'ORGAN_EXECUTION_FAILED'});}
+};
+organRouter.post('/:id',execute);
+organRouter.post('/:id/execute',execute);
 
 // ── POST /api/organs/:id/reset ────────────────────────────────────────────
 organRouter.post("/:id/reset", (req, res) => {
@@ -218,28 +115,3 @@ organRouter.post("/:id/isolate", (req, res) => {
   res.json({ success, id: req.params.id });
 });
 
-// ── POST /api/organs/broadcast — call multiple organs ─────────────────────
-organRouter.post("/broadcast", async (req, res) => {
-  const { organ_ids, action, payload } = req.body;
-  if (!Array.isArray(organ_ids)) return res.status(400).json({ error: "organ_ids array required" });
-
-  const results = await Promise.allSettled(
-    organ_ids.map(async (id: string) => {
-      const t0       = Date.now();
-      const organ    = organRegistry.get(id);
-      if (!organ || organ.isolated) return { id, skipped: true, error: !organ ? "Not found" : "Isolated" };
-      organRegistry.setStatus(id, "busy");
-      const executor = getExecutor(id);
-      const result   = await executor(action, payload);
-      const latency  = Date.now() - t0;
-      organRegistry.recordExec(id, true, latency, action);
-      organRegistry.setStatus(id, "active");
-      return { id, result, latency_ms: latency };
-    })
-  );
-
-  res.json({
-    success: true,
-    results: results.map(r => r.status === "fulfilled" ? r.value : { error: String((r as PromiseRejectedResult).reason) }),
-  });
-});

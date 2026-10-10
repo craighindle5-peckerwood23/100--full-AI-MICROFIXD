@@ -1,0 +1,42 @@
+{
+  "environment": "local HTTP; external integrations disabled",
+  "probe_only": true,
+  "capability_execution_verified": false,
+  "organs": 247,
+  "concurrent_sweeps": [
+    {
+      "sweep": 0,
+      "calls": 247
+    },
+    {
+      "sweep": 1,
+      "calls": 247
+    },
+    {
+      "sweep": 2,
+      "calls": 247
+    }
+  ],
+  "total_probe_calls": 1239,
+  "fault_checks": {
+    "failure_isolation": true,
+    "isolation_enforced": true
+  },
+  "native_executors": 21,
+  "without_explicit_executor": 226,
+  "duration_ms": 143,
+  "lanes": {
+    "stable": 366,
+    "canary": 375,
+    "fallback": 0
+  },
+  "canary": {
+    "samples": 626,
+    "failures": 0,
+    "in_flight": 0,
+    "disabled": false,
+    "percentage": 50,
+    "scope": "process; read-only probes only"
+  },
+  "failures": []
+}
