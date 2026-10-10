@@ -1,0 +1,16 @@
+import {readFileSync} from 'node:fs';
+import {evaluateRelease,type ReleasePolicy,type EvaluationCase} from '../server/evolution/releaseGate';
+import {routePermission} from '../server/security/routePermission';
+import {deadlineExceeded,type Mission,type Artifact} from '../server/planner/executionSpine';
+import {auditMission} from '../server/planner/missionAudit';
+import {validateSchema} from '../server/planner/schema';
+const policy=JSON.parse(readFileSync(new URL('../governance/release-policy.json',import.meta.url),'utf8')) as ReleasePolicy;
+const mission:Mission={mission_id:'evaluation',tenant_id:'evaluation',created_at:'2026-01-01T00:00:00Z',created_by:'evaluation',objective:'verify governance',constraints:{},status:'succeeded',result_artifact_id:null};
+const cases:EvaluationCase[]=[];
+const run=(id:string,test:()=>boolean)=>{let passed=false;try{passed=test()===true;}catch{}cases.push({id,passed});};
+run('observer-write-denied',()=>['POST','PUT','PATCH','DELETE'].every(method=>routePermission('/api/planner/missions',method,'monitor')==='execute'));
+run('deadline-expiry',()=>deadlineExceeded({...mission,constraints:{deadline_at:'2026-01-01T00:00:00Z'}},Date.parse('2026-01-02T00:00:00Z')));
+run('schema-rejects-extra-fields',()=>!validateSchema({answer:'ok',injected:true},{type:'object',properties:{answer:{type:'string'}},required:['answer'],additionalProperties:false}));
+run('audit-rejects-incomplete-success',()=>!auditMission(mission,[],[],[]).verified);
+run('audit-rejects-cross-tenant-evidence',()=>auditMission({...mission,status:'running'},[],[],[{artifact_id:'foreign',tenant_id:'other',mission_id:mission.mission_id,task_id:null,subtask_id:null,type:'json',content:{},hash:'invalid',evidence:{}} as Artifact]).issues.some(i=>i.code==='ARTIFACT_SCOPE_MISMATCH'));
+const report=evaluateRelease(policy,cases);console.log(JSON.stringify(report,null,2));if(!report.approved)process.exitCode=1;

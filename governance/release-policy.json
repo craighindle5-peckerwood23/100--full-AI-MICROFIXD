@@ -1,0 +1,5 @@
+{
+  "version": "microfixd-release-v1",
+  "required_cases": ["observer-write-denied", "deadline-expiry", "schema-rejects-extra-fields", "audit-rejects-incomplete-success", "audit-rejects-cross-tenant-evidence"],
+  "maximum_failures": 0
+}

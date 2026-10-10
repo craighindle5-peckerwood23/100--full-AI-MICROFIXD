@@ -30,6 +30,7 @@ export async function executeEvolutionOrgan(action: string, payload: unknown): P
           });
           const text = res.content;
           const proposal = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] ?? "{}") as Record<string, string>;
+          if (res.completion.choices[0]?.finish_reason === "length" || typeof proposal.title !== 'string' || !proposal.title.trim() || typeof proposal.change !== 'string' || !proposal.change.trim() || typeof proposal.reason !== 'string' || !proposal.reason.trim() || !['high','medium','low'].includes(proposal.priority)) throw new Error('INVALID_EVOLUTION_PROPOSAL');
           const entry = { id: `evo_${Date.now().toString(36)}`, ...proposal, status: "pending", ts: new Date().toISOString() };
           proposals.push(entry as typeof proposals[0]);
           return { proposal: entry };
@@ -37,27 +38,15 @@ export async function executeEvolutionOrgan(action: string, payload: unknown): P
           console.warn("[evolutionOrgan] Groq proposal error:", err);
         }
       }
-      const fallbackEntry = {
-        id: `evo_${Date.now().toString(36)}`,
-        title: "Autonomous Dynamic Mesh Rebalancing",
-        change: "Optimized inter-organ token pipeline routing",
-        reason: "Continuous self-evolution loop trigger",
-        priority: "normal",
-        status: "pending",
-        ts: new Date().toISOString()
-      };
-      proposals.push(fallbackEntry);
-      return { proposal: fallbackEntry };
+      throw new Error('EVOLUTION_PROPOSAL_UNAVAILABLE');
     }
     case "list":
       return { proposals: proposals.slice(-20) };
     case "status":
     case "health":
-      return { status: "nominal", proposalsCount: proposals.length, architecture: "Level 6 Dynamic Self-Evolving" };
+      return { status: "nominal", proposalsCount: proposals.length, architecture: "Proposal generation; deployment requires governed release", auto_apply: false };
     case "apply_proposal": {
-      const prop = proposals.find(p2 => p2.id === String(p.id));
-      if (prop) prop.status = "applied";
-      return { applied: !!prop, id: p.id };
+      throw new Error('GOVERNED_RELEASE_REQUIRED');
     }
     case "reject_proposal": {
       const prop = proposals.find(p2 => p2.id === String(p.id));
