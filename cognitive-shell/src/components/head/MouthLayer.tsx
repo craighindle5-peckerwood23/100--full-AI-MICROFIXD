@@ -1,0 +1,1 @@
+import React from'react';export const MouthLayer=({speaking}:{speaking:boolean})=><div className={'mx-mouth '+(speaking?'speaking':'')} aria-hidden/>;
