@@ -1,0 +1,1 @@
+export function safeMerge<T extends Record<string,unknown>>(base:T,patch:Partial<T>):T{return Object.assign({},base,patch)}
