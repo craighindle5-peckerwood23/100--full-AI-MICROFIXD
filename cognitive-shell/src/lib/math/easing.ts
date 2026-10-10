@@ -1,0 +1,1 @@
+export const clamp=(n:number,min=0,max=1)=>Math.max(min,Math.min(max,n));export const smoothstep=(t:number)=>{t=clamp(t);return t*t*(3-2*t)};
