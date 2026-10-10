@@ -75,17 +75,17 @@ export async function orchestrateWithTools(
   let finalAnswer = "";
   let model       = "";
   let tokensUsed  = 0;
-  let provider: 'groq' | 'openrouter' = groq ? 'groq' : 'openrouter';
+  let provider: 'groq' | 'openrouter' = openRouter ? 'openrouter' : 'groq';
 
   for (let iter = 0; iter < maxIterations; iter++) {
     const params = {model: provider === 'groq' ? groqConfiguration().model : 'openrouter/free',
       messages,tools:getToolsForGroq() as Groq.Chat.ChatCompletionTool[],tool_choice:'auto' as const,
-      max_tokens:Math.max(1,Math.min(Number(process.env.RESPONSE_MAX_TOKENS) || 512,16384))};
+      max_tokens:Math.max(1,Math.min(Number(process.env.RESPONSE_MAX_TOKENS) || 10000,16384))};
     let completion: Groq.Chat.ChatCompletion;
     if (provider === 'groq') {
       try {completion = await groq!.chat.completions.create(params);}
       catch (error) {
-        if (!openRouter || ![429,500,502,503,504].includes(Number((error as any)?.status))) throw error;
+        if (!openRouter || ![413,429,500,502,503,504].includes(Number((error as any)?.status))) throw error;
         provider = 'openrouter';
         completion = await openRouter.chat.completions.create({...params,model:'openrouter/free'} as any) as unknown as Groq.Chat.ChatCompletion;
       }

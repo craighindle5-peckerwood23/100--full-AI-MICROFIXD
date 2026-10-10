@@ -54,7 +54,7 @@ test('brain recalls before inference and persists the completed response', async
     const request=input instanceof Request ? input : new Request(input,init);
     if (!request.url.includes('api.groq.com')) return memoryFetch(input,init);
     const body=await request.json();
-    assert.equal(body.max_tokens,512);
+    assert.equal(body.max_tokens,10000);
     sawContext=body.messages.some((m:any)=>m.content.includes('repair fact'));
     return new Response(JSON.stringify({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:'remembered repair'},finish_reason:'stop'}],usage:{total_tokens:10}}),{headers:{'Content-Type':'application/json'}});
   };

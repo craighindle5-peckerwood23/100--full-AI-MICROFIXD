@@ -28,6 +28,12 @@ services:
         sync: false
       - key: SYSTEM_TOKEN
         sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: BRAIN_MAX_TOKENS
+        value: "10000"
+      - key: RESPONSE_MAX_TOKENS
+        value: "10000"
       - key: GROQ_API_KEY
         sync: false
       - key: CORS_ORIGINS

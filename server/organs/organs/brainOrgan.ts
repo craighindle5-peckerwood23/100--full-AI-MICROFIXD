@@ -31,7 +31,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
         try {
           const model = (p.model as string) ?? groqConfiguration().model;
           const res = await completeTextWithFallback(memoryMessages,
-            Math.max(1, Math.min(Number(p.max_tokens ?? process.env.BRAIN_MAX_TOKENS) || 512, 16384)),
+            Math.max(1, Math.min(Number(p.max_tokens ?? process.env.BRAIN_MAX_TOKENS) || 10000, 16384)),
             (p.temperature as number) ?? 0.7);
           if (res.truncated) throw new Error("Brain response reached its output limit; incomplete answer was not stored");
           await executeMemoryOrgan("store", {

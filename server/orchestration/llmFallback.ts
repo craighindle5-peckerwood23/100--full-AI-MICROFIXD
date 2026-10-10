@@ -23,6 +23,28 @@ export async function completeTextWithFallback(
   preferredProvider?: TextResult['provider'],
   options?: {beforeAttempt?: (provider: TextResult['provider']) => Promise<void>},
 ): Promise<TextResult> {
+  const failures: string[] = [];
+  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (openRouterKey && (!preferredProvider || preferredProvider === 'openrouter')) {
+    await options?.beforeAttempt?.('openrouter');
+    try {
+    // openrouter/free only selects zero-priced models. A different model is
+    // deliberately not configurable here, so this path cannot spend credits.
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${openRouterKey}`},
+      body:JSON.stringify({model:'openrouter/free',messages,max_tokens:maxTokens,temperature}),
+      signal:AbortSignal.timeout(120000),
+    });
+    const data = await response.json() as any;
+    if (!response.ok || data.error) throw new Error(`HTTP ${response.status}: ${String(data.error?.message || 'OpenRouter rejected the request').slice(0,500)}`);
+    const choice = data.choices?.[0];
+    const content = choice?.message?.content || '';
+    if (!content.trim() || choice.finish_reason === 'length') throw new Error('OpenRouter returned an empty or truncated answer');
+    return {content,model:data.model || 'openrouter/free',provider:'openrouter',tokensUsed:data.usage?.total_tokens || 0,truncated:false};
+  } catch (error) { failures.push(`OpenRouter: ${String(error).slice(0,160)}`); }
+  }
+
+
   const groq = !preferredProvider || preferredProvider === 'groq' ? getGroqClient() : null;
   let groqError: unknown;
   if (groq) {
@@ -37,10 +59,10 @@ export async function completeTextWithFallback(
     } catch (error) {
       groqError = error;
       // Invalid credentials and malformed requests require an explicit fix.
-      if (![429, 503, 500, 502, 504].includes(Number((error as any)?.status))) throw error;
+      if (![413, 429, 503, 500, 502, 504].includes(Number((error as any)?.status))) throw error;
     }
   }
-  const failures: string[] = [];
+
   const prompt = messages.map(message => `${message.role.toUpperCase()}: ${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`).join('\n\n');
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
   if (geminiKey && (!preferredProvider || preferredProvider === 'gemini')) {
@@ -54,26 +76,6 @@ export async function completeTextWithFallback(
     if (!content.trim() || truncated) throw new Error('Gemini returned an empty or truncated answer');
     return {content,model,provider:'gemini',tokensUsed:response.usageMetadata?.totalTokenCount || 0,truncated:false};
   } catch (error) { failures.push(`Gemini: ${String(error).slice(0,160)}`); }
-  }
-
-  const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (openRouterKey && (!preferredProvider || preferredProvider === 'openrouter')) {
-    await options?.beforeAttempt?.('openrouter');
-    try {
-    // openrouter/free only selects zero-priced models. A different model is
-    // deliberately not configurable here, so this path cannot spend credits.
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions',{
-      method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${openRouterKey}`},
-      body:JSON.stringify({model:'openrouter/free',messages,max_tokens:maxTokens,temperature}),
-      signal:AbortSignal.timeout(45000),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json() as any;
-    const choice = data.choices?.[0];
-    const content = choice?.message?.content || '';
-    if (!content.trim() || choice.finish_reason === 'length') throw new Error('OpenRouter returned an empty or truncated answer');
-    return {content,model:data.model || 'openrouter/free',provider:'openrouter',tokensUsed:data.usage?.total_tokens || 0,truncated:false};
-  } catch (error) { failures.push(`OpenRouter: ${String(error).slice(0,160)}`); }
   }
 
   const cfToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
@@ -95,6 +97,6 @@ export async function completeTextWithFallback(
   } catch (error) { failures.push(`Cloudflare: ${String(error).slice(0,160)}`); }
   }
 
-  if (failures.length) throw Object.assign(new Error('ALL_PROVIDERS_UNAVAILABLE'),{code:'PROVIDERS_EXHAUSTED'});
+  if (failures.length) throw Object.assign(new Error('All configured providers failed. ' + failures.join('; ') + (groqError ? '; Groq: ' + String((groqError as any)?.message || groqError).slice(0,500) : '')),{code:'PROVIDERS_EXHAUSTED',status:(groqError as any)?.status});
   throw groqError || new Error('No server-side LLM provider configured');
 }
