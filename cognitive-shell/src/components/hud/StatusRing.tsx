@@ -1,0 +1,1 @@
+import React from'react';export const StatusRing=({status}:{status:string})=><div className="mx-status-ring"><i/>{status}</div>;
