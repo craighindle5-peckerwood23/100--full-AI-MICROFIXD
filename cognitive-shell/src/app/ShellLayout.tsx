@@ -1,0 +1,1 @@
+import React from'react';export const ShellLayout=({children}:{children:React.ReactNode})=><div className="mx-layout">{children}</div>;
