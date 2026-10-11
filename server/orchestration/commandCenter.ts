@@ -29,6 +29,7 @@ import { feedbackLoop }          from "./feedbackLoop";
 import { resolveExecutableOrgans } from "../classification";
 import { EXECUTORS, getExecutor } from "../organs/executors";
 import { telemetry }             from "../../microfixd/backend/core/telemetry/grid";
+import { executeEvaluationOrgan, executeUncertaintyOrgan, executeParagonOrgan } from "../organs/organs/cognitiveAssuranceOrgan";
 
 export interface CommandRequest {
   task:        string;
@@ -49,7 +50,7 @@ export interface CommandResult {
   groq_tokens?: number;
   feedback:     Record<string, unknown>;
   ts:           string;
-  diagnostics?: {warnings: string[]; model?: string; provider?: string; stages: string[]; failure?: Awaited<ReturnType<typeof recordCommandFailure>>};
+  diagnostics?: {warnings: string[]; model?: string; provider?: string; stages: string[]; assurance?: Record<string, unknown>; failure?: Awaited<ReturnType<typeof recordCommandFailure>>};
 }
 
 let _cmdCount = 0;
@@ -81,7 +82,19 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     }
     organsUsed.push("security_spine");
 
-    // ── Step 3: Groq fast classification + routing ─────────────────────
+    // ── Step 2b: Paragon structural/governance preflight ──────────────
+    const paragon = await executeParagonOrgan("preflight", {
+      task: req.task,
+      payload: { ...(req.context || {}), priority: req.priority, source: req.source }
+    });
+    stages.push("paragon_preflight");
+    organsUsed.push("paragon");
+    if (!paragon.success) {
+      broadcast("governance:blocked", { cmdId, session_id:req.session_id, organ:"paragon", result:paragon.result });
+      return finalize(req, "Command blocked by Paragon preflight.", false, organsUsed, t0, false, {});
+    }
+
+    // ── Step 3: Provider-backed classification + routing ─────────────────────
     let routing = {
       intent: "execute",
       complexity: "medium",
@@ -96,7 +109,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       try {
         const res = await completeTextWithFallback([{
             role: "system",
-            content: "You are the Microfixd command router and Central Intelligence orchestrator. Classify the task and output strictly valid JSON: {\"intent\":\"plan|execute|retrieve|diagnose|create|reflect|query\",\"complexity\":\"low|medium|high\",\"organs\":[\"brain\",\"memory\"],\"priority\":\"low|normal|high\"}"
+            content: "You are the Microfixd command router. Classify the task and output strictly valid JSON: {\"intent\":\"plan|execute|retrieve|diagnose|create|reflect|query\",\"complexity\":\"low|medium|high\",\"organs\":[...],\"priority\":\"low|normal|high\"}. Choose only organs needed for the task. Assurance organs available when relevant: critic_organ (evaluation), knowledge_retriever (durable RAG), reflection_organ, uncertainty_detector, policy_verifier, paragon. Core execution organs include brain and memory."
           }, {
             role: "user",
             content: req.task,
@@ -214,6 +227,18 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     providerUsed = synthesisRes.provider;
     }
 
+    // ── Step 5b: Deterministic post-response assurance ────────────────
+    const evaluation = await executeEvaluationOrgan("evaluate", { candidate: output });
+    const uncertainty = await executeUncertaintyOrgan("score", { output, evidenceCount: Object.keys(organResults).length });
+    const assurance = {
+      evaluationScore: evaluation.score,
+      uncertainty: uncertainty.uncertainty,
+      confidence: uncertainty.confidence,
+      signals: uncertainty.signals,
+    };
+    stages.push("evaluation","uncertainty");
+    broadcast("assurance:complete",{cmdId,session_id:req.session_id,...assurance});
+
     const spoken = req.source === "voice" || req.context?.output_mode === "spoken";
     const persisted = await getExecutor("memory")("store", {
       session_id: req.session_id, organ: "command",
@@ -245,7 +270,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       latency_ms:  Date.now() - t0,
       reflex_hit:  false,
       groq_tokens: groqTokens,
-      diagnostics: {warnings, model:modelUsed, provider:providerUsed, stages:[...stages,"feedback","response"]},
+      diagnostics: {warnings, model:modelUsed, provider:providerUsed, assurance, stages:[...stages,"feedback","response"]},
       feedback,
       ts:          new Date().toISOString(),
     };
