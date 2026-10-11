@@ -291,9 +291,9 @@ export default function OSShell({ onReboot }: Props) {
       <header className="w-full z-40 px-4 py-2.5 border-b border-cyan-500/20 bg-black/80 backdrop-blur-xl flex flex-wrap items-center justify-between gap-3 shrink-0">
         {/* Left: Branding & Status */}
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-cyan-950/80 border border-cyan-400/50 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.5)]">
+          <button onClick={()=>setOrbitOpen(v=>!v)} className="w-7 h-7 rounded-lg bg-cyan-950/80 border border-cyan-400/50 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.5)] hover:bg-cyan-900/80" title="Toggle cognitive core navigation">
             <span className="font-black text-xs text-white">MFX</span>
-          </div>
+          </button>
 
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
@@ -331,10 +331,9 @@ export default function OSShell({ onReboot }: Props) {
       {/* VISUAL INDICATOR SYSTEM: FALLBACK ALERT BANNER WITH UNDO / MANUAL OVERRIDE */}
       <FallbackAlertBanner onOpenAutonomyRoom={() => handleNavigate('autonomy')} />
 
-      {/* HOLOGRAPHIC CORE: the always-present avatar entity + glassmorphic
+      {/* HOLOGRAPHIC CORE: detachable cognitive shell + glassmorphic
           orbit ring that drops you into any room. Sits above everything
-          else; shrinks to a corner icon once a room is chosen, and can be
-          reopened at any time by clicking the avatar again. */}
+          else; the navigation ring can be reopened from the MFX core button. */}
       <div className="fixed inset-0 z-[35] pointer-events-none">
         {orbitOpen && <OrbitRing
           onOpenSettings={()=>{setSettingsSection('general');setOrbitOpen(false);}}
