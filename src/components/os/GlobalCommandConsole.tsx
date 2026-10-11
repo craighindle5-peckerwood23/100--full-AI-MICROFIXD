@@ -26,6 +26,8 @@ import {
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
 import { OrganApi } from '../../lib/organApi';
+import { api, AuthenticationRequiredError } from '../../lib/serverApi';
+import { requestOperatorAccess } from '../../lib/operatorAccess';
 import { Subsystem } from '../../types';
 
 interface Props {
@@ -148,22 +150,26 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
     setAgentTaskPrompt('');
     setIsProcessing(true);
     sound.playCognitivePulse();
+    const started = Date.now();
 
     try {
-      const res = await fetch('/api/agents/dispatch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: agentKey, prompt }),
-      });
-      const data = await res.json();
-      
+      const send = () => api<any>('POST', '/agents/dispatch', { action: agentKey, prompt });
+      let data;
+      try {
+        data = await send();
+      } catch (error) {
+        if (!(error instanceof AuthenticationRequiredError)) throw error;
+        await requestOperatorAccess();
+        data = await send();
+      }
+
       setLogs(prev => [{
         id: `agent-${Date.now()}`,
         query: `[AGENT TASK // ${agentKey.toUpperCase()}]: ${prompt}`,
-        response: JSON.stringify(data.result || data, null, 2),
-        latencyMs: 45,
+        response: JSON.stringify(data?.result || data, null, 2),
+        latencyMs: Date.now() - started,
         timestamp: new Date().toLocaleTimeString(),
-        success: res.ok,
+        success: data?.success !== false,
         agent: agentKey.toUpperCase()
       }, ...prev]);
 
@@ -173,7 +179,7 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
         id: `agent-err-${Date.now()}`,
         query: `[AGENT TASK // ${agentKey.toUpperCase()}]: ${prompt}`,
         response: `Dispatch error: ${err?.message || String(err)}`,
-        latencyMs: 50,
+        latencyMs: Date.now() - started,
         timestamp: new Date().toLocaleTimeString(),
         success: false,
         agent: agentKey.toUpperCase()
@@ -469,17 +475,17 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
                     <span className="text-[10px] text-emerald-400 block mt-1">{systemSnapshot ? `${systemSnapshot.active_count ?? 0} active / ${systemSnapshot.error_count ?? 0} error` : 'Loading live metrics'}</span>
                   </div>
                   <div className="p-3 rounded-xl bg-black/50 border border-cyan-500/20">
-                    <span className="text-[10px] text-cyan-500/60 uppercase block">Groq LPU Layer</span>
+                    <span className="text-[10px] text-cyan-500/60 uppercase block">Avg Organ Latency</span>
                     <span className="text-xl text-cyan-300 font-bold">{systemSnapshot ? `${systemSnapshot.avg_latency_ms ?? 0} ms` : '—'}</span>
                     <span className="text-[10px] text-cyan-400 block mt-1">Measured average organ latency</span>
                   </div>
                   <div className="p-3 rounded-xl bg-black/50 border border-cyan-500/20">
-                    <span className="text-[10px] text-cyan-500/60 uppercase block">Vector Memory</span>
+                    <span className="text-[10px] text-cyan-500/60 uppercase block">Registry Health</span>
                     <span className="text-xl text-emerald-400 font-bold">{systemSnapshot?.system_health ?? '—'}</span>
                     <span className="text-[10px] text-cyan-500/60 block mt-1">Registry system health</span>
                   </div>
                   <div className="p-3 rounded-xl bg-black/50 border border-cyan-500/20">
-                    <span className="text-[10px] text-cyan-500/60 uppercase block">Safety Directive</span>
+                    <span className="text-[10px] text-cyan-500/60 uppercase block">Average Success Rate</span>
                     <span className="text-xl text-white font-bold">{systemSnapshot ? `${Math.round((systemSnapshot.avg_success_rate ?? 0)*100)}%` : '—'}</span>
                     <span className="text-[10px] text-emerald-400 block mt-1">Measured average success rate</span>
                   </div>
@@ -487,7 +493,7 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
 
                 <div className="p-4 rounded-xl bg-black/60 border border-cyan-500/25 space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-white border-b border-cyan-500/15 pb-2">
-                    <span>Active System Subsystems (15 Rooms)</span>
+                    <span>Configured OS Rooms</span>
                     <span className={systemSnapshot?.error_count ? "text-amber-400" : "text-emerald-400"}>{systemSnapshot ? `${systemSnapshot.active_count ?? 0} active, ${systemSnapshot.error_count ?? 0} errors` : 'Loading'}</span>
                   </div>
 
@@ -499,7 +505,7 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
                       'Federation', 'OS Bible', 'Autonomous Loop'
                     ].map((room, i) => (
                       <div key={i} className="p-2 rounded bg-cyan-950/20 border border-cyan-500/10 flex items-center gap-1.5">
-                        <CheckCircle2 size={11} className="text-emerald-400 flex-shrink-0" />
+                        <Activity size={11} className="text-cyan-500 flex-shrink-0" />
                         <span className="text-cyan-200 truncate">{room}</span>
                       </div>
                     ))}
