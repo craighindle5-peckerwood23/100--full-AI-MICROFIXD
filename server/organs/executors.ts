@@ -43,7 +43,6 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   world_model: executeWorldModelOrgan,
   world_thinking_engine: executeWorldModelOrgan,
   counterfactual_simulator: executeWorldModelOrgan,
-  epistemic_uncertainty_scorer: executeWorldModelOrgan,
   future_state_projector: executeWorldModelOrgan,
   invariance_verifier: executeWorldModelOrgan,
   hallucination_pruner: executeWorldModelOrgan,
@@ -61,66 +60,62 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   paragon: executeParagonOrgan,
 
   // LangGraph Core Systemic Organs
-  "core.model": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    const prompt = typeof payload === "string" ? payload : payload?.prompt || payload?.task || "Model inquiry";
-    const res = organs ? await organs.model.generate(prompt) : `Model generated for "${prompt}"`;
-    return { output: res, action, status: "completed" };
+  "core.model": async (_action, payload: any) => {
+    const prompt = typeof payload === "string" ? payload : payload?.prompt || payload?.task;
+    if (!prompt) throw new Error("CORE_MODEL_PROMPT_REQUIRED");
+    return executeBrainOrgan("complete", { messages:[{role:"user",content:String(prompt)}], session_id:payload?.session_id || "core" });
   },
   "core.tools": async () => {
     const organs = getCognitiveOrgans();
-    return { tools: organs?.tools.getAvailableTools() || ["analyze", "repair", "deploy"], status: "available" };
+    if (!organs) throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { tools: organs.tools.getAvailableTools(), status: "registered" };
   },
   "core.memory": async (action, payload: any) => {
     return executeMemoryOrgan(action, payload);
   },
-  "core.legal": async (action) => {
-    const organs = getCognitiveOrgans();
-    const compliant = organs ? organs.legal.verifyDirectiveCompliance(action) : true;
-    return { compliant, directive: "Chapter 15 Compliance", action };
-  },
+  "core.legal": async (action,payload:any) => executePolicyOrgan(action,{...payload,actionName:payload?.actionName||action,agentKey:payload?.agentKey||"core.legal"}),
   "core.web": async (action, payload: any) => {
     return executePlaywrightOrgan(action, payload);
   },
-  "core.deployment": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    const deployRes = organs ? await organs.deployment.deploy(payload || {}) : { status: "deployed", timestamp: Date.now() };
-    return deployRes;
+  "core.deployment": async () => {
+    throw new Error("CORE_DEPLOYMENT_REQUIRES_GOVERNED_DEPLOYMENT_PIPELINE");
   },
   "core.router": async (action, payload: any) => {
     const organs = getCognitiveOrgans();
-    return organs ? await organs.router.route({ type: action, payload }) : { routed: true, action };
+    if (!organs) throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return organs.router.route({ type: action, payload });
   },
   "core.scheduler": async (action, payload: any) => {
     return executeSchedulerOrgan(action, payload);
   },
   "core.loop": async () => {
     const organs = getCognitiveOrgans();
-    if (organs) organs.loop.start();
-    return { status: "running", loop: "BackgroundLoopEngine" };
+    if (!organs) throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    organs.loop.start();
+    return { status: "started", loop: "BackgroundLoopEngine" };
   },
-  "core.repair": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    return { status: "nominal", repaired: true, payload };
+  "core.repair": async () => {
+    throw new Error("CORE_REPAIR_REQUIRES_SANDBOX_VERIFICATION_AND_APPROVAL");
   },
-  "core.autoDeploy": async (action, payload: any) => {
-    return { deployed: true, timestamp: Date.now(), config: payload };
+  "core.autoDeploy": async () => {
+    throw new Error("CORE_AUTODEPLOY_REQUIRES_GOVERNED_PROMOTION_PIPELINE");
   },
   "core.mission": async () => {
     return { mission: missionEngine.getCurrentMission(), status: "active" };
   },
   "core.feedback": async () => {
-    return { status: "feedback_loop_active", timestamp: Date.now() };
+    const organs=getCognitiveOrgans();
+    if(!organs)throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { status: "registered", organ: "CognitiveFeedbackLoop" };
   },
-  "core.paragon": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    return organs ? organs.paragon.dissect(action, payload) : { dissected: true };
-  },
+  "core.paragon": async (action, payload: any) => executeParagonOrgan(action,payload),
   "core.federation": async () => {
-    return { federation: "MCP_DISTRIBUTED", status: "synchronized" };
+    const organs=getCognitiveOrgans();if(!organs)throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { federation: "FederationLayer", status: "registered" };
   },
   "core.emotion": async () => {
-    return { emotion: "focused", valence: 0.98, status: "optimal" };
+    const organs=getCognitiveOrgans();if(!organs)throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { engine: "SyntheticEmotionEngine", status: "registered", note:"No emotional state is fabricated by this status call." };
   },
   "core.reflex": async (action, payload: any) => {
     return executeReflexOrgan(action, payload);
@@ -128,18 +123,10 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   "core.voice": async (action, payload: any) => {
     return executeVoiceOrgan(action, payload);
   },
-  "core.voiceOut": async (action, payload: any) => {
-    return { audioStream: "active", action, payload };
-  },
-  "core.voiceEmotion": async () => {
-    return { emotion: "confident", pitchHz: 210, valence: 0.95 };
-  },
-  "core.voiceGrammar": async (action, payload: any) => {
-    return { grammarState: "PARSED", payload };
-  },
-  "core.wiring": async (action, payload: any) => {
-    return { wiringMesh: "SYNCHRONIZED", nodes: 235, timestamp: Date.now() };
-  },
+  "core.voiceOut": async () => ({ organ:"VoiceOutputOrgan", status:"registered" }),
+  "core.voiceEmotion": async () => ({ organ:"VoiceEmotionOrgan", status:"registered" }),
+  "core.voiceGrammar": async () => ({ organ:"VoiceCommandGrammarEngine", status:"registered" }),
+  "core.wiring": async () => ({ organ:"UnifiedWiringOrgan", status:"registered" }),
 };
 
 /**
