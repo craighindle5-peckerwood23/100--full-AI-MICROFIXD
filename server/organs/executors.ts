@@ -158,35 +158,20 @@ export function getExecutor(organId: string): ExecutorFn {
     // 1. Agent society execution
     if (organId.startsWith("agent_")) {
       const agentKey = organId.replace("agent_", "").toLowerCase();
-      const registeredAgent = agentRegistry[agentKey] || agentRegistry["optimize"] || agentRegistry["analyze"];
-      
+      const registeredAgent = agentRegistry[agentKey];
+      if (!registeredAgent || typeof registeredAgent.execute !== "function") {
+        throw new Error(`NO_REGISTERED_AGENT_EXECUTOR:${organId}`);
+      }
       telemetry.push("organ_agent_dispatch", { organ: organId, action, ts: Date.now() });
       memory.logEvent({ type: "agent_organ_exec", agent: organId, action, timestamp: Date.now() });
-
-      let agentResult: unknown = null;
-      if (registeredAgent && typeof registeredAgent.execute === "function") {
-        agentResult = await registeredAgent.execute({
-          mission: missionEngine.getCurrentMission(),
-          memory,
-          telemetry,
-          action,
-          payload: p
-        });
-      }
-
-      return {
-        executed: true,
-        organ: organId,
-        agent: agentKey,
+      const agentResult = await registeredAgent.execute({
+        mission: missionEngine.getCurrentMission(),
+        memory,
+        telemetry,
         action,
-        status: "completed",
-        timestamp: ts,
-        result: agentResult ?? {
-          task: p.task ?? `Autonomous action '${action}' completed by ${organId}`,
-          compliance: "100% Chapter 15 verified",
-          state: "nominal"
-        }
-      };
+        payload: p
+      });
+      return { executed: true, organ: organId, agent: agentKey, action, status: "completed", timestamp: ts, result: agentResult };
     }
 
     // 2. Governance, Security & Constitutional evaluation
@@ -202,38 +187,12 @@ export function getExecutor(organId: string): ExecutorFn {
       };
     }
 
-    // 3. Telemetry, Sensory & Metric organs
+    // 3. Registered definitions without a native executor are descriptive
+    // capabilities only. Never fabricate sensor readings or execution success.
     if (organId.includes("sensor") || organId.includes("monitor") || organId.includes("telemetry")) {
-      const snapshot = {
-        organ: organId,
-        timestamp: ts,
-        metric: action,
-        value: p.value ?? Math.round((Math.random() * 20 + 20) * 10) / 10,
-        status: "nominal",
-        reading: p.reading ?? "Telemetry channel synchronised at 1000Hz"
-      };
-      telemetry.push(organId, snapshot);
-      return snapshot;
+      throw new Error(`NO_NATIVE_SENSOR_EXECUTOR:${organId}`);
     }
 
-    // 4. Default live execution handler for all remaining systemic organs
-    telemetry.push("organ_action", { organ: organId, action, ts: Date.now() });
-    return {
-      executed: true,
-      organ: organId,
-      action,
-      timestamp: ts,
-      payload: p,
-      output: {
-        status: "success",
-        processed_at: ts,
-        execution_context: "Microfixd Kernel Level-6 Live Organ",
-        metrics: {
-          confidence: 0.99,
-          integrity_hash: `sha256-${Date.now().toString(16)}`,
-          entropy: 0.02
-        }
-      }
-    };
+    throw new Error(`NO_NATIVE_EXECUTOR:${organId}`);
   };
 }
