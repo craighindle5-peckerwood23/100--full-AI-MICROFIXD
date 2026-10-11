@@ -1,4 +1,3 @@
-import {deliverSpokenResponse} from '../../lib/outputDelivery';
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -26,7 +25,6 @@ import {
 } from 'lucide-react';
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
-import { omniRouter } from '../../utils/omniRouter';
 import { OrganApi } from '../../lib/organApi';
 import { Subsystem } from '../../types';
 
@@ -53,7 +51,7 @@ interface CommandLogItem {
 const QUICK_ACTIONS = [
   { label: 'Query System Diagnostics', query: 'Query full system status, memory lattice health, and cluster coherence.', icon: Activity, category: 'status' },
   { label: 'Run Sentinel Security Audit', query: 'Dispatch Sentinel to perform a zero-leak constitutional security audit.', icon: ShieldCheck, category: 'security' },
-  { label: 'Run 200% Organ Stress Test', query: 'Execute 200% capacity stress test across all 235 live organs.', icon: Zap, category: 'stress' },
+  { label: 'Run Governed Organ Load Test', query: 'Run a governed load test against the currently registered organ set and report measured throughput, latency, failures, and recovery behavior.', icon: Zap, category: 'stress' },
   { label: 'Rebalance Agent Threadpool', query: 'Rebalance V8 worker threads and optimize inter-agent message bus.', icon: Users, category: 'agents' },
   { label: 'Inspect Supabase Memory', query: 'Query Supabase vector memory and check active context records.', icon: Database, category: 'memory' },
 ];
@@ -67,7 +65,7 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
       id: 'init-1',
       query: 'System Boot Initialized',
       intent: 'diagnose',
-      response: 'Central Command & Groq LPU active. 235 organs loaded with zero memory leaks. Ready for natural language commands.',
+      response: 'Command console ready. Organ counts, health, latency, and failures are loaded from live backend metrics.',
       organsUsed: ['brain', 'memory', 'reflex', 'security_spine'],
       latencyMs: 12,
       timestamp: new Date().toLocaleTimeString(),
@@ -109,49 +107,27 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
 
     const t0 = Date.now();
     try {
-      // Execute through Central Command (Groq + Organ Mesh)
-      let resultText = '';
-      let organsUsed: string[] = ['brain', 'memory'];
-      let intent = 'execute';
-      let targetSubsystem = '';
-
-      // 1. Evaluate with OmniRouter / Groq
-      const decision = await omniRouter.evaluateAndOrchestrate(text, (activeSubsystem as string) || 'ai_core');
-      resultText = decision.detailedAnswer || decision.speech || decision.thought || 'Command executed across system mesh.';
-      intent = decision.actionName || 'orchestrate';
-      targetSubsystem = decision.targetSubsystem || '';
-
-      organsUsed = decision.organsUsed || [];
-
+      const result = await OrganApi.command(text, undefined, 'global-command-console');
+      const resultText = String(result?.output || result?.message || 'Command completed.');
+      const organsUsed: string[] = Array.isArray(result?.organs_used) ? result.organs_used : Array.isArray(result?.organsUsed) ? result.organsUsed : [];
       const latency = Date.now() - t0;
-
+      const diagnostics = result?.diagnostics || {};
       const newLog: CommandLogItem = {
         id: `cmd-${Date.now()}`,
         query: text,
-        intent,
+        intent: diagnostics?.stages?.at?.(-1) || 'orchestrate',
         response: resultText,
-        speech: decision.speech,
+        speech: resultText,
         organsUsed,
         latencyMs: latency,
         timestamp: new Date().toLocaleTimeString(),
-        success: true,
-        agent: decision.actionName ? decision.actionName.toUpperCase() : 'CENTRAL_COMMAND'
+        success: result?.success !== false,
+        agent: 'CENTRAL_COMMAND'
       };
-
       setLogs(prev => [newLog, ...prev.slice(0, 30)]);
       sound.playSuccess();
-
-      // Voice output
-      if (decision.speech && voice.isEnabled()) {
-        await deliverSpokenResponse(decision,text=>voice.speak(text));
-      }
-
-      // Navigate if Groq determined target space
-      if (targetSubsystem && onNavigate) {
-        onNavigate(targetSubsystem as Subsystem);
-      }
-
-      loadSystemSnapshot();
+      if (resultText && voice.isEnabled()) await voice.speak(resultText);
+      await loadSystemSnapshot();
     } catch (err: any) {
       const latency = Date.now() - t0;
       setLogs(prev => [{
@@ -258,9 +234,9 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-cyan-500/25 bg-cyan-950/30">
             <div className="flex items-center gap-3">
               <Terminal className="text-cyan-400 animate-pulse" size={18} />
-              <span className="text-sm font-bold tracking-wider text-white">GLOBAL COMMAND CONSOLE // GROQ CENTRAL COMMAND</span>
+              <span className="text-sm font-bold tracking-wider text-white">GLOBAL COMMAND CONSOLE // LIVE EXECUTION SPINE</span>
               <span className="px-2 py-0.5 text-[10px] bg-cyan-950 border border-cyan-500/40 rounded text-cyan-300">
-                LEVEL 6 LIVE
+                LIVE BACKEND
               </span>
             </div>
 
@@ -489,30 +465,30 @@ export default function GlobalCommandConsole({ isOpen, onClose, onNavigate, acti
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 rounded-xl bg-black/50 border border-cyan-500/20">
                     <span className="text-[10px] text-cyan-500/60 uppercase block">Total Organs</span>
-                    <span className="text-xl text-white font-bold">235 Live</span>
-                    <span className="text-[10px] text-emerald-400 block mt-1">100% Operational</span>
+                    <span className="text-xl text-white font-bold">{systemSnapshot?.total_organs ?? '—'}</span>
+                    <span className="text-[10px] text-emerald-400 block mt-1">{systemSnapshot ? `${systemSnapshot.active_count ?? 0} active / ${systemSnapshot.error_count ?? 0} error` : 'Loading live metrics'}</span>
                   </div>
                   <div className="p-3 rounded-xl bg-black/50 border border-cyan-500/20">
                     <span className="text-[10px] text-cyan-500/60 uppercase block">Groq LPU Layer</span>
-                    <span className="text-xl text-cyan-300 font-bold">qwen/3.8-27b</span>
-                    <span className="text-[10px] text-cyan-400 block mt-1">Sub-second Latency</span>
+                    <span className="text-xl text-cyan-300 font-bold">{systemSnapshot ? `${systemSnapshot.avg_latency_ms ?? 0} ms` : '—'}</span>
+                    <span className="text-[10px] text-cyan-400 block mt-1">Measured average organ latency</span>
                   </div>
                   <div className="p-3 rounded-xl bg-black/50 border border-cyan-500/20">
                     <span className="text-[10px] text-cyan-500/60 uppercase block">Vector Memory</span>
-                    <span className="text-xl text-emerald-400 font-bold">Connected</span>
-                    <span className="text-[10px] text-cyan-500/60 block mt-1">Supabase Lattice</span>
+                    <span className="text-xl text-emerald-400 font-bold">{systemSnapshot?.system_health ?? '—'}</span>
+                    <span className="text-[10px] text-cyan-500/60 block mt-1">Registry system health</span>
                   </div>
                   <div className="p-3 rounded-xl bg-black/50 border border-cyan-500/20">
                     <span className="text-[10px] text-cyan-500/60 uppercase block">Safety Directive</span>
-                    <span className="text-xl text-white font-bold">Chapter 15</span>
-                    <span className="text-[10px] text-emerald-400 block mt-1">100.0% Pass</span>
+                    <span className="text-xl text-white font-bold">{systemSnapshot ? `${Math.round((systemSnapshot.avg_success_rate ?? 0)*100)}%` : '—'}</span>
+                    <span className="text-[10px] text-emerald-400 block mt-1">Measured average success rate</span>
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl bg-black/60 border border-cyan-500/25 space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-white border-b border-cyan-500/15 pb-2">
                     <span>Active System Subsystems (15 Rooms)</span>
-                    <span className="text-emerald-400">All Nominal</span>
+                    <span className={systemSnapshot?.error_count ? "text-amber-400" : "text-emerald-400"}>{systemSnapshot ? `${systemSnapshot.active_count ?? 0} active, ${systemSnapshot.error_count ?? 0} errors` : 'Loading'}</span>
                   </div>
 
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-[11px]">
