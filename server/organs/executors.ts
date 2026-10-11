@@ -8,6 +8,7 @@ import { executeEvolutionOrgan } from "./organs/evolutionOrgan";
 import { executeReflexOrgan } from "./organs/reflexOrgan";
 import { executeSchedulerOrgan } from "./organs/schedulerOrgan";
 import { executeWorldModelOrgan } from "./organs/worldModelOrgan";
+import { executeEvaluationOrgan, executeKnowledgeOrgan, executeReflectionOrgan, executeUncertaintyOrgan, executePolicyOrgan, executeParagonOrgan } from "./organs/cognitiveAssuranceOrgan";
 import { governanceEngine } from "../../microfixd/backend/core/governance/engine";
 import { missionEngine } from "../../microfixd/backend/core/mission/engine";
 import { memory } from "../../microfixd/backend/core/memory/state";
@@ -51,6 +52,13 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   subagent_mesh_arbiter: executeWorldModelOrgan,
   emergency_kill_switch: executeWorldModelOrgan,
   anti_drift_anchor: executeWorldModelOrgan,
+  critic_organ: executeEvaluationOrgan,
+  knowledge_retriever: executeKnowledgeOrgan,
+  reflection_organ: executeReflectionOrgan,
+  uncertainty_detector: executeUncertaintyOrgan,
+  epistemic_uncertainty_scorer: executeUncertaintyOrgan,
+  policy_verifier: executePolicyOrgan,
+  paragon: executeParagonOrgan,
 
   // LangGraph Core Systemic Organs
   "core.model": async (action, payload: any) => {
