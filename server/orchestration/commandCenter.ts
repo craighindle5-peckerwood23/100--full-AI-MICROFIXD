@@ -30,6 +30,7 @@ import { resolveExecutableOrgans } from "../classification";
 import { EXECUTORS, getExecutor } from "../organs/executors";
 import { telemetry }             from "../../microfixd/backend/core/telemetry/grid";
 import { executeEvaluationOrgan, executeUncertaintyOrgan, executeParagonOrgan } from "../organs/organs/cognitiveAssuranceOrgan";
+import { probeOrgan } from "../organs/probes";
 
 export interface CommandRequest {
   task:        string;
@@ -332,97 +333,55 @@ function finalize(
 }
 
 /**
- * 200% CAPACITY FULL SYSTEM LOAD TEST
- * Fires simultaneous stress batches through all 235 organs + agent society.
- * Verifies zero shorts, zero leaks, and complete end-to-end pipeline integrity.
+ * Governed read-only organ load test.
+ * Exercises registry routing/canary probe paths only; it does not execute
+ * arbitrary organ actions, deploy, write files, or promote changes.
  */
-export async function runSystemLoadTest(concurrencyFactor: number = 2.0) {
-  const startTime = Date.now();
-  const allOrgans = organRegistry.all();
-  const testId = `load_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+export async function runSystemLoadTest(concurrencyFactor:number=1.0){
+  const factor=Math.max(0.1,Math.min(2,Number.isFinite(concurrencyFactor)?concurrencyFactor:1));
+  const started=Date.now();
+  const all=organRegistry.all();
+  const requestId=`probe_load_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+  const target=Math.max(1,Math.round(all.length*factor));
+  const heapBefore=process.memoryUsage().heapUsed;
+  broadcast("load_test:started",{testId:requestId,totalOrgans:all.length,probeOperations:target,concurrencyFactor:factor,timestamp:new Date().toISOString()});
 
-  broadcast("load_test:started", {
-    testId,
-    totalOrgans: allOrgans.length,
-    concurrencyFactor: `${Math.round(concurrencyFactor * 100)}%`,
-    timestamp: new Date().toISOString()
-  });
+  const tasks=Array.from({length:target},(_,i)=>(async()=>{
+    const organ=all[i%all.length];const t=performance.now();
+    try{
+      const result=await probeOrgan(organ.id,`${requestId}:${i}`,'system-load-test');
+      return{organId:organ.id,success:true,latency:Math.round((performance.now()-t)*10)/10,nativeExecutor:Boolean(result.native_executor)};
+    }catch(error){
+      return{organId:organ.id,success:false,latency:Math.round((performance.now()-t)*10)/10,error:String(error).slice(0,240),nativeExecutor:false};
+    }
+  })());
 
-  const targetCalls = Math.round(allOrgans.length * concurrencyFactor);
-  const tasks: Promise<{ organId: string; success: boolean; latency: number; error?: string }>[] = [];
-
-  // Create simultaneous execution promises for every organ scaled by 200%
-  for (let i = 0; i < targetCalls; i++) {
-    const organ = allOrgans[i % allOrgans.length];
-    tasks.push((async () => {
-      const callStart = performance.now();
-      try {
-        const executor = EXECUTORS[organ.id] || getExecutor(organ.id);
-        const action = getDefaultActionForOrgan(organ.id);
-        const payload = getDefaultPayloadForOrgan(organ.id, `Load test iteration #${i + 1}`);
-
-        await executor(action, payload);
-        const lat = Math.round(performance.now() - callStart);
-        organRegistry.recordExec(organ.id, true, lat, `load_test_${action}`);
-        return { organId: organ.id, success: true, latency: lat };
-      } catch (err: any) {
-        const lat = Math.round(performance.now() - callStart);
-        organRegistry.recordExec(organ.id, false, lat, "load_test_failure", String(err));
-        return { organId: organ.id, success: false, latency: lat, error: err?.message || String(err) };
-      }
-    })());
-  }
-
-  const results = await Promise.all(tasks);
-  const totalDuration = Date.now() - startTime;
-  const successfulCalls = results.filter(r => r.success).length;
-  const failedCalls = results.filter(r => !r.success);
-
-  const latencies = results.map(r => r.latency).sort((a, b) => a - b);
-  const p50 = latencies[Math.floor(latencies.length * 0.5)] || 0;
-  const p95 = latencies[Math.floor(latencies.length * 0.95)] || 0;
-  const p99 = latencies[Math.floor(latencies.length * 0.99)] || 0;
-  const avgLatency = Math.round(latencies.reduce((a, b) => a + b, 0) / (latencies.length || 1));
-
-  const throughput = Math.round((results.length / (totalDuration / 1000)) * 10) / 10;
-
-  const report = {
-    testId,
-    timestamp: new Date().toISOString(),
-    capacityRun: `${Math.round(concurrencyFactor * 100)}%`,
-    totalOrgansEngaged: allOrgans.length,
-    totalOperationsDispatched: results.length,
-    successfulOperations: successfulCalls,
-    failedOperations: failedCalls.length,
-    successRate: `${((successfulCalls / (results.length || 1)) * 100).toFixed(1)}%`,
-    totalDurationMs: totalDuration,
-    throughputOpsPerSec: throughput,
-    latency: {
-      avgMs: avgLatency,
-      p50Ms: p50,
-      p95Ms: p95,
-      p99Ms: p99,
-      minMs: latencies[0] || 0,
-      maxMs: latencies[latencies.length - 1] || 0
-    },
-    systemState: failedCalls.length === 0 ? "NOMINAL_MAX_PERFORMANCE" : "DEGRADED",
-    pipelineIntegrity: {
-      circuitBreaker: "NOMINAL",
-      memoryLeakDetected: false,
-      shortsDetected: false,
-      deadlocks: false,
-      constitutionalDirectiveCompliance: "100.0%"
-    },
-    failures: failedCalls.slice(0, 10)
+  const results=await Promise.all(tasks);
+  const duration=Date.now()-started;
+  const latencies=results.map(r=>r.latency).sort((a,b)=>a-b);
+  const percentile=(p:number)=>latencies[Math.min(latencies.length-1,Math.floor(latencies.length*p))]||0;
+  const failures=results.filter(r=>!r.success);
+  const successes=results.length-failures.length;
+  const heapAfter=process.memoryUsage().heapUsed;
+  const report={
+    testId:requestId,
+    timestamp:new Date().toISOString(),
+    mode:"read_only_probe",
+    concurrencyFactor:factor,
+    registeredOrgans:all.length,
+    probeOperations:results.length,
+    successfulOperations:successes,
+    failedOperations:failures.length,
+    successRate:results.length?successes/results.length:0,
+    nativeExecutorProbeCount:results.filter(r=>r.nativeExecutor).length,
+    totalDurationMs:duration,
+    throughputOpsPerSec:duration>0?Math.round(results.length/(duration/1000)*10)/10:results.length,
+    latency:{avgMs:latencies.length?Math.round(latencies.reduce((a,b)=>a+b,0)/latencies.length*10)/10:0,p50Ms:percentile(.5),p95Ms:percentile(.95),p99Ms:percentile(.99),minMs:latencies[0]||0,maxMs:latencies.at(-1)||0},
+    memory:{heapUsedBeforeBytes:heapBefore,heapUsedAfterBytes:heapAfter,heapDeltaBytes:heapAfter-heapBefore,note:"Heap delta is measured; leak detection requires longitudinal profiling and is not inferred from one run."},
+    systemHealth:organRegistry.systemHealth(),
+    failures:failures.slice(0,25),
   };
-
-  telemetry.push("load_test_execution", {
-    testId,
-    operations: results.length,
-    successRate: report.successRate,
-    durationMs: totalDuration
-  });
-
-  broadcast("load_test:complete", report);
+  telemetry.push("load_test_execution",{testId:requestId,operations:results.length,successRate:report.successRate,durationMs:duration,mode:report.mode});
+  broadcast("load_test:complete",report);
   return report;
 }
