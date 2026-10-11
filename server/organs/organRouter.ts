@@ -11,6 +11,7 @@ import { getSystemSnapshot } from "./organMetrics";
 import {randomUUID} from "node:crypto";
 import {dispatchOrgan} from "./dispatch";
 import {probeCanary} from "./probes";
+import {EXECUTORS} from "./executors";
 
 export const organRouter = Router();
 
@@ -85,7 +86,8 @@ organRouter.get("/:id", (req, res) => {
   res.json({
     organ,
     capabilities: {
-      executable: true,
+      executable: Object.hasOwn(EXECUTORS, organ.id),
+      native_executor: Object.hasOwn(EXECUTORS, organ.id),
       isolated: organ.isolated,
       status: organ.status,
       layer: organ.layer,
