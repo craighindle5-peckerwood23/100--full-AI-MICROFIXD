@@ -140,7 +140,7 @@
       "layer": "server",
       "source": "server/organs/organRegistry.ts",
       "node": "server/organs/index.ts",
-      "executable": false
+      "executable": true
     },
     {
       "id": "federation",
