@@ -7,7 +7,7 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "server": "node --import tsx server/index.ts",
     "dev:all": "node scripts/dev-all.mjs",
-    "build": "tsc --noEmit && npm run build:cognitive-shell && npm test && npm run validate:classification && npm run evaluate:release && vite build",
+    "build": "npm run prepare:cognitive-shell && tsc --noEmit && npm run build:cognitive-shell && npm test && npm run validate:classification && npm run evaluate:release && vite build",
     "audit:report": "node scripts/audit-dependencies.mjs",
     "preview": "vite preview",
     "start": "node --import tsx server/index.ts",
@@ -24,7 +24,8 @@
     "evaluate:release": "node --import tsx scripts/evaluate-release.ts",
     "verify:production": "bash scripts/verify-production.sh",
     "test:system-probes": "node scripts/probe-system.mjs",
-    "build:cognitive-shell": "tsc -p cognitive-shell/tsconfig.json --noEmit && vite build cognitive-shell --config cognitive-shell/vite.config.ts"
+    "build:cognitive-shell": "tsc -p cognitive-shell/tsconfig.json --noEmit && vite build cognitive-shell --config cognitive-shell/vite.config.ts",
+    "prepare:cognitive-shell": "npm install --prefix cognitive-shell --include=dev --no-audit --no-fund"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
