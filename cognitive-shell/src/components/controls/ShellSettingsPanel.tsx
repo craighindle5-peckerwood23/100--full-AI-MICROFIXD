@@ -1,0 +1,1 @@
+import React from'react';export const ShellSettingsPanel=({open}:{open:boolean})=>open?<section className="mx-settings">SHELL // ISOLATED PRESENTATION LAYER</section>:null;

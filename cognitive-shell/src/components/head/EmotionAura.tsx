@@ -1,0 +1,1 @@
+import React from'react';import type{ShellEmotion}from'../../integration/ShellAPI';export const EmotionAura=({emotion}:{emotion:ShellEmotion})=><div className={'mx-aura '+emotion} aria-hidden/>;

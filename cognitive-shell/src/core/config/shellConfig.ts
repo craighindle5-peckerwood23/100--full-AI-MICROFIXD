@@ -1,0 +1,1 @@
+import type{ShellConfig}from'../../integration/ShellAPI';export const DEFAULT_SHELL_CONFIG:Omit<ShellConfig,'mountSelector'>={theme:'plaid-killer',title:'MICROFIXD',reducedMotion:false};

@@ -1,0 +1,1 @@
+import type{ShellChannels,Unsubscribe}from'../integration/ShellAPI';import type{StoreApi}from'zustand/vanilla';import type{ShellState}from'./shellState';export function attachTelemetry(store:StoreApi<ShellState>,channels:ShellChannels):Unsubscribe{const sub=channels.telemetry$.subscribe(e=>store.getState().ingest(e));return typeof sub==='function'?sub:()=>sub.unsubscribe()}

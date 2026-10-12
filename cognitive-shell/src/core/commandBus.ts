@@ -1,0 +1,1 @@
+import type{ShellCommand}from'../integration/ShellAPI';export type CommandBus={send(command:ShellCommand):Promise<void>};export const createCommandBus=(sender:(c:ShellCommand)=>void|Promise<void>):CommandBus=>({async send(c){await sender(c)}});

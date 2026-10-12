@@ -39,7 +39,8 @@ orchestratorRouter.post("/run", async (req, res) => {
 });
 
 orchestratorRouter.post("/load-test", async (req, res) => {
-  const factor = Number(req.body?.concurrencyFactor ?? 2.0);
+  const requested = Number(req.body?.concurrencyFactor ?? 1.0);
+  const factor = Math.max(0.1, Math.min(2.0, Number.isFinite(requested) ? requested : 1.0));
   try {
     const report = await runSystemLoadTest(factor);
     res.json(report);

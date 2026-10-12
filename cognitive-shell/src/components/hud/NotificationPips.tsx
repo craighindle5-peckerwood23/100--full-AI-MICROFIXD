@@ -1,0 +1,1 @@
+import React from'react';export const NotificationPips=({severity}:{severity:'info'|'warn'|'error'})=><div className={'mx-pip '+severity} title={severity}/>;

@@ -3,8 +3,8 @@ import type {SettingsSection} from '../rooms/SettingsRoom';
 import {deliverSpokenResponse} from '../../lib/outputDelivery';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Subsystem, AvatarState } from '../../types';
-import Avatar from './Avatar';
+import { Subsystem } from '../../types';
+import CognitiveShellBridge from './CognitiveShellBridge';
 import OrbitRing from './OrbitRing';
 import { 
   Rocket, 
@@ -36,6 +36,8 @@ import {
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
 import { omniRouter } from '../../utils/omniRouter';
+import { api, AuthenticationRequiredError } from '../../lib/serverApi';
+import { requestOperatorAccess } from '../../lib/operatorAccess';
 import { getSupabaseCredentials, saveUIState, getUIState } from '../../lib/supabase';
 import { autonomousCore } from '../../autonomy/autonomousCore';
 
@@ -93,7 +95,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function OSShell({ onReboot }: Props) {
-  const [activeSubsystem, setActiveSubsystem] = useState<Subsystem>('workspace');
+  const [activeSubsystem, setActiveSubsystem] = useState<Subsystem>('mission_control');
   const [isMuted, setIsMuted] = useState(sound.isMuted);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(voice.isEnabled());
   const [isSpeaking, setIsSpeaking] = useState(voice.isSpeaking());
@@ -109,7 +111,7 @@ export default function OSShell({ onReboot }: Props) {
   // Starts open (full "hologram + orbit" view) right after boot; once a room
   // is picked it shrinks to a small always-present corner icon that can be
   // clicked again at any time to reopen the orbit menu.
-  const [orbitOpen, setOrbitOpen] = useState(false);
+  const [orbitOpen, setOrbitOpen] = useState(true);
   const [settingsSection,setSettingsSection]=useState<SettingsSection | null>(null);
 
   useEffect(()=>{
@@ -117,21 +119,6 @@ export default function OSShell({ onReboot }: Props) {
     window.addEventListener('microfixd:auth-required',openAccess);
     return ()=>window.removeEventListener('microfixd:auth-required',openAccess);
   },[]);
-
-  // Derive the avatar's visual/emotional state from real system signals
-  // instead of a hardcoded value, so the "living" holographic entity
-  // actually reflects autonomous core health, connectivity fallback, and
-  // in-flight commands.
-  const avatarState: AvatarState =
-    fallbackState.active && !fallbackState.dismissed
-      ? 'alert'
-      : watchdogStatus.status === 'REPAIRING'
-      ? 'processing'
-      : isCommandRunning
-      ? 'processing'
-      : isSpeaking
-      ? 'learning'
-      : 'idle';
 
   // Subscribe to voice synthesis & autonomous core state
   useEffect(() => {
@@ -212,41 +199,41 @@ export default function OSShell({ onReboot }: Props) {
     setIsCommandRunning(true);
 
     try {
-      // Intelligence Central Command & Main Orchestrator (Groq / OmniRouter)
-      const decision = await omniRouter.evaluateAndOrchestrate(query, activeSubsystem);
-
-      // 1. If Groq decides to target or switch a subsystem, navigate smoothly
-      if (decision.targetSubsystem && decision.targetSubsystem !== activeSubsystem) {
-        handleNavigate(decision.targetSubsystem as Subsystem);
+      const run = async () => api<any>('POST', '/command/run', {
+        task: query,
+        source: 'os-shell',
+        priority: 'normal',
+        context: { activeSubsystem }
+      });
+      let result;
+      try {
+        result = await run();
+      } catch (err) {
+        if (err instanceof AuthenticationRequiredError) {
+          await requestOperatorAccess();
+          result = await run();
+        } else {
+          throw err;
+        }
       }
 
-      // 2. If Groq decides to dispatch an agent action, dispatch to agent matrix
-      if (decision.actionName) {
-        fetch('/api/agents/dispatch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: decision.actionName, query }),
-        }).catch(() => {});
+      const output = String(result?.output || result?.message || '');
+      if (output && voice.isEnabled()) {
+        await voice.speak(output);
       }
 
-      // 3. Speak the contoured, natural expressive speech output aloud
-      if (decision.speech && voice.isEnabled()) {
-        await deliverSpokenResponse(decision,text=>voice.speak(text));
-      }
-
-      // 4. Persist interaction to Supabase UI State
       saveUIState({
         last_command: query,
         state_data: {
-          lastThought: decision.thought,
-          lastProvider: decision.providerUsed,
-          lastAnswer: decision.detailedAnswer,
-          latencyMs: decision.latencyMs
+          lastAnswer: output,
+          commandId: result?.cmdId,
+          success: result?.success !== false,
+          organsUsed: result?.organs_used || result?.organsUsed || []
         }
       });
     } catch (err) {
-      console.error('[command] Output incomplete:', err);
-      void voice.speak(`Command or playback failed. ${String(err)}`).catch(() => {});
+      console.error('[command] Backend command failed:', err);
+      void voice.speak('Command execution failed. Check the command console for diagnostics.').catch(() => {});
     } finally {
       setIsCommandRunning(false);
     }
@@ -304,19 +291,19 @@ export default function OSShell({ onReboot }: Props) {
       <header className="w-full z-40 px-4 py-2.5 border-b border-cyan-500/20 bg-black/80 backdrop-blur-xl flex flex-wrap items-center justify-between gap-3 shrink-0">
         {/* Left: Branding & Status */}
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-cyan-950/80 border border-cyan-400/50 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.5)]">
+          <button onClick={()=>setOrbitOpen(v=>!v)} className="w-7 h-7 rounded-lg bg-cyan-950/80 border border-cyan-400/50 flex items-center justify-center shadow-[0_0_10px_rgba(6,182,212,0.5)] hover:bg-cyan-900/80" title="Toggle cognitive core navigation">
             <span className="font-black text-xs text-white">MFX</span>
-          </div>
+          </button>
 
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-white tracking-widest">MICROFYXD OS</span>
               <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-400/40 text-cyan-300 font-bold">
-                LEVEL 6 SYNTHETIC AI
+                LIVE COGNITIVE OS
               </span>
             </div>
             <span className="text-[10px] text-cyan-500/80 hidden sm:inline">
-              RING-0 MICROKERNEL v6.2.0 &bull; ZERO-TRUST LATTICE
+              GOVERNED RUNTIME &bull; LIVE TELEMETRY
             </span>
           </div>
         </div>
@@ -344,10 +331,9 @@ export default function OSShell({ onReboot }: Props) {
       {/* VISUAL INDICATOR SYSTEM: FALLBACK ALERT BANNER WITH UNDO / MANUAL OVERRIDE */}
       <FallbackAlertBanner onOpenAutonomyRoom={() => handleNavigate('autonomy')} />
 
-      {/* HOLOGRAPHIC CORE: the always-present avatar entity + glassmorphic
+      {/* HOLOGRAPHIC CORE: detachable cognitive shell + glassmorphic
           orbit ring that drops you into any room. Sits above everything
-          else; shrinks to a corner icon once a room is chosen, and can be
-          reopened at any time by clicking the avatar again. */}
+          else; the navigation ring can be reopened from the MFX core button. */}
       <div className="fixed inset-0 z-[35] pointer-events-none">
         {orbitOpen && <OrbitRing
           onOpenSettings={()=>{setSettingsSection('general');setOrbitOpen(false);}}
@@ -359,19 +345,14 @@ export default function OSShell({ onReboot }: Props) {
         />}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="pointer-events-auto">
-            <Avatar
-              state={avatarState}
-              isZoomed={!orbitOpen}
-              onClick={() => setOrbitOpen(o => !o)}
-              speechText={isSpeaking ? 'Synthesizing response...' : null}
-            />
+            <CognitiveShellBridge />
           </div>
         </div>
       </div>
 
       {/* MODERN OS NAVIGATION SPACE SELECTOR (Tabs / Pills) */}
       <nav aria-label="Main workspace navigation" className="w-full z-30 px-3 py-1.5 bg-black/60 border-b border-cyan-500/20 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
-        {NAV_ITEMS.filter(item => ['workspace','sandbox'].includes(item.id)).map(item => {
+        {NAV_ITEMS.filter(item => ['mission_control','ai_core','agents','workspace','infra'].includes(item.id)).map(item => {
           const isActive = activeSubsystem === item.id;
           const Icon = item.icon;
 
@@ -399,7 +380,7 @@ export default function OSShell({ onReboot }: Props) {
         <span className="ml-auto hidden sm:block px-3 text-[10px] text-slate-500">{NAV_ITEMS.find(item=>item.id===activeSubsystem)?.label}</span>
       </nav>
 
-      {/* MAIN VIEWPORT: COMPLETE NEW PAGE (NO OVERLAY, NO HOLOGRAPHIC HEAD) */}
+      {/* MAIN VIEWPORT: host rooms beneath persistent detachable cognitive shell */}
       <main className="flex-1 w-full overflow-hidden relative z-10 flex flex-col">
         <AnimatePresence mode="wait">
           <motion.div

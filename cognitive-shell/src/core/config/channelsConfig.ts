@@ -1,0 +1,1 @@
+export const CHANNELS={websocket:'/ws',command:'/api/command/run',health:'/api/health/deep'} as const;

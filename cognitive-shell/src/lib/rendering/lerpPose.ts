@@ -1,0 +1,1 @@
+import type{ShellViewModel}from'../../integration/ShellAPI';export function lerpPose(a:ShellViewModel['pose'],b:ShellViewModel['pose'],t:number){return{yaw:a.yaw+(b.yaw-a.yaw)*t,pitch:a.pitch+(b.pitch-a.pitch)*t,attention:a.attention+(b.attention-a.attention)*t}}

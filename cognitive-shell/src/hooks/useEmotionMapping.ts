@@ -1,0 +1,1 @@
+import{useMemo}from'react';import{telemetryToEmotion}from'../core/mapping/telemetryToEmotion';import type{TelemetryEvent}from'../integration/ShellAPI';export const useEmotionMapping=(event:TelemetryEvent)=>useMemo(()=>telemetryToEmotion(event),[event]);

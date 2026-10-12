@@ -1,0 +1,1 @@
+import React from'react';export const FaceMesh=()=> <div className="mx-face-grid" aria-hidden/>;

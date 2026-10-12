@@ -1,0 +1,1 @@
+import React from'react';export const ShellRouter=({mode}:{mode:string})=><div className="mx-view-label">{mode.toUpperCase()}</div>;

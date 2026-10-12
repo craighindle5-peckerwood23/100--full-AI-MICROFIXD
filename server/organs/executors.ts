@@ -8,6 +8,7 @@ import { executeEvolutionOrgan } from "./organs/evolutionOrgan";
 import { executeReflexOrgan } from "./organs/reflexOrgan";
 import { executeSchedulerOrgan } from "./organs/schedulerOrgan";
 import { executeWorldModelOrgan } from "./organs/worldModelOrgan";
+import { executeEvaluationOrgan, executeKnowledgeOrgan, executeReflectionOrgan, executeUncertaintyOrgan, executePolicyOrgan, executeParagonOrgan } from "./organs/cognitiveAssuranceOrgan";
 import { governanceEngine } from "../../microfixd/backend/core/governance/engine";
 import { missionEngine } from "../../microfixd/backend/core/mission/engine";
 import { memory } from "../../microfixd/backend/core/memory/state";
@@ -42,7 +43,6 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   world_model: executeWorldModelOrgan,
   world_thinking_engine: executeWorldModelOrgan,
   counterfactual_simulator: executeWorldModelOrgan,
-  epistemic_uncertainty_scorer: executeWorldModelOrgan,
   future_state_projector: executeWorldModelOrgan,
   invariance_verifier: executeWorldModelOrgan,
   hallucination_pruner: executeWorldModelOrgan,
@@ -51,68 +51,71 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   subagent_mesh_arbiter: executeWorldModelOrgan,
   emergency_kill_switch: executeWorldModelOrgan,
   anti_drift_anchor: executeWorldModelOrgan,
+  critic_organ: executeEvaluationOrgan,
+  knowledge_retriever: executeKnowledgeOrgan,
+  reflection_organ: executeReflectionOrgan,
+  uncertainty_detector: executeUncertaintyOrgan,
+  epistemic_uncertainty_scorer: executeUncertaintyOrgan,
+  policy_verifier: executePolicyOrgan,
+  paragon: executeParagonOrgan,
 
   // LangGraph Core Systemic Organs
-  "core.model": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    const prompt = typeof payload === "string" ? payload : payload?.prompt || payload?.task || "Model inquiry";
-    const res = organs ? await organs.model.generate(prompt) : `Model generated for "${prompt}"`;
-    return { output: res, action, status: "completed" };
+  "core.model": async (_action, payload: any) => {
+    const prompt = typeof payload === "string" ? payload : payload?.prompt || payload?.task;
+    if (!prompt) throw new Error("CORE_MODEL_PROMPT_REQUIRED");
+    return executeBrainOrgan("complete", { messages:[{role:"user",content:String(prompt)}], session_id:payload?.session_id || "core" });
   },
   "core.tools": async () => {
     const organs = getCognitiveOrgans();
-    return { tools: organs?.tools.getAvailableTools() || ["analyze", "repair", "deploy"], status: "available" };
+    if (!organs) throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { tools: organs.tools.getAvailableTools(), status: "registered" };
   },
   "core.memory": async (action, payload: any) => {
     return executeMemoryOrgan(action, payload);
   },
-  "core.legal": async (action) => {
-    const organs = getCognitiveOrgans();
-    const compliant = organs ? organs.legal.verifyDirectiveCompliance(action) : true;
-    return { compliant, directive: "Chapter 15 Compliance", action };
-  },
+  "core.legal": async (action,payload:any) => executePolicyOrgan(action,{...payload,actionName:payload?.actionName||action,agentKey:payload?.agentKey||"core.legal"}),
   "core.web": async (action, payload: any) => {
     return executePlaywrightOrgan(action, payload);
   },
-  "core.deployment": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    const deployRes = organs ? await organs.deployment.deploy(payload || {}) : { status: "deployed", timestamp: Date.now() };
-    return deployRes;
+  "core.deployment": async () => {
+    throw new Error("CORE_DEPLOYMENT_REQUIRES_GOVERNED_DEPLOYMENT_PIPELINE");
   },
   "core.router": async (action, payload: any) => {
     const organs = getCognitiveOrgans();
-    return organs ? await organs.router.route({ type: action, payload }) : { routed: true, action };
+    if (!organs) throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return organs.router.route({ type: action, payload });
   },
   "core.scheduler": async (action, payload: any) => {
     return executeSchedulerOrgan(action, payload);
   },
   "core.loop": async () => {
     const organs = getCognitiveOrgans();
-    if (organs) organs.loop.start();
-    return { status: "running", loop: "BackgroundLoopEngine" };
+    if (!organs) throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    organs.loop.start();
+    return { status: "started", loop: "BackgroundLoopEngine" };
   },
-  "core.repair": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    return { status: "nominal", repaired: true, payload };
+  "core.repair": async () => {
+    throw new Error("CORE_REPAIR_REQUIRES_SANDBOX_VERIFICATION_AND_APPROVAL");
   },
-  "core.autoDeploy": async (action, payload: any) => {
-    return { deployed: true, timestamp: Date.now(), config: payload };
+  "core.autoDeploy": async () => {
+    throw new Error("CORE_AUTODEPLOY_REQUIRES_GOVERNED_PROMOTION_PIPELINE");
   },
   "core.mission": async () => {
     return { mission: missionEngine.getCurrentMission(), status: "active" };
   },
   "core.feedback": async () => {
-    return { status: "feedback_loop_active", timestamp: Date.now() };
+    const organs=getCognitiveOrgans();
+    if(!organs)throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { status: "registered", organ: "CognitiveFeedbackLoop" };
   },
-  "core.paragon": async (action, payload: any) => {
-    const organs = getCognitiveOrgans();
-    return organs ? organs.paragon.dissect(action, payload) : { dissected: true };
-  },
+  "core.paragon": async (action, payload: any) => executeParagonOrgan(action,payload),
   "core.federation": async () => {
-    return { federation: "MCP_DISTRIBUTED", status: "synchronized" };
+    const organs=getCognitiveOrgans();if(!organs)throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { federation: "FederationLayer", status: "registered" };
   },
   "core.emotion": async () => {
-    return { emotion: "focused", valence: 0.98, status: "optimal" };
+    const organs=getCognitiveOrgans();if(!organs)throw new Error("COGNITIVE_ORGANS_UNAVAILABLE");
+    return { engine: "SyntheticEmotionEngine", status: "registered", note:"No emotional state is fabricated by this status call." };
   },
   "core.reflex": async (action, payload: any) => {
     return executeReflexOrgan(action, payload);
@@ -120,18 +123,10 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   "core.voice": async (action, payload: any) => {
     return executeVoiceOrgan(action, payload);
   },
-  "core.voiceOut": async (action, payload: any) => {
-    return { audioStream: "active", action, payload };
-  },
-  "core.voiceEmotion": async () => {
-    return { emotion: "confident", pitchHz: 210, valence: 0.95 };
-  },
-  "core.voiceGrammar": async (action, payload: any) => {
-    return { grammarState: "PARSED", payload };
-  },
-  "core.wiring": async (action, payload: any) => {
-    return { wiringMesh: "SYNCHRONIZED", nodes: 235, timestamp: Date.now() };
-  },
+  "core.voiceOut": async () => ({ organ:"VoiceOutputOrgan", status:"registered" }),
+  "core.voiceEmotion": async () => ({ organ:"VoiceEmotionOrgan", status:"registered" }),
+  "core.voiceGrammar": async () => ({ organ:"VoiceCommandGrammarEngine", status:"registered" }),
+  "core.wiring": async () => ({ organ:"UnifiedWiringOrgan", status:"registered" }),
 };
 
 /**
@@ -150,35 +145,20 @@ export function getExecutor(organId: string): ExecutorFn {
     // 1. Agent society execution
     if (organId.startsWith("agent_")) {
       const agentKey = organId.replace("agent_", "").toLowerCase();
-      const registeredAgent = agentRegistry[agentKey] || agentRegistry["optimize"] || agentRegistry["analyze"];
-      
+      const registeredAgent = agentRegistry[agentKey];
+      if (!registeredAgent || typeof registeredAgent.execute !== "function") {
+        throw new Error(`NO_REGISTERED_AGENT_EXECUTOR:${organId}`);
+      }
       telemetry.push("organ_agent_dispatch", { organ: organId, action, ts: Date.now() });
       memory.logEvent({ type: "agent_organ_exec", agent: organId, action, timestamp: Date.now() });
-
-      let agentResult: unknown = null;
-      if (registeredAgent && typeof registeredAgent.execute === "function") {
-        agentResult = await registeredAgent.execute({
-          mission: missionEngine.getCurrentMission(),
-          memory,
-          telemetry,
-          action,
-          payload: p
-        });
-      }
-
-      return {
-        executed: true,
-        organ: organId,
-        agent: agentKey,
+      const agentResult = await registeredAgent.execute({
+        mission: missionEngine.getCurrentMission(),
+        memory,
+        telemetry,
         action,
-        status: "completed",
-        timestamp: ts,
-        result: agentResult ?? {
-          task: p.task ?? `Autonomous action '${action}' completed by ${organId}`,
-          compliance: "100% Chapter 15 verified",
-          state: "nominal"
-        }
-      };
+        payload: p
+      });
+      return { executed: true, organ: organId, agent: agentKey, action, status: "completed", timestamp: ts, result: agentResult };
     }
 
     // 2. Governance, Security & Constitutional evaluation
@@ -194,38 +174,12 @@ export function getExecutor(organId: string): ExecutorFn {
       };
     }
 
-    // 3. Telemetry, Sensory & Metric organs
+    // 3. Registered definitions without a native executor are descriptive
+    // capabilities only. Never fabricate sensor readings or execution success.
     if (organId.includes("sensor") || organId.includes("monitor") || organId.includes("telemetry")) {
-      const snapshot = {
-        organ: organId,
-        timestamp: ts,
-        metric: action,
-        value: p.value ?? Math.round((Math.random() * 20 + 20) * 10) / 10,
-        status: "nominal",
-        reading: p.reading ?? "Telemetry channel synchronised at 1000Hz"
-      };
-      telemetry.push(organId, snapshot);
-      return snapshot;
+      throw new Error(`NO_NATIVE_SENSOR_EXECUTOR:${organId}`);
     }
 
-    // 4. Default live execution handler for all remaining systemic organs
-    telemetry.push("organ_action", { organ: organId, action, ts: Date.now() });
-    return {
-      executed: true,
-      organ: organId,
-      action,
-      timestamp: ts,
-      payload: p,
-      output: {
-        status: "success",
-        processed_at: ts,
-        execution_context: "Microfixd Kernel Level-6 Live Organ",
-        metrics: {
-          confidence: 0.99,
-          integrity_hash: `sha256-${Date.now().toString(16)}`,
-          entropy: 0.02
-        }
-      }
-    };
+    throw new Error(`NO_NATIVE_EXECUTOR:${organId}`);
   };
 }

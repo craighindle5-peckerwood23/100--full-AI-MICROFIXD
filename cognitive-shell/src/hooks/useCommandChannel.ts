@@ -1,0 +1,1 @@
+import{useMemo}from'react';import{createCommandBus}from'../core/commandBus';import type{ShellCommand}from'../integration/ShellAPI';export const useCommandChannel=(send:(c:ShellCommand)=>void|Promise<void>)=>useMemo(()=>createCommandBus(send),[send]);

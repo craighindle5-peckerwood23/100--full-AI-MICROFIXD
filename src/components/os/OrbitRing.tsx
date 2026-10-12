@@ -22,8 +22,11 @@ interface OrbitRingProps {
 }
 
 const NODES: { id: Subsystem | 'settings'; icon: React.ElementType; label: string }[] = [
+  {id:'mission_control',icon:Target,label:'Mission'},
+  {id:'ai_core',icon:Brain,label:'AI Core'},
+  {id:'agents',icon:Activity,label:'Agents'},
   {id:'workspace',icon:Layout,label:'Workspace'},
-  {id:'sandbox',icon:Box,label:'Sandbox'},
+  {id:'infra',icon:Server,label:'System'},
   {id:'settings',icon:Settings2,label:'Settings'},
 ];
 
@@ -33,8 +36,8 @@ export default function OrbitRing({ activeSubsystem, onSelect, onOpenSettings }:
   useEffect(() => {
     const handleResize = () => {
       const minDimension = Math.min(window.innerWidth, window.innerHeight);
-      // Adjust radius dynamically based on screen size, with min 120px and max 280px
-      const newRadius = Math.max(120, Math.min(280, (minDimension / 2) - 80));
+      // Adjust radius dynamically based on screen size, with min 130px and max 320px
+      const newRadius = Math.max(130, Math.min(320, (minDimension / 2) - 72));
       setRadius(newRadius);
     };
 
