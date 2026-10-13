@@ -68,7 +68,11 @@ app.use(express.json({ limit: "10mb" }));
 
 // ── Health and boot state (public, read-only) ──────────────────────────────
 configureMemoryTransport(executeMemoryOrgan);
-const cognitiveOrgans = initOrgans();
+let cognitiveOrgans: ReturnType<typeof initOrgans> | null = null;
+function ensureCognitiveOrgans() {
+  if (!cognitiveOrgans) cognitiveOrgans = initOrgans();
+  return cognitiveOrgans;
+}
 
 // Boot readiness for the OS TV: mirrors deep health without auth so the
 // boot screen can show nominal/degraded before the operator logs in.
@@ -102,7 +106,14 @@ app.get("/health", (_, res) => res.redirect(307, "/api/health"));
 
 app.get("/api/health/deep", async (_, res) => {
   let memoryReady = false;
-  try { await cognitiveOrgans.memory.flush(); await executeMemoryOrgan("health", {}); memoryReady = true; } catch {}
+  let organsInitialized = false;
+  try {
+    const organs = ensureCognitiveOrgans();
+    organsInitialized = Boolean(organs.paragon && organs.wiring && organs.memory);
+    await organs.memory.flush();
+    await executeMemoryOrgan("health", {});
+    memoryReady = true;
+  } catch {}
   const records = organRegistry.all();
   const configured = {
     admin: Boolean(process.env.ADMIN_TOKEN),
@@ -115,7 +126,7 @@ app.get("/api/health/deep", async (_, res) => {
     ready,
     ts: new Date().toISOString(),
     runtime: {
-      organsInitialized: Boolean(cognitiveOrgans.paragon && cognitiveOrgans.wiring && cognitiveOrgans.memory),
+      organsInitialized,
       registeredOrgans: records.length,
       failedOrgans: records.filter((organ) => organ.status === "error").map((organ) => organ.id),
       pendingHumanApprovals: getPending().length,
@@ -287,10 +298,22 @@ if (
   const stopPlanner = startPlannerWorker();
   server.once("close", stopPlanner);
   server.listen(PORT, HOST, () => {
-    if(process.env.MICROFIXD_STARTUP_PROBES==='1')void runStartupProbe().catch(()=>console.error('[system-probe] failed'));
     console.log(`\n🧠 Microfixd Backend Server`);
     console.log(`   REST: http://${HOST}:${PORT}/api`);
     console.log(`   WS:   ws://${HOST}:${PORT}/ws`);
     console.log(`   Playwright, Sandbox, HITL, GitHub, MCP — ready\n`);
+
+    // Bind the public port first so Render can promote the instance even when
+    // heavyweight cognitive initialization or external dependencies are slow.
+    setTimeout(() => {
+      try {
+        ensureCognitiveOrgans();
+      } catch (error) {
+        console.error('[organs] initialization failed', error);
+      }
+      if (process.env.MICROFIXD_STARTUP_PROBES === '1') {
+        void runStartupProbe().catch(() => console.error('[system-probe] failed'));
+      }
+    }, 0);
   });
 }
