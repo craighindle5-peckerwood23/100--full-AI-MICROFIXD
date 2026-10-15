@@ -32,6 +32,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/api/github":          "execute",
   "/api/hitl":            "monitor",
   "/api/mcp":             "execute",
+  "/api/plugins":         "execute",
+  "/api/assets":          "execute",
   "/api/classification/resolve": "execute",
   "/api/tools":           "execute",
   "/api/crossai":         "execute",
