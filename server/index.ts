@@ -361,6 +361,10 @@ app.use("/api/crossai", lazyRouter(async () => {
   const { crossAIRouter } = await import("./crossai/crossAIRouter");
   return crossAIRouter;
 }));
+app.use("/api/assets", lazyRouter(async () => {
+  const { assetApiRouter } = await import("./plugins/assetApiRouter");
+  return assetApiRouter;
+}));
 app.use("/api/plugins", lazyRouter(async () => {
   const { pluginRouter } = await import("./plugins/pluginRouter");
   return pluginRouter;
