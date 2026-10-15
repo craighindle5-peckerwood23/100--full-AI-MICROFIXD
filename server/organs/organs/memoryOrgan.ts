@@ -39,7 +39,21 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
   if (action === "context") {
     const requested = Math.max(1,Math.min(100,Number(p.limit ?? process.env.MEMORY_RETRIEVAL_LIMIT) || 10));
     const max_chars = Math.max(1000,Math.min(100000,Number(p.max_chars ?? process.env.MEMORY_CONTEXT_MAX_CHARS) || 8000));
-    const result = await executeMemoryOrgan(p.query ? "search" : "recent",{session_id:session,limit:requested,query:p.query});
+    let result: any;
+    try {
+      result = await executeMemoryOrgan(p.query ? "search" : "recent",{session_id:session,limit:requested,query:p.query});
+    } catch (error) {
+      const message = String((error as Error)?.message || error);
+      const transient = /timeout|gateway|fetch failed|econnreset|etimedout|503|504/i.test(message);
+      if (!transient) throw error;
+      console.warn("[memory] transient recall failure; continuing without recalled context:", message);
+      return {
+        context: "[]",
+        window: { requested, returned: 0, max_chars, used_chars: 2, omitted: 0, degraded: true },
+        degraded: true,
+        reason: "transient_memory_unavailable",
+      };
+    }
     const selected:any[]=[];let used=2;
     for(const memory of result.memories){
       if(memory.agent_id === "delivery")continue;
