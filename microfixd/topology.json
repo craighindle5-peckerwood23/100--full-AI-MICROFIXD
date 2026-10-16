@@ -9,7 +9,8 @@
     "memory",
     "metacognition",
     "execution",
-    "server"
+    "server",
+    "interface"
   ],
   "criticalOrgans": [
     "paragon",
@@ -429,6 +430,15 @@
       "source": "microfixd/core/wiring/unifiedWiring.ts",
       "node": "microfixd/langgraph/index.ts",
       "executable": false
+    },
+    {
+      "id": "hio",
+      "name": "Holographic Interface Organ",
+      "kind": "organ",
+      "layer": "interface",
+      "source": "cognitive-shell/src/hio/HIO.ts",
+      "node": "cognitive-shell/src/integration/ShellMount.tsx",
+      "executable": false
     }
   ],
   "objects": [
@@ -716,6 +726,11 @@
       "id": "agent_bus",
       "kind": "runtime",
       "source": "server/planner/executionSpine.ts"
+    },
+    {
+      "id": "hio",
+      "kind": "organ",
+      "source": "cognitive-shell/src/hio/HIO.ts"
     }
   ]
 }

@@ -16,7 +16,7 @@
     "validate:classification": "node --import tsx scripts/validate-classification.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts tests/command-failure.test.ts tests/voice-delivery.test.ts tests/groq-recovery.test.ts tests/public-page-reader.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts tests/release-gate.test.ts tests/canary.test.ts tests/cognitive-shell.test.ts tests/cognitive-assurance.test.ts",
+    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts tests/command-failure.test.ts tests/voice-delivery.test.ts tests/groq-recovery.test.ts tests/public-page-reader.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts tests/release-gate.test.ts tests/canary.test.ts tests/cognitive-shell.test.ts tests/cognitive-assurance.test.ts tests/hio.test.ts",
     "test:services": "node scripts/test-services.mjs",
     "test:website": "npm run build && node --import tsx --test tests/public-website.test.ts",
     "test:settings": "npm run build && node tests/settings-ui.mjs",
@@ -25,12 +25,13 @@
     "verify:production": "bash scripts/verify-production.sh",
     "test:system-probes": "node scripts/probe-system.mjs",
     "build:cognitive-shell": "tsc -p cognitive-shell/tsconfig.json --noEmit && vite build cognitive-shell --config cognitive-shell/vite.config.ts",
-    "prepare:cognitive-shell": "npm install --prefix cognitive-shell --include=dev --no-audit --no-fund"
+    "prepare:cognitive-shell": "npm install --prefix cognitive-shell --include=dev --no-audit --no-fund",
+    "test:hio-ui": "node tests/hio-ui.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
-    "@sparticuz/chromium": "153.0.0",
     "@google/genai": "^2.4.0",
+    "@sparticuz/chromium": "153.0.0",
     "@supabase/supabase-js": "^2.116.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/cors": "^2.8.19",
@@ -53,6 +54,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
+    "three": "0.180.0",
     "tsx": "^4.21.0",
     "turndown": "^7.2.4",
     "vite": "^6.2.3",
@@ -63,6 +65,7 @@
   "devDependencies": {
     "@types/express": "^4.17.25",
     "@types/node": "^22.14.0",
+    "@types/three": "0.180.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",

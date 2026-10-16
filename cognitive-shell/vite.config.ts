@@ -11,7 +11,7 @@ export default defineConfig({
       fileName: 'microfixd-cognitive-shell',
     },
     rollupOptions: {
-      external: ['react', 'react-dom'],
+      external: ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client'],
       output: {
         globals: {
           react: 'React',

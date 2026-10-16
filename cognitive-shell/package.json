@@ -17,21 +17,25 @@
     "react-dom": "^19.0.1",
     "zustand": "^5.0.15",
     "motion": "^12.23.24",
-    "lucide-react": "^0.546.0"
+    "lucide-react": "^0.546.0",
+    "three": "0.180.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "0.180.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "src/hio/assets/LICENSE.txt"
   ],
   "main": "./dist/microfixd-cognitive-shell.js",
   "module": "./dist/microfixd-cognitive-shell.js",
   "exports": {
     ".": {
       "import": "./dist/microfixd-cognitive-shell.js"
-    }
+    },
+    "./style.css": "./dist/microfixd-cognitive-shell.css"
   },
   "peerDependencies": {
     "react": "^19.0.0",

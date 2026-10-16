@@ -1,3 +1,4 @@
+import type {HIOInput} from '../hio/types';
 export type ShellEmotion='calm'|'focused'|'thinking'|'executing'|'waiting'|'overloaded'|'error';
 export type TelemetryEvent={type:string;timestamp?:number;severity?:'info'|'warn'|'error';state?:string;message?:string;agents?:number;signal?:number;data?:Record<string,unknown>};
 export type ShellCommand={kind:string;payload?:Record<string,unknown>;requestId?:string};
@@ -6,4 +7,4 @@ export interface TelemetryStream{subscribe(next:(event:TelemetryEvent)=>void):Un
 export interface ShellChannels{telemetry$:TelemetryStream;sendCommand:(command:ShellCommand)=>void|Promise<void>}
 export interface ShellConfig{mountSelector:string;theme?:string;title?:string;reducedMotion?:boolean;embedded?:boolean}
 export interface ShellHandle{id:string;destroy():void}
-export interface ShellViewModel{emotion:ShellEmotion;pose:{yaw:number;pitch:number;attention:number};mouth:'idle'|'speaking';indicators:{status:string;agents:number;signal:number;severity:'info'|'warn'|'error'}}
+export interface ShellViewModel{hio?:HIOInput;emotion:ShellEmotion;pose:{yaw:number;pitch:number;attention:number};mouth:'idle'|'speaking';indicators:{status:string;agents:number;signal:number;severity:'info'|'warn'|'error'}}
