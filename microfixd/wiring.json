@@ -303,6 +303,12 @@
       "target": "memory",
       "relation": "recall_before_completion_and_store_after_completion",
       "node": "server/organs/organs/brainOrgan.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "hio",
+      "relation": "resolves",
+      "node": "cognitive-shell/src/integration/ShellMount.tsx"
     }
   ],
   "classificationRoutes": {
@@ -349,7 +355,8 @@
     "core.voiceOut": "microfixd/core/voice/voiceOutputOrgan.ts",
     "core.voiceEmotion": "microfixd/core/voice/voiceEmotionOrgan.ts",
     "core.voiceGrammar": "microfixd/core/voice/voiceCommandGrammarEngine.ts",
-    "core.wiring": "microfixd/core/wiring/unifiedWiring.ts"
+    "core.wiring": "microfixd/core/wiring/unifiedWiring.ts",
+    "hio": "cognitive-shell/src/hio/HIO.ts"
   },
   "executionSpine": {
     "submission": "/api/planner/missions",

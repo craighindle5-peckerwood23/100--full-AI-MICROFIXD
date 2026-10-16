@@ -33,4 +33,11 @@
 @keyframes mxSpin{to{transform:rotate(360deg)}}@keyframes mxPulse{50%{opacity:.45;transform:scale(.93)}}@keyframes mxSpeak{to{height:8px}}
 @media(max-width:900px){.mx-head{width:min(68vw,430px);height:min(64vh,560px)}.mx-shell aside{right:12px}.mx-orbit{width:min(88vw,620px);height:min(88vw,620px)}}
 @media(max-width:640px){.mx-head{width:min(88vw,380px);height:min(58vh,500px)}.mx-shell aside{display:none}.mx-stage{inset:64px 0 76px}.mx-embedded .mx-stage{inset:0}.mx-orbit{width:94vw;height:94vw}.mx-projection{width:88%}}
-@media(prefers-reduced-motion:reduce){.mx-orbit-ring:after,.mx-projection-live:before{animation:none!important}.mx-orbit-body{transform:none!important}}
+@media(prefers-reduced-motion:reduce){.mx-orbit-ring:after,.mx-projection-live:before{animation:none!important}.mx-orbit-body{transform:none!important}}/* HIO owns lighting, scanlines and projection geometry. */
+.mx-hio-renderer{position:absolute;inset:0;overflow:hidden}
+.mx-hio-fallback{position:absolute;inset:30% 8%;z-index:3;text-align:center;color:#a5e9f4;font:13px/1.7 system-ui;background:#03121b;padding:20px;border:1px solid #164455}
+.mx-head,.mx-head.error,.mx-head.waiting,.mx-head.executing,.mx-head.thinking,.mx-head.overloaded{filter:none;width:100%;height:100%}
+.mx-hologram-depth{transform:none}
+.mx-holo-rim,.mx-holo-scanlines,.mx-projection,.mx-orbit-ring{display:none}
+.mx-orbit{width:100%;height:100%}.mx-orbit-body{width:100%;height:100%;transform:none!important}
+.mx-embedded .mx-stage{inset:0}.mx-shell.mx-embedded{overflow:hidden}
