@@ -1,3 +1,4 @@
+import {marketingRouter} from './marketing/seo';
 /**
  * server/index.ts
  * Microfixd Backend Server
@@ -439,6 +440,7 @@ app.get("/api/groq/debug-logs", async (req, res) => {
 
 // ── Static production UI ───────────────────────────────────────────────────
 const distDir = path.resolve(process.cwd(), "dist");
+app.use(marketingRouter(distDir));
 app.use(express.static(distDir));
 
 app.get("*", (req, res, next) => {

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Loader2, Send, Settings2 } from 'lucide-react';
+import type { Mission, Artifact, Task } from '../../../server/planner/executionSpine';
 import type { Subsystem } from '../../types';
 import { api, AuthenticationRequiredError } from '../../lib/serverApi';
 import { requestOperatorAccess } from '../../lib/operatorAccess';
@@ -60,6 +61,14 @@ export default function HolographicOS({ onReboot }: Props) {
   const [commandInput, setCommandInput] = useState('');
   const [commandState, setCommandState] = useState<CommandState>('READY');
   const [lastOutput, setLastOutput] = useState('System ready.');
+  const catalogInitialized = useRef(false);
+  const submission = useRef<{signature:string;key:string}|null>(null);
+  const [missionId, setMissionId] = useState('');
+  const [mode, setMode] = useState<'mission' | 'chat'>('mission');
+  const [tools, setTools] = useState<{name:string;description:string}[]>([]);
+  const [allowedTools, setAllowedTools] = useState<string[]>([]);
+  const [origins, setOrigins] = useState('');
+  const [missionStatus, setMissionStatus] = useState('');
   const [lastCommand, setLastCommand] = useState('');
 
   useEffect(() => {
@@ -94,7 +103,7 @@ export default function HolographicOS({ onReboot }: Props) {
 
   const renderTool = () => {
     switch (activeTool) {
-      case 'mission_control': return <MissionControlRoom />;
+      case 'mission_control': return <MissionControlRoom initialMissionId={missionId} />;
       case 'ai_core': return <AICoreRoom />;
       case 'agents': return <AgentsRoom />;
       case 'sandbox': return <SandboxRoom />;
@@ -115,6 +124,50 @@ export default function HolographicOS({ onReboot }: Props) {
     }
   };
 
+  useEffect(() => {
+    let stopped = false;
+    const refreshCatalog = () => void api<{tools:{name:string;description:string}[]}>('GET', '/planner/tools').then(result => {
+      if (!stopped) { setTools(result.tools); if (!catalogInitialized.current) { setAllowedTools(result.tools.map(t=>t.name)); catalogInitialized.current=true; } }
+    }).catch(error => { if (!stopped) setLastOutput(`Tool catalog unavailable: ${error.message}`); });
+    refreshCatalog();
+    window.addEventListener('microfixd:auth-changed',refreshCatalog);
+    return () => { stopped = true; window.removeEventListener('microfixd:auth-changed',refreshCatalog); };
+  }, []);
+
+  useEffect(() => {
+    if (!missionId) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = async () => {
+      try {
+        const detail = await api<{mission:Mission;tasks:Task[];artifacts:Artifact[];approvals:{status:string}[];errors:{code:string}[]}>('GET', `/planner/missions/${missionId}`);
+        if (stopped) return;
+        const status = detail.mission.status;
+        setMissionStatus(status);
+        const final = detail.artifacts.find(a => a.artifact_id === detail.mission.result_artifact_id);
+        const output = final ? (typeof final.content === 'string' ? final.content : JSON.stringify(final.content))
+          : detail.approvals.some(a => a.status === 'pending') ? 'Waiting for approval. Open this mission to review the exact action.'
+          : status === 'waiting' ? `Mission paused: ${detail.errors.map(e=>e.code).join(', ') || 'see mission details'}. Open this mission for recovery details.`
+          : status === 'failed' ? `Mission failed: ${detail.errors.map(e=>e.code).join(', ') || 'see mission details'}. Open this mission for persisted results and recovery details.`
+          : `${status}: ${detail.tasks.filter(t => t.status === 'succeeded').length}/${detail.tasks.length} tasks completed.`;
+        setLastOutput(output);
+        if (status === 'succeeded' || status === 'failed') {
+          setCommandState(status === 'succeeded' ? 'COMPLETE' : 'ERROR');
+          if (voice.isEnabled()) void voice.speak(output).catch(() => {});
+          return;
+        }
+        timer = setTimeout(() => void refresh(), 3000);
+      } catch (error) {
+        if (!stopped) {
+          setLastOutput(`Mission status unavailable: ${error instanceof Error ? error.message : String(error)}. Open this mission to retry; it has not been resubmitted.`);
+          timer = setTimeout(() => void refresh(), 5000);
+        }
+      }
+    };
+    void refresh();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [missionId]);
+
   const handleCommandSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const task = commandInput.trim();
@@ -127,7 +180,12 @@ export default function HolographicOS({ onReboot }: Props) {
     sound.playCognitivePulse();
 
     try {
-      const run = () => api<any>('POST', '/command/run', {
+      const signature = JSON.stringify({task,allowedTools,origins});
+      if (submission.current?.signature !== signature) submission.current = {signature,key:crypto.randomUUID()};
+      const key = submission.current.key;
+      const run = () => mode === 'mission'
+        ? api<Mission>('POST', '/planner/missions', {objective:task,tool_permissions:allowedTools,browser_origins:origins.split(',').map(v=>v.trim()).filter(Boolean)}, {'Idempotency-Key':key})
+        : api<any>('POST', '/command/run', {
         task,
         source: 'os-shell',
         priority: 'normal',
@@ -146,6 +204,13 @@ export default function HolographicOS({ onReboot }: Props) {
         }
       }
 
+      if (mode === 'mission') {
+        submission.current = null;
+        setMissionId(result.mission_id);
+        setMissionStatus(result.status);
+        setLastOutput('Mission saved. Waiting for the durable worker.');
+        return;
+      }
       const output = String(
         result?.output ||
         result?.message ||
@@ -171,6 +236,7 @@ export default function HolographicOS({ onReboot }: Props) {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      setCommandInput(task);
       setLastOutput(message || 'Command execution failed.');
       setCommandState('ERROR');
     }
@@ -182,7 +248,16 @@ export default function HolographicOS({ onReboot }: Props) {
         <section aria-live="polite" className="hio-output">
           <div className="hio-output-header"><span>{commandState}</span><span>{lastCommand||'MICROFIXD // AT YOUR SERVICE'}</span></div>
           <div className="hio-answer">{lastOutput}</div>
+          {missionId && <button type="button" onClick={()=>openTool('mission_control')}>Open mission • {missionStatus}</button>}
         </section>
+        <div className="text-xs">
+          <label>Command mode <select aria-label="Command mode" value={mode} disabled={commandState==='PROCESSING'} onChange={e=>setMode(e.target.value as 'mission'|'chat')}><option value="mission">Do a task (durable mission)</option><option value="chat">Ask a question</option></select></label>
+          {mode==='mission' && <details><summary>Authorized tool scope ({allowedTools.length} tools)</summary>
+            <p>Select tools for this task. External changes still require exact-action approval.</p>
+            {tools.map(tool=><label key={tool.name} className="block" title={tool.description}><input type="checkbox" disabled={commandState==='PROCESSING'} checked={allowedTools.includes(tool.name)} onChange={e=>setAllowedTools(prev=>e.target.checked?[...prev,tool.name]:prev.filter(n=>n!==tool.name))}/>{tool.name}</label>)}
+            <label>Allowed HTTPS origins<input aria-label="Allowed HTTPS origins" disabled={commandState==='PROCESSING'} value={origins} onChange={e=>setOrigins(e.target.value)} placeholder="https://example.com"/></label>
+          </details>}
+        </div>
         <form onSubmit={handleCommandSubmit} className="hio-form">
           <input value={commandInput} onChange={event=>setCommandInput(event.target.value)} placeholder="What would you like me to accomplish?" aria-label="Microfixd command"/>
           <button type="submit" disabled={!commandInput.trim()||commandState==='PROCESSING'} aria-label="Send command">{commandState==='PROCESSING'?<Loader2 size={17} className="animate-spin"/>:<Send size={17}/>}</button>

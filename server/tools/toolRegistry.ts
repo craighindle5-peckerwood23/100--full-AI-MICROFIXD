@@ -18,6 +18,9 @@ export interface ToolDefinition {
 }
 
 export const TOOL_REGISTRY: ToolDefinition[] = [
+  {name:'invoke_system_organ',description:'Invoke a concrete native organ action after exact-action approval. Use list_system_capabilities to discover IDs. Browser, crawl, GitHub, and sandbox operations require their dedicated governed tools. Unsupported organs fail explicitly.',parameters:{type:'object',properties:{organ_id:{type:'string',description:'Registered native organ ID'},action:{type:'string',description:'Supported organ action'},payload_json:{type:'string',description:'JSON object containing action arguments; tenant and session identity are set by the server'}},required:['organ_id','action','payload_json']},organ:'system_catalog',action:'invoke'},
+  {name:'list_system_capabilities',description:'List every registered organ, concrete executor availability, tool schema, and execution endpoint. Descriptive organs are not implemented task capabilities.',parameters:{type:'object',properties:{},required:[]},organ:'system_catalog',action:'list'},
+  {name:'probe_system_organ',description:'Run the real read-only routing probe for any registered organ. This verifies routing, not arbitrary task execution.',parameters:{type:'object',properties:{organ_id:{type:'string',description:'Exact registered organ ID from list_system_capabilities'}},required:['organ_id']},organ:'system_catalog',action:'probe'},
   {name:"read_public_page",description:"Read a public web page as text through Jina Reader (third party). Never use for private, signed-in or credential-bearing URLs; use Playwright for authenticated pages.",parameters:{type:"object",properties:{url:{type:"string",description:"Public HTTP(S) page URL"}},required:["url"]},organ:"crawl_engine",action:"read_public_page"},
   // ── Browser / Playwright ──────────────────────────────────────────────
   {

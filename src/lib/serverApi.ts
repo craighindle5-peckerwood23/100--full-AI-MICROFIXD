@@ -37,7 +37,7 @@ export async function api<T = unknown>(
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: resp.statusText }));
     if((resp.status===401||resp.status===403) && (err.code==='AUTH_REQUIRED'||/anonymous/i.test(err.error||'')))throw new AuthenticationRequiredError('Operator access required');
-    throw new Error((err as { error?: string }).error ?? `HTTP ${resp.status}`);
+    throw new Error((err as { error?: string; code?: string }).error ?? err.code ?? `HTTP ${resp.status}`);
   }
   return resp.json() as Promise<T>;
 }
