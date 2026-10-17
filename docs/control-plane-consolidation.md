@@ -43,3 +43,5 @@ These are not closed by reorganizing imports:
 ## Validation
 
 HTTP integration tests exercise compatibility routes against a PostgREST contract fixture: the same tenant/key/objective creates one stored mission across entry points; changed requests conflict; tenant identities remain separate; new routers recover the same persisted run. Additional tests reject legacy direct execution and fabricated repair/scheduler results, verify canonical agent identity, and require server persistence before updating the client mission projection. These fixture tests are not a live Supabase or provider proof. Live verification must use an authenticated task after deployment.
+
+Run `npm run test:assistant` for the focused autonomous assistant contract suite (mission intake, tenant isolation, idempotency, approvals, recovery, evidence and tool contracts). Then run `npm run verify:production` for the complete production gate. The focused suite reuses existing tests and is also covered by the full regression suite; neither command proves live provider credentials.
