@@ -68,6 +68,7 @@ export default function WorkspaceRoom() {
 
   return (
     <div className="h-full flex flex-col gap-4 font-mono text-cyan-400">
+      <a href="/case-workspace" className="rounded border border-cyan-500 p-3">Open private correspondence / case workspace →</a>
       {/* Top Banner */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/20 pb-3">
         <div className="flex items-center gap-3">

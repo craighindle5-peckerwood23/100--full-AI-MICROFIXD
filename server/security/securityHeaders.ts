@@ -13,6 +13,10 @@
 import { Request, Response, NextFunction } from "express";
 
 export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
+  if (req.path === "/case-workspace") {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  }
   // Force HTTPS on repeat visits (only meaningful once actually served over
   // HTTPS — Render terminates TLS in front of this app).
   res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
@@ -37,7 +41,7 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   // since an overly strict CSP shipped without testing can break the UI.
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss: https:; font-src 'self' data:;"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss: https:; font-src 'self' data:; frame-src https://accounts.google.com;"
   );
   next();
 }
