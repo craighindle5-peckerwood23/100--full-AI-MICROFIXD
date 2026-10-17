@@ -119,3 +119,13 @@ test('expired mission performs no planning or external effects',async()=>{
  f.deps.plan=async()=>{throw Error('must not plan');};
  assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),0);
 });
+
+
+test('planning failure is recorded before terminal state and executes no tools',async()=>{
+ const f=fixture();const events:string[]=[];
+ f.deps.plan=async()=>{throw new Error('INVALID_PLAN_JSON');};
+ const planner=new PlannerService({...f.deps,recordPlanningError:async(m,error)=>{assert.equal(m.tenant_id,'a');events.push((error as Error).message);}});
+ assert.equal((await planner.planAndExecuteMission(f.mission)).status,'failed');
+ assert.deepEqual(events,['INVALID_PLAN_JSON']);assert.equal(f.calls(),0);
+ assert.equal((await f.repository.getTasks(f.mission.mission_id)).length,0);
+});

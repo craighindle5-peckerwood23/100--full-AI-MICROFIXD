@@ -50,7 +50,7 @@ plannerRouter.get('/missions/:id',async(req,res)=>{
  const tasks=await repository.getTasks(req.params.id);const subtasks=(await Promise.all(tasks.map(t=>repository.getSubtasks(t.task_id)))).flat();
  const budget=await client.from('spine_budgets').select('reserved_tokens').eq('tenant_id',tenant).eq('mission_id',req.params.id).maybeSingle();
  if(budget.error)throw budget.error;
- res.json({errors:errors.data,subtasks,budget:budget.data,mission:await repository.getMission(req.params.id),tasks:await repository.getTasks(req.params.id),artifacts:await repository.getArtifacts(req.params.id),approvals:approvals.data,tool_runs:runs.data,messages:messages.data.map(r=>r.data)});}catch{res.status(404).json({code:'MISSION_NOT_FOUND'});}
+ res.json({errors:[...errors.data,...messages.data.filter(r=>r.data.content?.kind==='planning_error').map(r=>({code:r.data.content.code,stage:'planning'}))],subtasks,budget:budget.data,mission:await repository.getMission(req.params.id),tasks:await repository.getTasks(req.params.id),artifacts:await repository.getArtifacts(req.params.id),approvals:approvals.data,tool_runs:runs.data,messages:messages.data.map(r=>r.data)});}catch{res.status(404).json({code:'MISSION_NOT_FOUND'});}
 });
 plannerRouter.post('/missions/:id/approvals/:subtask/decide',async(req,res)=>{
  if((req as any).microfixdRole!=='admin')return res.status(403).json({code:'ADMIN_REQUIRED'});

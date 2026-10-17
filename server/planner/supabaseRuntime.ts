@@ -1,3 +1,4 @@
+import {parsePlanOutput,planningErrorCode} from './planOutput';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID, createHash } from 'node:crypto';
 import { DatabaseRepositories, PlannerService, type Database, type Row, type Table, type JSONValue, type Mission, type PlannerDependencies } from './executionSpine';
@@ -72,6 +73,7 @@ export function createPlannerRuntime(client: SupabaseClient, tenant: string, mis
       const timer=setInterval(()=>{void client.rpc('spine_lease',{p_tenant:tenant,p_mission:mission,p_owner:owner,p_release:false}).then(({data,error})=>{if(error||!data)console.error("[planner] lease heartbeat failed; database fencing remains enforced");});},10000);
       try{return await work();}finally{clearInterval(timer);await client.rpc('spine_lease',{p_tenant:tenant,p_mission:mission,p_owner:owner,p_release:true});}
     },
+    recordPlanningError:async(_mission,error)=>{const code=planningErrorCode(error);await publish(agents.planner,agents.supervisor,{kind:'planning_error',code});console.error('[planner] planning failed',code);},
     plan:async m=>{
       await ensureAgents();
       const explicit=m.constraints.plan;
@@ -82,9 +84,9 @@ export function createPlannerRuntime(client: SupabaseClient, tenant: string, mis
         ? 'Return only a JSON array of 1 to 8 atomic steps. Each is {"tool_request":{"name":"allowed tool","arguments":{}},"input":{}} or {"tool_request":null,"input":{"step":"reasoning objective"}}. Only listed tools are allowed. Browser tools always require an explicit url argument in an allowed origin. Do not claim execution. Tool catalog: '+JSON.stringify(allowed.map(name=>getTool(name)))+' Browser origins: '+JSON.stringify(m.constraints.browser_origins??[])
         : 'Decompose the objective into 1 to 8 bounded sequential reasoning tasks. Return only a JSON array of nonempty strings. Do not claim to perform tools.'},{role:'user',content:m.objective}],toolPlanning?1024:512,0);
       if(result.truncated)throw new Error('INVALID_PLAN');
-      const steps:unknown=JSON.parse(result.content);
+      const steps:unknown=parsePlanOutput(result.content);
       if(toolPlanning){
-        if(!Array.isArray(steps)||!steps.length||steps.length>8)throw new Error('INVALID_PLAN');
+        if(!Array.isArray(steps)||!steps.length||steps.length>8||steps.some(step=>!step||typeof step!=='object'||Array.isArray(step)))throw new Error('INVALID_PLAN');
         return validatePlan(steps.map(step=>({agent_id:agents.executor,tool_permissions:allowed,input_context:{objective:m.objective},expected_output_schema:{type:'object',required:[step.tool_request?'result':'answer'],properties:step.tool_request?{result:{type:'object'}}:{answer:{type:'string'}},additionalProperties:false},subtasks:[{agent_id:agents.executor,tool_request:step.tool_request??null,input:{objective:m.objective,...step.input}}]})),m);
       }
       if(!Array.isArray(steps)||!steps.length||steps.length>8||steps.some(s=>typeof s!=='string'||!s.trim()||s.length>2000))throw new Error('INVALID_PLAN');
