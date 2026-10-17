@@ -70,25 +70,7 @@ class SkinLayer {
       }
     }
 
-    // Route to execution spine for full processing
-    const result = await fetch(`http://127.0.0.1:${Number(process.env.PORT) || 3001}/api/execution/run`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ task: typeof payload === "string" ? payload : JSON.stringify(payload), session_id: sid, source: type }),
-    }).then(r => r.json()).catch(() => ({ output: "Execution error", success: false })) as { output: string; success: boolean; organs_used?: string[] };
-
-    const response: SkinResponse = {
-      stimulus_id:      id,
-      output:           result.output,
-      latency_ms:       Date.now() - t0,
-      organ:            (result.organs_used ?? ["brain"])[0] ?? "brain",
-      identity_stamped: true,
-      ts:               new Date().toISOString(),
-    };
-
-    responseMesh.record(response);
-    broadcast("skin:response_sent", { stimulus_id: id, latency_ms: response.latency_ms });
-    return response;
+    throw new Error('LEGACY_SKIN_EXECUTION_RETIRED_USE_AUTHENTICATED_PLANNER');
   }
 
   getStats() {

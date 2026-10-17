@@ -10,31 +10,12 @@ export interface Mission {
 }
 
 export class MissionEngine {
-  private currentMission: Mission = {
-    id: "mission-alpha-01",
-    name: "Autonomous Architecture Optimization & Surveillance",
-    objective: "Maintain Level 6 synthetic intelligence stability, low latency routing, and self-healing invariants.",
-    status: "RUNNING",
-    progress: 92,
-    activeAgents: [
-      "Watching Agent",
-      "Repair Agent",
-      "Security Agent",
-      "Optimization Agent",
-      "Synchronization Agent",
-    ],
-  };
-
-  public getCurrentMission(): Mission {
-    return this.currentMission;
+  public getCurrentMission(): Mission | null {
+    return null; // Legacy display compatibility; query the authenticated durable planner.
   }
 
   public updateMission(updates: Partial<Mission>): Mission {
-    this.currentMission = {
-      ...this.currentMission,
-      ...updates,
-    };
-    return this.currentMission;
+    throw new Error('LEGACY_MISSION_STATE_RETIRED_USE_DURABLE_PLANNER');
   }
 }
 

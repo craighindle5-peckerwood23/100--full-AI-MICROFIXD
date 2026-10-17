@@ -1,15 +1,5 @@
-import { AgentContext } from "./watching";
-
+/** Legacy role descriptor; real work must use the durable planner. */
 export const SynchronizationAgent = {
-  name: "Synchronization Agent",
-  role: "State Bus, Orchestration & Telemetry Broadcaster",
-  execute: async (context: AgentContext) => {
-    context.telemetry.push("agent_run", { role: "sync", status: "complete" });
-    return {
-      summary: "Subsystem state bus synchronized. 17 background autonomous tasks aligned.",
-      status: "synchronized",
-      metrics: { activeTasks: 17, scheduledTriggers: 6 },
-      timestamp: Date.now()
-    };
-  }
+ name: 'SynchronizationAgent', role: 'Cross-agent synchronization',
+ execute: async (_context:any):Promise<never> => { throw new Error('LEGACY_AGENT_REQUIRES_DURABLE_MISSION'); }
 };

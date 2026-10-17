@@ -227,7 +227,7 @@ export interface ExecutionJob {
 
 // ==========================================
 // Cognitive Schema (Supabase & Attention Layer)
-// Canonical source: microfyxd/core/interpretation/schema.ts
+// Canonical source: microfixd/core/interpretation/schema.ts
 // ==========================================
 
 import type {
@@ -238,9 +238,9 @@ import type {
   Constraint,
   MissingContextItem,
   MemoryBinding,
-} from '../microfyxd/core/interpretation/schema';
+} from '../microfixd/core/interpretation/schema';
 
-export * from '../microfyxd/core/interpretation/schema';
+export * from '../microfixd/core/interpretation/schema';
 
 export interface CognitiveRequestRecord {
   id: string;

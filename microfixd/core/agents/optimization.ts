@@ -1,15 +1,5 @@
-import { AgentContext } from "./watching";
-
+/** Legacy role descriptor; real work must use the durable planner. */
 export const OptimizationAgent = {
-  name: "Optimization Agent",
-  role: "Resource, Cache & Neural Pipeline Optimization",
-  execute: async (context: AgentContext) => {
-    context.telemetry.push("agent_run", { role: "optimization", status: "complete" });
-    return {
-      summary: "Neural processing weights aligned. Memory footprint reduced by 14.8%. Latency optimized.",
-      status: "optimized",
-      metrics: { latencySavingsMs: 42, memoryReclaimedMb: 128 },
-      timestamp: Date.now()
-    };
-  }
+ name: 'OptimizationAgent', role: 'Resource optimization',
+ execute: async (_context:any):Promise<never> => { throw new Error('LEGACY_AGENT_REQUIRES_DURABLE_MISSION'); }
 };

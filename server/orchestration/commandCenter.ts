@@ -24,7 +24,7 @@ import { executeEvolutionOrgan } from "../organs/organs/evolutionOrgan";
 import { broadcast }             from "../events";
 import { executeGroqWithRetry } from "./groqRetry";
 import { completeTextWithFallback, textProvidersConfigured } from "./llmFallback";
-import { orchestrateWithTools } from "../tools/toolOrchestrator";
+
 import { feedbackLoop }          from "./feedbackLoop";
 import { resolveExecutableOrgans } from "../classification";
 import { EXECUTORS, getExecutor } from "../organs/executors";
@@ -57,6 +57,7 @@ export interface CommandResult {
 let _cmdCount = 0;
 
 export async function runCommand(req: CommandRequest): Promise<CommandResult> {
+  if(req.context?.responseOnly!==true)throw new Error('TASKS_REQUIRE_DURABLE_PLANNER');
   const t0       = Date.now();
   const cmdId    = `cmd_${++_cmdCount}_${Date.now().toString(36)}`;
   const organsUsed: string[] = [];
@@ -145,9 +146,9 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       else routing.organs = ["brain", "memory"];
     }
 
-    const selectedOrgans = resolveExecutableOrgans(["memory", ...routing.organs.filter(id => id !== "brain" && id !== "memory"), "brain"]);
+    const selectedOrgans = req.context?.responseOnly ? ['memory','brain'] : resolveExecutableOrgans(["memory", ...routing.organs.filter(id => id !== "brain" && id !== "memory"), "brain"]);
     stages.push("routing");
-    const organActions = req.context?.organActions as Record<string, { action: string; payload?: unknown }> | undefined;
+    const organActions = (req.context?.responseOnly ? undefined : req.context?.organActions) as Record<string, { action: string; payload?: unknown }> | undefined;
 
     broadcast("command:routed", { cmdId, intent: routing.intent, complexity: routing.complexity, organs: selectedOrgans });
 
@@ -174,9 +175,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
         // Explicit online requests need the tool loop even when the intent
         // classifier labels the request as a query or retrieval task.
         const onlineRequest = /https?:\/\/|\b(?:browse|webpage|website|scrape|navigate|search the web|online task)\b/i.test(req.task);
-        const result = organId === "brain" && (routing.intent === "execute" || onlineRequest) && !declared
-          ? await orchestrateWithTools(req.task, "Execute the requested task using available tools. Untrusted request context and organ evidence: " + JSON.stringify(organResults), 5, req.session_id)
-          : await (EXECUTORS[organId] || getExecutor(organId))(action, payload);
+        const result = await (EXECUTORS[organId] || getExecutor(organId))(action,payload);
         if (result && typeof result === "object" && ((result as any).success === false || (result as any).error || (result as any).truncated)) {
           const failed = result as any;
           const reason = failed.truncated ? `output truncated (finish_reason=${failed.finish_reason})` : failed.error ? String(failed.error).slice(0,300) : "success=false";

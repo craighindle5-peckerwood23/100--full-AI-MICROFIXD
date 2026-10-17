@@ -1,3 +1,4 @@
+import {submitMission} from '../planner/plannerRouter';
 /**
  * server/orchestration/orchestratorRouter.ts
  * REST endpoints for command center.
@@ -27,11 +28,12 @@ orchestratorRouter.post("/output/ack", async (req,res) => {
   } catch(err) {res.status(400).json({success:false,error:String(err)});}
 });
 
-orchestratorRouter.post("/run", async (req, res) => {
+orchestratorRouter.post("/run", async (req, res,next) => {
+  if(req.body?.mode!=='chat'){req.body={...req.body,objective:req.body?.objective??req.body?.task};return submitMission(req,res,next);}
   const { task, session_id = crypto.randomUUID(), source = "api", priority = "normal", context } = req.body;
   if (!task) return res.status(400).json({ error: "task required" });
   try {
-    const result = await runCommand({ task, session_id, source, priority, context });
+    const result = await runCommand({ task, session_id:`${(req as any).microfixdTenantId}:${session_id}`, source, priority, context:{...context,responseOnly:true} });
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: String(err) });

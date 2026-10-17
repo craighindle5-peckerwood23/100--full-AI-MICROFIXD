@@ -9,7 +9,7 @@ export function commandSession():string {
   return session;
 }
 export async function runSystemCommand(task:string,context?:Record<string,unknown>,sessionId=commandSession(),source="chat"):Promise<any>{
-  const send=()=>api<any>('POST','/command/run',{task,session_id:sessionId,source,context:{...getCommandPreferences(),...context}});
+  const send=()=>api<any>('POST','/command/run',{task,mode:'chat',session_id:sessionId,source,context:{...getCommandPreferences(),...context}});
   let result;
   try {result=await send();}catch(error){
     if(!(error instanceof AuthenticationRequiredError))throw error;
