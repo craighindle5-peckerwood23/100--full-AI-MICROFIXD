@@ -2,7 +2,7 @@
  * GitHub Organ — repo operations
  * Actions: get_repo, list_branches, push_files, create_branch, get_file
  */
-const TOKEN  = process.env.VITE_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+const TOKEN  = process.env.GITHUB_TOKEN ?? "";
 const GHEADS = { "Authorization": `token ${TOKEN}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "Microfixd/7.0", "Content-Type": "application/json" };
 
 async function gh(method: string, path: string, body?: unknown) {

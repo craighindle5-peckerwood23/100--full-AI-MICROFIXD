@@ -1,3 +1,4 @@
+import { executeCrawlOrgan } from "./organs/crawlOrgan";
 import { executeBrainOrgan } from "./organs/brainOrgan";
 import { executeMemoryOrgan } from "./organs/memoryOrgan";
 import { executePlaywrightOrgan } from "./organs/playwrightOrgan";
@@ -31,6 +32,7 @@ function getCognitiveOrgans() {
 }
 
 export const EXECUTORS: Record<string, ExecutorFn> = {
+  crawl_engine: executeCrawlOrgan,
   brain: executeBrainOrgan,
   memory: executeMemoryOrgan,
   playwright: executePlaywrightOrgan,

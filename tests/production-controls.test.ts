@@ -38,3 +38,41 @@ test('audit rejects a final answer disconnected from verified source outputs',()
  const issues=auditMission(mission,f.tasks,f.subs,f.artifacts).issues;
  assert.ok(issues.some(i=>i.code==='FINAL_OUTPUT_LINK_MISMATCH'));assert.ok(issues.some(i=>i.code==='CANONICAL_TASK_LINK_MISMATCH'));
 });
+
+
+test('every advertised durable tool resolves to a concrete executor and schema',async()=>{
+ const {ENABLED_TOOLS}=await import('../server/planner/governedTools');
+ const {getTool}=await import('../server/tools/toolRegistry');
+ const {EXECUTORS}=await import('../server/organs/executors');
+ for(const name of ENABLED_TOOLS){const tool=getTool(name);assert.ok(tool,name);assert.ok(tool.organ==='system_catalog'||typeof EXECUTORS[tool.organ]==='function',name);assert.equal(tool.parameters.type,'object');}
+});
+
+test('durable public reader validates URLs through the real adapter',async()=>{
+ const {getExecutor}=await import('../server/organs/executors');
+ await assert.rejects(()=>getExecutor('crawl_engine')('read_public_page',{url:'file:///etc/passwd'}));
+});
+
+
+test('organ invocation rejects missing adapters and dedicated paths and pins tenant identity',async()=>{
+ const {organInvocationPayload,systemCapabilities}=await import('../server/planner/governedTools');
+ assert.throws(()=>organInvocationPayload({organ_id:'missing',payload_json:'{}'},'t','m'),/UNSUPPORTED_ORGAN_CAPABILITY/);
+ for(const organ_id of ['playwright','crawl_engine','github_connector'])assert.throws(()=>organInvocationPayload({organ_id,payload_json:'{}'},'t','m'),/USE_DEDICATED_GOVERNED_TOOL/);
+ assert.deepEqual(organInvocationPayload({organ_id:'memory',payload_json:'{"tenant_id":"other","session_id":"other","content":"test"}'},'t','m'),{tenant_id:'t',session_id:'t:m',content:'test'});
+ assert.ok(systemCapabilities().organs.every(o=>o.execution_endpoint&&typeof o.native_executor==='boolean'));
+});
+
+
+test('public marketing endpoints expose canonical sitemap without exposing private API routes',async()=>{
+ const {default:express}=await import('express');
+ const {marketingRouter}=await import('../server/marketing/seo');
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const dir=await mkdtemp(join(tmpdir(),'microfixd-seo-'));
+ await writeFile(join(dir,'index.html'),'<html><head><title>Old</title></head><body><div id="root"></div></body></html>');
+ const app=express();app.use(marketingRouter(dir));const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
+ const base=`http://127.0.0.1:${(server.address() as any).port}`;
+ try{const robots=await (await fetch(base+'/robots.txt')).text();assert.ok(robots.includes('Disallow: /api/'));assert.ok(robots.includes('Allow: /saas'));
+ const sitemap=await (await fetch(base+'/sitemap.xml')).text();assert.ok(sitemap.includes('/saas</loc>'));
+ const landing=await (await fetch(base+'/saas')).text();assert.ok(landing.includes('rel="canonical"'));assert.ok(landing.includes('Governed AI workspace'));assert.ok(landing.includes('<noscript>'));
+ }finally{await new Promise<void>((r,j)=>server.close(e=>e?j(e):r()));await rm(dir,{recursive:true,force:true});}
+});

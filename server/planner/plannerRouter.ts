@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
 import { validatePlan, validateSchema, createPlannerRuntime, plannerClient } from './supabaseRuntime';
-import { ENABLED_TOOLS } from './governedTools';
+import { getTool } from '../tools/toolRegistry';
+import { ENABLED_TOOLS, systemCapabilities } from './governedTools';
 import {canonicalJSON} from './executionSpine';
 import type { Mission } from './executionSpine';
 import {auditMission} from './missionAudit';
 export const plannerRouter=Router();
 const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex').slice(0,32);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
+plannerRouter.get('/capabilities',(_req,res)=>res.json(systemCapabilities()));
+plannerRouter.get('/tools',(_req,res)=>res.json({tools:ENABLED_TOOLS.map(name=>getTool(name)).filter(Boolean)}));
 plannerRouter.post('/missions',async(req,res)=>{
  try{
   const tenant=(req as any).microfixdTenantId;
@@ -43,10 +46,11 @@ plannerRouter.get('/missions/:id',async(req,res)=>{
  const runs=await client.from('spine_tool_runs').select('*').eq('tenant_id',tenant).eq('mission_id',req.params.id);
  const messages=await client.from('spine_rows').select('data').eq('tenant_id',tenant).eq('mission_id',req.params.id).eq('kind','messages').order('sequence').limit(200);
  if(approvals.error||runs.error||messages.error)throw new Error('STORAGE_UNAVAILABLE');
+ const errors=await client.from('spine_errors').select('code,subtask_id,attempt').eq('tenant_id',tenant).eq('mission_id',req.params.id).limit(50);if(errors.error)throw errors.error;
  const tasks=await repository.getTasks(req.params.id);const subtasks=(await Promise.all(tasks.map(t=>repository.getSubtasks(t.task_id)))).flat();
  const budget=await client.from('spine_budgets').select('reserved_tokens').eq('tenant_id',tenant).eq('mission_id',req.params.id).maybeSingle();
  if(budget.error)throw budget.error;
- res.json({subtasks,budget:budget.data,mission:await repository.getMission(req.params.id),tasks:await repository.getTasks(req.params.id),artifacts:await repository.getArtifacts(req.params.id),approvals:approvals.data,tool_runs:runs.data,messages:messages.data.map(r=>r.data)});}catch{res.status(404).json({code:'MISSION_NOT_FOUND'});}
+ res.json({errors:errors.data,subtasks,budget:budget.data,mission:await repository.getMission(req.params.id),tasks:await repository.getTasks(req.params.id),artifacts:await repository.getArtifacts(req.params.id),approvals:approvals.data,tool_runs:runs.data,messages:messages.data.map(r=>r.data)});}catch{res.status(404).json({code:'MISSION_NOT_FOUND'});}
 });
 plannerRouter.post('/missions/:id/approvals/:subtask/decide',async(req,res)=>{
  if((req as any).microfixdRole!=='admin')return res.status(403).json({code:'ADMIN_REQUIRED'});

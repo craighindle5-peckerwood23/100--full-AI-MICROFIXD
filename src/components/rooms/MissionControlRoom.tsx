@@ -18,13 +18,15 @@ import { api } from '../../lib/serverApi';
 import type { Mission as DurableMission, Task, Artifact } from '../../../server/planner/executionSpine';
 import { sound } from '../../utils/audio';
 
-export default function MissionControlRoom() {
+export default function MissionControlRoom({ initialMissionId = '' }: { initialMissionId?: string }) {
   const [missions,setMissions]=useState<Mission[]>([]);
-  const [selectedMissionId,setSelectedMissionId]=useState('');
+  const [selectedMissionId,setSelectedMissionId]=useState(initialMissionId);
   const [showNewModal,setShowNewModal]=useState(false);
   const [newTitle,setNewTitle]=useState('');
   const [newObjective,setNewObjective]=useState('');
   const [error,setError]=useState('');
+  const [catalog,setCatalog]=useState<{name:string}[]>([]);
+  useEffect(()=>{let stopped=false;void api<{tools:{name:string}[]}>('GET','/planner/tools').then(r=>{if(!stopped)setCatalog(r.tools);}).catch(e=>{if(!stopped)setError(String(e));});return()=>{stopped=true;};},[]);
   const [allowedTools,setAllowedTools]=useState<string[]>([]);
   const [browserOrigins,setBrowserOrigins]=useState('');
   const [tokenBudget,setTokenBudget]=useState(32000);
@@ -293,7 +295,7 @@ export default function MissionControlRoom() {
                   className="w-full bg-cyan-950/20 border border-cyan-500/30 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 resize-none"
                 />
               </div>
-              <fieldset className="text-xs space-y-1"><legend>Allowed tools</legend>{['scan_for_security_issues','read_public_page','navigate_browser','scrape_url','take_screenshot','click_element'].map(name=><label key={name} className="block"><input type="checkbox" checked={allowedTools.includes(name)} onChange={e=>setAllowedTools(prev=>e.target.checked?[...prev,name]:prev.filter(v=>v!==name))}/> {name.replaceAll('_',' ')}</label>)}</fieldset>
+              <fieldset className="text-xs space-y-1"><legend>Allowed tools</legend>{catalog.map(({name})=><label key={name} className="block"><input type="checkbox" checked={allowedTools.includes(name)} onChange={e=>setAllowedTools(prev=>e.target.checked?[...prev,name]:prev.filter(v=>v!==name))}/> {name.replaceAll('_',' ')}</label>)}</fieldset>
               <label className="block text-xs">Allowed browser origins, separated by commas<input aria-label="Allowed browser origins" value={browserOrigins} onChange={e=>setBrowserOrigins(e.target.value)} className="w-full bg-black border p-2"/></label>
               <label className="block text-xs">Mission token budget<input aria-label="New mission token budget" type="number" min={1} max={100000} value={tokenBudget} onChange={e=>setTokenBudget(Number(e.target.value))} className="w-full bg-black border p-2"/></label>
               <div className="flex justify-end gap-2 pt-2">

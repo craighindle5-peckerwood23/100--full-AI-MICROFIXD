@@ -1,13 +1,17 @@
 import {createHash} from 'node:crypto';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import type {JSONObject,JSONValue,ExecutionContext,ExecutionResult,Subtask} from './executionSpine';
-import {getTool} from '../tools/toolRegistry';
+import {dispatchOrgan} from '../organs/dispatch';
+import {organRegistry} from '../organs/organRegistry';
+import {probeOrgan} from '../organs/probes';
+import {EXECUTORS} from '../organs/executors';
+import {TOOL_REGISTRY,getTool} from '../tools/toolRegistry';
 import {getExecutor} from '../organs/executors';
 import {publicPageURL} from '../tools/publicPageReader';
 import {BrowserManager} from '../playwright/browserManager';
 import {validateSchema} from './schema';
-export const ENABLED_TOOLS=['read_public_page','get_github_repo','scan_for_security_issues','navigate_browser','scrape_url','take_screenshot','click_element','push_file_to_github'];
-export const READ_TOOLS=new Set(['read_public_page','get_github_repo','scan_for_security_issues']);
+export const ENABLED_TOOLS=['invoke_system_organ','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues','navigate_browser','scrape_url','take_screenshot','click_element','push_file_to_github'];
+export const READ_TOOLS=new Set(['list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
 export function requestHash(value:JSONValue):string {
  const canonical=(v:JSONValue):string=>Array.isArray(v)?`[${v.map(canonical).join(',')}]`:v&&typeof v==='object'?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`:JSON.stringify(v);
  return createHash('sha256').update(canonical(value)).digest('hex');
@@ -33,6 +37,11 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
    const url=new URL(publicPageURL(String((args as JSONObject).url??'')));
    if(url.protocol!=='https:'||url.username||url.password||!Array.isArray(context.constraints.browser_origins)||!context.constraints.browser_origins.includes(url.origin))throw new Error('INVALID_BROWSER_URL');
   }
+  let organPayload:Record<string,unknown>|undefined;
+  if(name==='invoke_system_organ'){
+   organPayload=organInvocationPayload(args as JSONObject,tenant,mission);
+  }
+  if(name==='push_file_to_github'&&!process.env.GITHUB_TOKEN?.trim())throw new Error('MISSING_GITHUB_CREDENTIALS');
   const prior=await run(context.subtask_id);
   if(prior){if(prior.request_hash!==hash)throw new Error('REQUEST_CHANGED');if(prior.status==='succeeded')return prior.result as ExecutionResult;throw new ExecutionPause('RECONCILIATION_REQUIRED');}
   const protectedAction=!READ_TOOLS.has(name);
@@ -54,12 +63,29 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
     else if(name==='scrape_url')raw={text:(await browser.getText(String((args as JSONObject).selector??'body'))).slice(0,16000),url:navigation.url,title:navigation.title};
     else raw=navigation;
    }finally{await browser.stop();}
-  }else raw=JSON.parse(JSON.stringify(await getExecutor(tool.organ)(tool.action,args as Record<string,unknown>))) as JSONValue;
-  }catch{throw new ExecutionPause('RECONCILIATION_REQUIRED');}
+  }else if(name==='invoke_system_organ')raw=JSON.parse(JSON.stringify(await dispatchOrgan(String((args as JSONObject).organ_id),String((args as JSONObject).action),organPayload,tenant)));
+  else if(name==='list_system_capabilities')raw=JSON.parse(JSON.stringify(systemCapabilities()));
+  else if(name==='probe_system_organ')raw=JSON.parse(JSON.stringify(await probeOrgan(String((args as JSONObject).organ_id),context.idempotency_key,tenant)));
+  else raw=JSON.parse(JSON.stringify(await getExecutor(tool.organ)(tool.action,args as Record<string,unknown>))) as JSONValue;
+  }catch(error){if(protectedAction)throw new ExecutionPause('RECONCILIATION_REQUIRED');throw error;}
+  if(raw&&typeof raw==='object'&&!Array.isArray(raw)&&('error' in raw||raw.success===false))throw new Error('TOOL_EXECUTION_FAILED');
   const result:ExecutionResult={raw,normalized:{result:raw},evidence:{tool:name,request_hash:hash,idempotency_key:context.idempotency_key,completed_at:new Date().toISOString()}};
   const {error:finishError}=await client.rpc('spine_finish_tool',{p_tenant:tenant,p_mission:mission,p_subtask:context.subtask_id,p_owner:owner,p_hash:hash,p_result:result});
   if(finishError)throw new Error(finishError.code);
   return result;
  };
  return {executeTool,recoverTool};
+}
+
+export function systemCapabilities(){
+ return {tools:TOOL_REGISTRY.map(tool=>({...tool,durable:ENABLED_TOOLS.includes(tool.name),endpoint:'/api/planner/missions',required_credentials:tool.organ==='github_connector'?['GITHUB_TOKEN']:[],credentials_configured:tool.organ==='github_connector'?Boolean(process.env.GITHUB_TOKEN?.trim()):null})),organs:organRegistry.all().map(organ=>({id:organ.id,name:organ.name,layer:organ.layer,isolated:organ.isolated,native_executor:Object.hasOwn(EXECUTORS,organ.id),status_endpoint:`/api/organs/${organ.id}/status`,execution_endpoint:`/api/organs/${organ.id}/execute`,durable_tools:TOOL_REGISTRY.filter(tool=>tool.organ===organ.id&&ENABLED_TOOLS.includes(tool.name)).map(tool=>tool.name),note:Object.hasOwn(EXECUTORS,organ.id)?'Concrete executor; supported actions and credentials still required.':'Routing probe available; arbitrary task execution is not verified.'}))};
+}
+
+export function organInvocationPayload(args:JSONObject,tenant:string,mission:string):Record<string,unknown>{
+ const id=String(args.organ_id);
+ if(!organRegistry.get(id)||!Object.hasOwn(EXECUTORS,id))throw new Error('UNSUPPORTED_ORGAN_CAPABILITY');
+ if(['playwright','crawl_engine','github_connector','sandbox','core.tools'].includes(id))throw new Error('USE_DEDICATED_GOVERNED_TOOL');
+ const payload=JSON.parse(String(args.payload_json));
+ if(!payload||typeof payload!=='object'||Array.isArray(payload))throw new Error('INVALID_ORGAN_PAYLOAD');
+ return {...payload,tenant_id:tenant,session_id:`${tenant}:${mission}`};
 }
