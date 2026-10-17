@@ -1,3 +1,4 @@
+import {api} from '../lib/serverApi';
 // Microfixd Level 7 Organism - Full Bill of Materials Implementation
 import { insertCognitiveRequest } from '../lib/supabase';
 import { 
@@ -194,65 +195,13 @@ export class LaboratorySandbox {
 export const laboratorySandbox = new LaboratorySandbox();
 
 export class AutonomyRuntime {
-  public async executeDAG(dag: any, runId: string) {
-    // Multi-Agent Runtime: walking mission DAG
-    for (const step of dag.steps) {
-      ExecutionBus.emit('step_start', { step, runId });
-      
-      const stepRecord: RuntimeStep = {
-        id: crypto.randomUUID(), runId, agent: step.agent || 'default', tool: step.tool || 'none',
-        stage: 'running', inputs: step.inputs, outputs: null, timestamp: Date.now()
-      };
-      
-      db.insert('runtimesteps', stepRecord);
-      TelemetryBus.emit('state_update', null);
-      
-      // Simulate real execution delay
-      await new Promise(r => setTimeout(r, 1500));
-      
-      stepRecord.outputs = `Result of ${step.name}`;
-      stepRecord.stage = 'completed';
-      
-      db.insert('runtimesteps', stepRecord);
-      TelemetryBus.emit('state_update', null);
-      
-      const isValid = verificationEngine.verify(stepRecord.outputs);
-      if (!isValid) {
-        TelemetryBus.emit('anomaly', { step: stepRecord.id, reason: 'verification_failed' });
-      }
-    }
-  }
+ public async executeDAG(_dag:any,_runId:string):Promise<never>{throw new Error('LOCAL_DAG_RETIRED_USE_DURABLE_PLANNER');}
 }
-
-export const autonomyRuntime = new AutonomyRuntime();
-
+export const autonomyRuntime=new AutonomyRuntime();
 export class MissionEngine {
-  constructor() {
-    IntentBus.subscribe('new_mission', (intent) => this.handleIntent(intent));
-  }
-  public async handleIntent(intent: any) {
-    const risk = paragonDissector.precheck(intent);
-    if (!governanceLayer.evaluate('start_mission', { intent, risk })) {
-      TelemetryBus.emit('emergency_stop', { reason: 'Governance blocked mission' });
-      return;
-    }
-    
-    const runId = crypto.randomUUID();
-    const run: RuntimeRun = {
-      id: runId, context: intent.context, operator: intent.operator, dag: intent.dag,
-      risk, stage: 'running', outcome: 'pending', timestamp: Date.now()
-    };
-    db.insert('runtimeruns', run);
-    TelemetryBus.emit('state_update', null);
-    
-    await autonomyRuntime.executeDAG(intent.dag, runId);
-    
-    run.stage = 'completed';
-    run.outcome = 'success';
-    // Sync update to DB conceptually (in a real system we'd update by ID, but for this append-only prototype we just update the ref)
-    db.insert('runtimeruns', run); 
-    TelemetryBus.emit('state_update', null);
-  }
+ public async handleIntent(intent:any){
+  return api('POST','/planner/missions',{objective:String(intent.prompt??intent.objective??''),tool_permissions:[]},{'Idempotency-Key':crypto.randomUUID()});
+ }
 }
 
 export const missionEngine = new MissionEngine();
@@ -362,35 +311,10 @@ export class AttentionLayer {
     };
   }
 
-  public async receivePrompt(prompt: string, operator: string) {
-    // Parse into Level 6 Cognitive Request Schema
-    const cognitiveRecord = this.parsePromptToCognitiveSchema(prompt, operator);
-
-    // Persist asynchronously to Supabase & local cache
-    insertCognitiveRequest(cognitiveRecord).catch(err => {
-      console.warn('Could not insert cognitive request to Supabase:', err);
-    });
-
-    // Frontend cognitive presence
-    const context = memoryEngine.retrieveContext();
-    
-    // Construct DAG based on prompt
-    const dag = {
-      steps: [
-        { name: 'Analyze', agent: 'Analyzer', tool: 'Think', inputs: prompt },
-        { name: 'Execute', agent: 'Builder', tool: 'Sandbox', inputs: prompt }
-      ]
-    };
-    
-    IntentBus.emit('new_mission', { prompt, operator, context, dag, cognitiveRecord });
-    
-    db.insert<SystemEvent>('systemevents', {
-      id: crypto.randomUUID(), 
-      type: 'health', 
-      details: `Prompt processed by Attention Layer (${cognitiveRecord.request_type} / ${cognitiveRecord.domain_type})`, 
-      timestamp: Date.now()
-    });
+  public async receivePrompt(prompt:string,_operator:string){
+    return missionEngine.handleIntent({prompt});
   }
+
 }
 
 
@@ -398,7 +322,7 @@ export const attentionLayer = new AttentionLayer();
 
 export class OperatorUX {
   public dispatchMission(prompt: string) {
-    attentionLayer.receivePrompt(prompt, 'human_operator');
+    return attentionLayer.receivePrompt(prompt, 'human_operator');
   }
   public getMissionHistory(): RuntimeRun[] {
     return db.query<RuntimeRun>('runtimeruns', () => true);

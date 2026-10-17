@@ -103,7 +103,7 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
     throw new Error("CORE_AUTODEPLOY_REQUIRES_GOVERNED_PROMOTION_PIPELINE");
   },
   "core.mission": async () => {
-    return { mission: missionEngine.getCurrentMission(), status: "active" };
+    return {mission:null,status:'use_durable_planner',endpoint:'/api/planner/missions'};
   },
   "core.feedback": async () => {
     const organs=getCognitiveOrgans();

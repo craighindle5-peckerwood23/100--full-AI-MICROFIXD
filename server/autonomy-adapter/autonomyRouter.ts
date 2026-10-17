@@ -45,7 +45,9 @@ import { resolve, basename } from "node:path";
 import { organRegistry } from "../organs/organRegistry";
 import { getSystemSnapshot } from "../organs/organMetrics";
 import { trigger as hitlTrigger, decide as hitlDecide, getPending, getAll } from "../hitl/hitlManager";
-import { runCommand } from "../orchestration/commandCenter";
+import {submitMission} from '../planner/plannerRouter';
+import {createPlannerRuntime,plannerClient} from '../planner/supabaseRuntime';
+import {projectMission} from '../planner/missionProjection';
 import { executionTracer } from "../execution/executionTracer";
 import { getCircuitBreakerStatus } from "../execution/executionSpine";
 import { getRbacAuditLog } from "../security/rbac";
@@ -67,7 +69,9 @@ function requireTvAdmin(req: Request, res: Response, next: NextFunction): void {
 autonomyRouter.use(requireTvAdmin);
 
 function tenantOf(req: Request): string {
-  return req.header("x-microfixd-tenant") || "default";
+  const tenant=(req as any).microfixdTenantId;
+  if(!tenant)throw new Error('AUTH_REQUIRED');
+  return tenant;
 }
 
 // ── Organs: real registry records ──────────────────────────────────────────
@@ -456,160 +460,21 @@ autonomyRouter.post("/github/import", async (req, res) => {
 
 // ── Chat: the real command pipeline (Groq-backed when configured) ──────────
 
-autonomyRouter.post("/chat", async (req, res) => {
-  const { message, requestedBy } = req.body;
-  if (typeof message !== "string" || !message.trim()) {
-    return res.status(400).json({ reply: "Empty message.", status: "error" });
-  }
-  try {
-    const result = await runCommand({
-      task: message,
-      session_id: tenantOf(req),
-      source: "chat",
-      priority: "normal",
-      context: { requestedBy, channel: "microfixd-os-tv" },
-    });
-    res.json({ reply: result.output, status: result.success ? "ok" : "blocked", command: result });
-  } catch (err) {
-    res.status(500).json({ reply: `Command pipeline error: ${String(err)}`, status: "error" });
-  }
-});
-
-// ── Goals / runs: real execution with event streaming ──────────────────────
-
-interface TvRunStep {
-  id: string; runId: string; sequence: number; action: Record<string, unknown>;
-  status: string; createdAt: string;
-}
-interface TvRun {
-  run: {
-    id: string; tenantId: string; agentId: string; goal: string; requestedBy: string;
-    status: "queued" | "planning" | "running" | "awaiting_approval" | "succeeded" | "failed" | "cancelled";
-    plan: Array<{ id: string; kind: string; title: string; input: Record<string, unknown>; risk: string }>;
-    currentStep: number; workingMemory: Record<string, unknown>;
-    outcome?: string; error?: string; createdAt: string; updatedAt: string;
-  };
-  steps: TvRunStep[];
-}
-const runs = new Map<string, TvRun>();
-const runSubscribers = new Map<string, Set<(event: Record<string, unknown>) => void>>();
-const streamTokens = new Map<string, { runId: string; expires: number }>();
-
-function emit(runId: string, event: Record<string, unknown>): void {
-  broadcast(`autonomy:run:${runId}`, event);
-  for (const send of runSubscribers.get(runId) ?? []) send(event);
-}
-
-autonomyRouter.post("/goals", async (req, res) => {
-  const { goal, requestedBy } = req.body;
-  if (typeof goal !== "string" || !goal.trim()) return res.status(400).json({ error: "goal required." });
-  const runId = `run_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  const now = new Date().toISOString();
-  const tvRun: TvRun = {
-    run: {
-      id: runId, tenantId: tenantOf(req), agentId: "outlet-command-center", goal,
-      requestedBy: requestedBy ?? "operator", status: "running",
-      plan: [
-        { id: "s1", kind: "introspect", title: "Reflex + security precheck", input: { task: goal }, risk: "low" },
-        { id: "s2", kind: "design_workflow", title: "Groq classification + organ routing", input: { task: goal }, risk: "low" },
-        { id: "s3", kind: "apply_capability", title: "Organ pipeline execution", input: { task: goal }, risk: "medium" },
-      ],
-      currentStep: 0, workingMemory: {}, createdAt: now, updatedAt: now,
-    },
-    steps: [],
-  };
-  runs.set(runId, tvRun);
-  emit(runId, { type: "graph.started", missionId: runId });
-
-  // Execute the goal through the REAL outlet pipeline. Async: the TV
-  // subscribes to the stream while this runs.
-  void (async () => {
-    try {
-      const result = await runCommand({
-        task: goal, session_id: tenantOf(req), source: "api", priority: "normal",
-        context: { requestedBy: requestedBy ?? "operator", channel: "microfixd-os-tv" },
-      });
-      const used = result.organs_used || [];
-      used.forEach((organ, i) => {
-        const step: TvRunStep = {
-          id: `step_${i + 1}`, runId, sequence: i + 1,
-          action: { id: `s${i + 1}`, kind: "apply_capability", title: `Organ: ${organ}`, input: { task: goal }, risk: "low" },
-          status: result.success ? "succeeded" : "failed", createdAt: new Date().toISOString(),
-        };
-        tvRun.steps.push(step);
-        tvRun.run.currentStep = i + 1;
-        emit(runId, { type: "graph.step", missionId: runId, stepId: step.id, sequence: step.sequence, status: step.status, action: step.action });
-      });
-      tvRun.run.status = result.success ? "succeeded" : "failed";
-      tvRun.run.outcome = result.output;
-      tvRun.run.updatedAt = new Date().toISOString();
-      emit(runId, { type: "mission.completed", missionId: runId, outcome: tvRun.run.status, ...(result.success ? {} : { error: result.output }) });
-    } catch (err) {
-      tvRun.run.status = "failed";
-      tvRun.run.error = String(err);
-      tvRun.run.updatedAt = new Date().toISOString();
-      emit(runId, { type: "mission.completed", missionId: runId, outcome: "failed", error: String(err) });
-      emit(runId, { type: "system.error", message: String(err) });
-    }
-  })();
-
-  res.json({ run: tvRun.run });
-});
-
-autonomyRouter.post("/runs/:id/stream-token", (req, res) => {
-  const token = `st_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-  streamTokens.set(token, { runId: req.params.id, expires: Date.now() + 60_000 });
-  res.json({ token });
-});
-
-autonomyRouter.get("/runs/:id/stream", (req, res) => {
-  const { token } = req.query;
-  const grant = token ? streamTokens.get(String(token)) : undefined;
-  if (!grant || grant.runId !== req.params.id || grant.expires < Date.now()) {
-    return res.status(401).json({ error: "Invalid or expired stream token." });
-  }
-  streamTokens.delete(String(token));
-  const tvRun = runs.get(req.params.id);
-  if (!tvRun) return res.status(404).json({ error: "Run not found." });
-
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "Access-Control-Allow-Origin": req.headers.origin || "*",
-  });
-  const send = (event: Record<string, unknown>) => {
-    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-  };
-
-  // Replay real events that already happened (poll fallback parity).
-  if (tvRun.run.status === "succeeded" || tvRun.run.status === "failed") {
-    send({ type: "graph.started", missionId: tvRun.run.id });
-    for (const s of tvRun.steps) {
-      send({ type: "graph.step", missionId: tvRun.run.id, stepId: s.id, sequence: s.sequence, status: s.status, action: s.action });
-    }
-    send({ type: "mission.completed", missionId: tvRun.run.id, outcome: tvRun.run.status, ...(tvRun.run.error ? { error: tvRun.run.error } : {}) });
-    res.end();
-    return;
-  }
-
-  const sub = (event: Record<string, unknown>) => send(event);
-  const subs = runSubscribers.get(req.params.id) ?? new Set();
-  subs.add(sub);
-  runSubscribers.set(req.params.id, subs);
-  const heartbeat = setInterval(() => res.write(": ping\n\n"), 15_000);
-  req.on("close", () => {
-    clearInterval(heartbeat);
-    const s = runSubscribers.get(req.params.id);
-    s?.delete(sub);
-    if (s && s.size === 0) runSubscribers.delete(req.params.id);
-  });
-});
-
-autonomyRouter.get("/runs/:id", (req, res) => {
-  const tvRun = runs.get(req.params.id);
-  if (!tvRun) return res.status(404).json({ error: "Run not found." });
-  res.json({ run: tvRun.run, steps: tvRun.steps });
+const submitLegacy=(field:string):import('express').RequestHandler=>(req,res,next)=>{
+ req.body={...req.body,objective:req.body?.[field]};res.locals.legacyMission=true;
+ return submitMission(req,res,next);
+};
+autonomyRouter.post('/chat',submitLegacy('message'));
+autonomyRouter.post('/goals',submitLegacy('goal'));
+// No RAM-only runs, guessed plans, or tenant-free bearer tokens.
+autonomyRouter.post('/runs/:id/stream-token',(_req,res)=>res.status(410).json({code:'USE_DURABLE_MISSION_POLLING'}));
+autonomyRouter.get('/runs/:id/stream',(_req,res)=>res.status(410).json({code:'USE_DURABLE_MISSION_POLLING'}));
+autonomyRouter.get('/runs/:id',async(req,res)=>{
+ try{
+  const {repository}=createPlannerRuntime(plannerClient(),tenantOf(req),req.params.id);
+  const mission=await repository.getMission(req.params.id),tasks=await repository.getTasks(req.params.id),artifacts=await repository.getArtifacts(req.params.id);
+  res.json({run:projectMission(mission,tasks,artifacts),steps:tasks.map((task,i)=>({id:task.task_id,runId:mission.mission_id,sequence:i+1,status:task.status,action:{title:String(task.input_context.objective??mission.objective)}}))});
+ }catch{res.status(404).json({code:'MISSION_NOT_FOUND'});}
 });
 
 // ── Agents: the organ registry as the real agent network ──────────────────

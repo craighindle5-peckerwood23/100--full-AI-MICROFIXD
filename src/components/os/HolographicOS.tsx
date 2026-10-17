@@ -186,6 +186,7 @@ export default function HolographicOS({ onReboot }: Props) {
       const run = () => mode === 'mission'
         ? api<Mission>('POST', '/planner/missions', {objective:task,tool_permissions:allowedTools,browser_origins:origins.split(',').map(v=>v.trim()).filter(Boolean)}, {'Idempotency-Key':key})
         : api<any>('POST', '/command/run', {
+        mode:'chat',
         task,
         source: 'os-shell',
         priority: 'normal',

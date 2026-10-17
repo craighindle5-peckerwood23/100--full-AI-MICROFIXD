@@ -93,7 +93,7 @@ export class VoiceCommandGrammarEngine {
   async execute(parsed: ParsedCommand) {
     switch (parsed.intent) {
       case "create_mission":
-        this.mission.createMission(parsed.target!, [
+        await this.mission.createMission(parsed.target!, [
           {
             type: "model",
             payload: {
@@ -105,13 +105,7 @@ export class VoiceCommandGrammarEngine {
         break;
 
       case "run_agent":
-        await this.router.route({
-          type: parsed.target!,
-          payload: {
-            systemPrompt: "Execute voice agent command.",
-            userPrompt: parsed.raw,
-          },
-        });
+        await this.mission.createMission(parsed.raw,[]);
         break;
 
       case "emotion_modulate":
@@ -140,22 +134,11 @@ export class VoiceCommandGrammarEngine {
         break;
 
       case "deploy_service":
-        await this.router.route({
-          type: "deploy",
-          payload: {
-            service: parsed.target,
-            reason: "voice_command",
-          },
-        });
+        await this.mission.createMission(parsed.raw,[]);
         break;
 
       case "trigger_repair":
-        await this.router.route({
-          type: "repair",
-          payload: {
-            reason: "voice_command",
-          },
-        });
+        await this.mission.createMission(parsed.raw,[]);
         break;
 
       default:

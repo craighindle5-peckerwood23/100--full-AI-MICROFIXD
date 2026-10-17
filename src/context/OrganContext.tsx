@@ -9,20 +9,8 @@ export const OrganProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     const initializedOrgans = initOrgans();
     
-    // Start non-intrusive autonomous loops
-    initializedOrgans.scheduler.start();
-    initializedOrgans.loop.start();
-    initializedOrgans.mission.start();
-    initializedOrgans.feedback.start();
-    initializedOrgans.federation.start();
-    initializedOrgans.emotion.start();
-    initializedOrgans.reflex.start();
-    initializedOrgans.web.start();
-    
-    // Auditory organs require user gesture - DO NOT start automatically
-    // initializedOrgans.voice.start();
-    // initializedOrgans.voiceEmotion.start();
-
+    // Presentation context only. The authenticated server planner owns work.
+    // Starting schedulers here creates an independent worker per browser tab.
     setOrgans(initializedOrgans);
     
     return () => {

@@ -67,6 +67,7 @@ try{
  await page.getByRole('button',{name:'Approve action',exact:true}).click();
  await page.getByRole('button',{name:'Hologram',exact:true}).click();
  await page.getByText('Verified mission fixture result.',{exact:true}).waitFor();
+ await page.getByText('0 active · 1 completed',{exact:true}).waitFor({timeout:25000});
  assert.equal(missionAttempts,1);assert.equal(attempts,1);assert.equal(approved,true);
  await page.getByRole('button',{name:'Open Microfixd settings'}).click();await page.getByRole('dialog').waitFor();await page.getByRole('button',{name:'Close settings',exact:true}).click();
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:join(evidence,'Microfixd-HIO-Mobile.png'),fullPage:true});

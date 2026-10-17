@@ -1,3 +1,4 @@
+import {projectMission} from './missionProjection';
 import { Router } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
 import { validatePlan, validateSchema, createPlannerRuntime, plannerClient } from './supabaseRuntime';
@@ -10,14 +11,14 @@ export const plannerRouter=Router();
 const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex').slice(0,32);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 plannerRouter.get('/capabilities',(_req,res)=>res.json(systemCapabilities()));
 plannerRouter.get('/tools',(_req,res)=>res.json({tools:ENABLED_TOOLS.map(name=>getTool(name)).filter(Boolean)}));
-plannerRouter.post('/missions',async(req,res)=>{
+export const submitMission:import('express').RequestHandler=async(req,res)=>{
  try{
   const tenant=(req as any).microfixdTenantId;
   const key=req.header('Idempotency-Key');
   if(!tenant||!key||key.length>200||typeof req.body.objective!=='string'||!req.body.objective.trim()||req.body.objective.length>16000)return res.status(400).json({code:'INVALID_MISSION'});
   if(req.body.deadline_at!==undefined&&(typeof req.body.deadline_at!=='string'||!Number.isFinite(Date.parse(req.body.deadline_at))||Date.parse(req.body.deadline_at)<=Date.now()))return res.status(400).json({code:'INVALID_DEADLINE'});
   const mission:Mission={mission_id:uuid(`${tenant}:${key}`),tenant_id:tenant,created_by:(req as any).microfixdUserId??'operator',created_at:new Date().toISOString(),objective:req.body.objective.trim(),constraints:{...(req.body.deadline_at?{deadline_at:req.body.deadline_at}:{}),max_tokens:Number.isInteger(req.body.max_tokens)?Math.max(1,Math.min(100000,req.body.max_tokens)):32000,browser_origins:Array.isArray(req.body.browser_origins)?req.body.browser_origins.filter((v:unknown)=>{try{return typeof v==='string'&&new URL(v).origin===v&&v.startsWith('https://');}catch{return false;}}):[],tool_permissions:Array.isArray(req.body.tool_permissions)?req.body.tool_permissions.filter((t:unknown)=>typeof t==='string'&&ENABLED_TOOLS.includes(t)):[],...(req.body.plan?{plan:req.body.plan}:{})},status:'queued',result_artifact_id:null};
-  if(req.body.plan)validatePlan(req.body.plan,mission);
+  if(req.body.plan){try{validatePlan(req.body.plan,mission);}catch{return res.status(400).json({code:'INVALID_PLAN'});}}
   const client=plannerClient(),owner=randomUUID();
   const {data:claimed,error}=await client.rpc('spine_lease',{p_tenant:tenant,p_mission:mission.mission_id,p_owner:owner,p_release:false});
   if(error)throw error;
@@ -25,9 +26,10 @@ plannerRouter.post('/missions',async(req,res)=>{
   const {data,error:readError}=await client.from('spine_rows').select('data').eq('tenant_id',tenant).eq('kind','missions').eq('id',mission.mission_id).single();
   if(readError)throw readError;
   if(data.data.objective!==mission.objective||canonicalJSON(data.data.constraints)!==canonicalJSON(mission.constraints))return res.status(409).json({code:'IDEMPOTENCY_CONFLICT'});
-  res.status(202).json(data.data);
+  res.status(202).json({...data.data,status_url:`/api/planner/missions/${mission.mission_id}`,...(res.locals.legacyMission?{run:projectMission(data.data),reply:'Mission queued; follow status_url for execution evidence.'}:{})});
  }catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
-});
+};
+plannerRouter.post('/missions',submitMission);
 plannerRouter.get('/missions',async(req,res)=>{
  try{const {data,error}=await plannerClient().from('spine_rows').select('data').eq('tenant_id',(req as any).microfixdTenantId).eq('kind','missions').order('sequence',{ascending:false}).limit(50);if(error)throw error;res.json({missions:data.map(r=>r.data)});}catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
 });

@@ -103,7 +103,6 @@ export default function OSShell({ onReboot }: Props) {
   const [isCommandRunning, setIsCommandRunning] = useState(false);
   const [activeModel, setActiveModel] = useState('Groq / Gemini / DeepSeek');
   const [supabaseConnected, setSupabaseConnected] = useState(false);
-  const [watchdogStatus, setWatchdogStatus] = useState(autonomousCore.getWatchdog());
   const [fallbackState, setFallbackState] = useState(autonomousCore.getFallbackAlert());
   const [isCommandConsoleOpen, setIsCommandConsoleOpen] = useState(false);
 
@@ -126,7 +125,6 @@ export default function OSShell({ onReboot }: Props) {
       setIsSpeaking(speaking);
     });
     const unsubAutonomy = autonomousCore.subscribe(() => {
-      setWatchdogStatus({ ...autonomousCore.getWatchdog() });
       setFallbackState({ ...autonomousCore.getFallbackAlert() });
     });
     return () => {
