@@ -112,6 +112,7 @@ export interface PlannerDependencies {
   transaction<T>(work: (repository: Repositories) => Promise<T>): Promise<T>;
   withMissionLock<T>(tenantId: string, missionId: UUID, work: () => Promise<T>): Promise<T>;
   plan(mission: Mission): Promise<PlannedTask[]>;
+  recordPlanningError?(mission:Mission,error:unknown):Promise<void>;
   executeTool(request: JSONObject, context: ExecutionContext): Promise<ExecutionResult>;
   invokeAgent(input: JSONValue, agentId: UUID | undefined, context: ExecutionContext): Promise<ExecutionResult>;
   validate: SchemaValidator;
@@ -156,6 +157,7 @@ export class PlannerService {
       if (!tasks.length) {
         let plan: PlannedTask[];
         try { plan = await this.d.plan(current); } catch (error) {
+          await this.d.recordPlanningError?.(current,error);
           await r.updateMissionStatus(current.mission_id, ['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) ? 'waiting' : 'failed');
           return r.getMission(current.mission_id);
         }
@@ -163,7 +165,7 @@ export class PlannerService {
         const allowed = current.constraints.tool_permissions;
         if (!plan.length || count > this.d.budget.max_subtasks || plan.some(t => !t.subtasks.length
           || !Object.keys(t.expected_output_schema).length || t.tool_permissions.some(p => !Array.isArray(allowed) || !allowed.includes(p))))
-          {await r.updateMissionStatus(current.mission_id,'failed');return r.getMission(current.mission_id);}
+          {await this.d.recordPlanningError?.(current,new Error('INVALID_PLAN'));await r.updateMissionStatus(current.mission_id,'failed');return r.getMission(current.mission_id);}
         await this.d.transaction(async tx => {
           for (const p of plan) {
             const task: Task = { ...p, task_id: randomUUID(), mission_id: current.mission_id,
