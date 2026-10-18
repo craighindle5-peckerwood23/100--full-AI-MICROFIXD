@@ -254,7 +254,7 @@ export default function HolographicOS({ onReboot }: Props) {
         <div className="text-xs">
           <label>Command mode <select aria-label="Command mode" value={mode} disabled={commandState==='PROCESSING'} onChange={e=>setMode(e.target.value as 'mission'|'chat')}><option value="mission">Do a task (durable mission)</option><option value="chat">Ask a question</option></select></label>
           {mode==='mission' && <details><summary>Authorized tool scope ({allowedTools.length} tools)</summary>
-            <p>Select tools for this task. External changes still require exact-action approval.</p>
+            <p>All tools are selected by default. Owner missions use standing authorization; other accounts retain manual approval.</p>
             {tools.map(tool=><label key={tool.name} className="block" title={tool.description}><input type="checkbox" disabled={commandState==='PROCESSING'} checked={allowedTools.includes(tool.name)} onChange={e=>setAllowedTools(prev=>e.target.checked?[...prev,tool.name]:prev.filter(n=>n!==tool.name))}/>{tool.name}</label>)}
             <label>Allowed HTTPS origins<input aria-label="Allowed HTTPS origins" disabled={commandState==='PROCESSING'} value={origins} onChange={e=>setOrigins(e.target.value)} placeholder="https://example.com"/></label>
           </details>}

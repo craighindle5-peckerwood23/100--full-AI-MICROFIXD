@@ -14,25 +14,26 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, any>;
   const db = database();
   const session = String(p.session_id || "default");
+  const tenant = String(p.tenant_id || "global");
   const agent = String(p.organ || "brain");
   const limit = Math.max(1, Math.min(100, Number(p.limit) || 10));
   if (action === "ack_output") {
     if (!p.session_id || !p.response_id || !["played", "failed", "cancelled"].includes(p.status)) throw new Error("Valid response_id and playback status required");
     const { data: output, error: readError } = await db.from("microfixd_memory_records")
-      .select("id,agent_id,metadata").eq("id", p.response_id).contains("metadata", {session_id:session}).single();
+      .select("id,agent_id,metadata").eq("tenant_id",tenant).eq("id", p.response_id).contains("metadata", {session_id:session}).single();
     if (readError || output?.agent_id !== "command" || output.metadata?.output_mode !== "spoken") throw new Error("Spoken response not found in this session");
     const id = p.status === "played" ? `playback:${p.response_id}` : `playback:${p.response_id}:${randomUUID()}`;
     if(p.status === "played") {
-      const {data:existing,error:existingError} = await db.from("microfixd_memory_records").select("metadata").eq("id",id).contains("metadata",{session_id:session}).maybeSingle();
+      const {data:existing,error:existingError} = await db.from("microfixd_memory_records").select("metadata").eq("tenant_id",tenant).eq("id",id).contains("metadata",{session_id:session}).maybeSingle();
       if(existingError)throw new Error(`Playback lookup failed: ${existingError.message}`);
       if(existing)return {success:true,response_id:p.response_id,state:existing.metadata.state,cmdId:output.metadata.cmdId,duplicate:true};
     }
     const row = {id, agent_id:"delivery", kind:"episodic", content:JSON.stringify({response_id:p.response_id,status:p.status,error:String(p.error || "").slice(0,500)}),
-      tags:["playback"],importance:0.5,tenant_id:"global",metadata:{session_id:session,response_id:p.response_id,state:p.status === "played" ? "completed" : p.status}};
+      tags:["playback"],importance:0.5,tenant_id:tenant,metadata:{session_id:session,response_id:p.response_id,state:p.status === "played" ? "completed" : p.status}};
     // A successful acknowledgment is immutable; retries cannot create duplicate completion records.
     const {error} = await db.from("microfixd_memory_records").upsert(row,{onConflict:"id",ignoreDuplicates:true});
     if(error) throw new Error(`Playback acknowledgment failed: ${error.message}`);
-    const {data:ack,error:ackError} = await db.from("microfixd_memory_records").select("metadata").eq("id",id).contains("metadata",{session_id:session}).single();
+    const {data:ack,error:ackError} = await db.from("microfixd_memory_records").select("metadata").eq("tenant_id",tenant).eq("id",id).contains("metadata",{session_id:session}).single();
     if(ackError) throw new Error(`Playback acknowledgment read failed: ${ackError.message}`);
     return {success:true,response_id:p.response_id,state:ack.metadata.state,cmdId:output.metadata.cmdId};
   }
@@ -41,7 +42,7 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
     const max_chars = Math.max(1000,Math.min(100000,Number(p.max_chars ?? process.env.MEMORY_CONTEXT_MAX_CHARS) || 8000));
     let result: any;
     try {
-      result = await executeMemoryOrgan(p.query ? "search" : "recent",{session_id:session,limit:requested,query:p.query});
+      result = await executeMemoryOrgan(p.query ? "search" : "recent",{session_id:session,tenant_id:tenant,limit:requested,query:p.query});
     } catch (error) {
       const message = String((error as Error)?.message || error);
       const transient = /timeout|gateway|fetch failed|econnreset|etimedout|503|504/i.test(message);
@@ -69,19 +70,19 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
     const { data, error } = await db.from("microfixd_memory_records").insert({
       id: randomUUID(), agent_id: agent, kind: "episodic", content: p.content,
       tags: Array.isArray(p.tags) ? p.tags : [], importance: Number(p.importance ?? 0.5),
-      metadata: { ...(p.metadata || {}), session_id: session }, tenant_id: "global",
+      metadata: { ...(p.metadata || {}), session_id: session }, tenant_id: tenant,
     }).select("id").single();
     if (error) throw new Error(`Memory write failed [${error.code}]: ${error.message}`);
     return { stored: true, id: data.id, source: "supabase", durable: true };
   }
   if (["stats", "status", "health", "health_check"].includes(action)) {
-    const { count, error } = await db.from("microfixd_memory_records").select("id", { count: "exact", head: true });
+    const { count, error } = await db.from("microfixd_memory_records").select("id", { count: "exact", head: true }).eq("tenant_id",tenant);
     if (error) throw new Error(`Memory health failed [${error.code}]: ${error.message}`);
     return { total_memories: count, source: "supabase", durable: true, status: "nominal" };
   }
   if (["query", "search", "recall", "recall_keyword", "recent"].includes(action)) {
     let query = db.from("microfixd_memory_records")
-      .select("id,content,tags,agent_id,importance,created_at,metadata")
+      .select("id,content,tags,agent_id,importance,created_at,metadata").eq("tenant_id",tenant)
       .contains("metadata", { session_id: session })
       .order("created_at", { ascending: false }).limit(limit);
     if (action !== "recent") {

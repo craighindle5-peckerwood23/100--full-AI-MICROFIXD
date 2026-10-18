@@ -24,10 +24,10 @@ test('all compatibility submissions reuse one persisted tenant-scoped mission an
  const db=store.listen(0,'127.0.0.1');await new Promise<void>(r=>db.once('listening',r));
  const oldUrl=process.env.SUPABASE_URL,oldKey=process.env.SUPABASE_SERVICE_ROLE_KEY;
  process.env.SUPABASE_URL=`http://127.0.0.1:${(db.address() as any).port}`;process.env.SUPABASE_SERVICE_ROLE_KEY='test-only-key';
- const makeApp=()=>{const app=express();app.use(express.json());app.use((req,_res,next)=>{Object.assign(req,{microfixdTenantId:req.header('x-test-tenant')??'a',microfixdUserId:'test-operator',microfixdRole:'admin'});next();});app.use('/api/planner',plannerRouter);app.use('/api/execution',executionRouter);app.use('/api/autonomy',autonomyRouter);app.use('/api/tools',toolsRouter);app.use('/api/skin',skinRouter);app.use('/api/command',orchestratorRouter);return app;};
+ const makeApp=()=>{const app=express();app.use(express.json());app.use((req,_res,next)=>{Object.assign(req,{microfixdTenantId:req.header('x-test-tenant')??'a',microfixdUserId:'test-operator',microfixdRole:req.header('x-test-role')??'admin'});next();});app.use('/api/planner',plannerRouter);app.use('/api/execution',executionRouter);app.use('/api/autonomy',autonomyRouter);app.use('/api/tools',toolsRouter);app.use('/api/skin',skinRouter);app.use('/api/command',orchestratorRouter);return app;};
  let server=makeApp().listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));
  const origin=()=>`http://127.0.0.1:${(server.address() as any).port}`;
- const submit=async(path:string,body:any,key='same-request',tenant='a')=>{const response=await fetch(origin()+path,{method:'POST',headers:{'content-type':'application/json','Idempotency-Key':key,'x-test-tenant':tenant,'x-microfixd-tenant':'untrusted'},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
+ const submit=async(path:string,body:any,key='same-request',tenant='a',role='admin')=>{const response=await fetch(origin()+path,{method:'POST',headers:{'content-type':'application/json','Idempotency-Key':key,'x-test-tenant':tenant,'x-test-role':role,'x-microfixd-tenant':'untrusted'},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
  try{
   let id='';
   for(const [path,field] of [['/api/planner/missions','objective'],['/api/execution/run','task'],['/api/autonomy/goals','goal'],['/api/tools/run','message'],['/api/skin/receive','payload'],['/api/command/run','task']]){
@@ -36,6 +36,15 @@ test('all compatibility submissions reuse one persisted tenant-scoped mission an
    assert.equal(result.body.mission_id,id);assert.equal(result.body.tenant_id,'a');assert.equal(result.body.status,'queued');
   }
   assert.equal(saved.size,1);
+  const {ENABLED_TOOLS}=await import('../server/planner/governedTools');
+  const initial=[...saved.values()][0];assert.deepEqual(initial.constraints.tool_permissions,ENABLED_TOOLS);assert.equal(initial.constraints.tool_approval_mode,'preauthorized');
+  const restricted=await submit('/api/planner/missions',{objective:'Restricted scope',tool_permissions:[],tool_approval_mode:'preauthorized',approval_actor:'forged'},'operator-request','a','operator');
+  assert.equal(restricted.status,202);assert.equal(restricted.body.constraints.tool_approval_mode,'manual');assert.equal(restricted.body.constraints.approval_actor,null);assert.deepEqual(restricted.body.constraints.tool_permissions,[]);
+  const browser=await submit('/api/tools/execute',{tool_name:'take_screenshot',arguments:{url:'https://example.org/page'}},'browser-request');
+  assert.equal(browser.status,202);assert.deepEqual(browser.body.constraints.browser_origins,['https://example.org']);
+  const manual=await submit('/api/planner/missions',{objective:'Manual mission',tool_approval_mode:'manual'},'manual');assert.equal(manual.body.constraints.tool_approval_mode,'manual');
+  const invalid=await submit('/api/planner/missions',{objective:'Invalid plan',plan:[null]},'invalid-plan');assert.equal(invalid.status,400);
+
   const conflict=await submit('/api/execution/run',{task:'Changed objective'});assert.equal(conflict.status,409);
   const other=await submit('/api/execution/run',{task:'Verify one control plane'},'same-request','b');assert.equal(other.status,202);assert.notEqual(other.body.mission_id,id);
   const exact=await submit('/api/tools/execute',{tool_name:'scan_for_security_issues',arguments:{output:'test text'}},'exact-tool');assert.equal(exact.status,202);assert.equal(exact.body.constraints.plan[0].subtasks[0].tool_request.name,'scan_for_security_issues');

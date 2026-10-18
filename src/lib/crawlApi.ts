@@ -25,6 +25,6 @@ export const CrawlApi = {
 
 export const ToolsApi = {
   list:    ()                                          => api("GET",  "/tools"),
-  run:     (message: string, systemPrompt?: string)    => api("POST", "/tools/run",     { message, system_prompt: systemPrompt }),
-  execute: (toolName: string, args: unknown)           => api("POST", "/tools/execute", { tool_name: toolName, arguments: args }),
+  run:     (message: string, systemPrompt?: string, idempotencyKey = crypto.randomUUID())    => api("POST", "/tools/run",     { message, system_prompt: systemPrompt }, {"Idempotency-Key":idempotencyKey}),
+  execute: (toolName: string, args: unknown, idempotencyKey = crypto.randomUUID())           => api("POST", "/tools/execute", { tool_name: toolName, arguments: args }, {"Idempotency-Key":idempotencyKey}),
 };

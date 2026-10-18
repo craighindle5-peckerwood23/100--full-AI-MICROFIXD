@@ -200,7 +200,7 @@ export class AutonomyRuntime {
 export const autonomyRuntime=new AutonomyRuntime();
 export class MissionEngine {
  public async handleIntent(intent:any){
-  return api('POST','/planner/missions',{objective:String(intent.prompt??intent.objective??''),tool_permissions:[]},{'Idempotency-Key':crypto.randomUUID()});
+  return api('POST','/planner/missions',{objective:String(intent.prompt??intent.objective??'')},{'Idempotency-Key':crypto.randomUUID()});
  }
 }
 

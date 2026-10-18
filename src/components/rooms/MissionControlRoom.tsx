@@ -26,7 +26,7 @@ export default function MissionControlRoom({ initialMissionId = '' }: { initialM
   const [newObjective,setNewObjective]=useState('');
   const [error,setError]=useState('');
   const [catalog,setCatalog]=useState<{name:string}[]>([]);
-  useEffect(()=>{let stopped=false;void api<{tools:{name:string}[]}>('GET','/planner/tools').then(r=>{if(!stopped)setCatalog(r.tools);}).catch(e=>{if(!stopped)setError(String(e));});return()=>{stopped=true;};},[]);
+  useEffect(()=>{let stopped=false;void api<{tools:{name:string}[]}>('GET','/planner/tools').then(r=>{if(!stopped){setCatalog(r.tools);setAllowedTools(r.tools.map(t=>t.name));}}).catch(e=>{if(!stopped)setError(String(e));});return()=>{stopped=true;};},[]);
   const [allowedTools,setAllowedTools]=useState<string[]>([]);
   const [browserOrigins,setBrowserOrigins]=useState('');
   const [tokenBudget,setTokenBudget]=useState(32000);

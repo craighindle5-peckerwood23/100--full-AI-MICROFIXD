@@ -39,6 +39,9 @@ export async function executeWorldModelOrgan(action: string, payload: unknown): 
         invariantsPreserved: report.optimalBranch.predictedState.invariantsPreserved,
       };
     }
+    case "emergency_kill": {
+      return {engaged:orchestrationOversight.triggerEmergencyKill(),reason:String(p.reason??"Operator request"),scope:"local_oversight_registry"};
+    }
     case "oversight_status": {
       return {
         status: "ok",
