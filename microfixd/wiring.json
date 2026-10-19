@@ -309,6 +309,12 @@
       "target": "hio",
       "relation": "resolves",
       "node": "cognitive-shell/src/integration/ShellMount.tsx"
+    },
+    {
+      "source": "classifier",
+      "target": "vector_automotive",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
     }
   ],
   "classificationRoutes": {
@@ -356,7 +362,8 @@
     "core.voiceEmotion": "microfixd/core/voice/voiceEmotionOrgan.ts",
     "core.voiceGrammar": "microfixd/core/voice/voiceCommandGrammarEngine.ts",
     "core.wiring": "microfixd/core/wiring/unifiedWiring.ts",
-    "hio": "cognitive-shell/src/hio/HIO.ts"
+    "hio": "cognitive-shell/src/hio/HIO.ts",
+    "vector_automotive": "server/organs/organs/automotiveOrgan.ts"
   },
   "executionSpine": {
     "submission": "/api/planner/missions",
@@ -366,5 +373,14 @@
     "protectedTools": "server/planner/governedTools.ts",
     "durableOnly": true,
     "approvalRequiredFor": "all_tools_except_explicit_read_allowlist"
+  },
+  "vectorAutomotive": {
+    "api": "/api/automotive",
+    "workspace": "/automotive",
+    "workflow": "server/automotive/workflows/diagnosticWorkflow.ts",
+    "storage": "supabase/automotive_schema.sql",
+    "tenantSource": "verified RBAC context",
+    "durableOnly": true,
+    "vehicleWrites": false
   }
 }

@@ -297,6 +297,10 @@ app.post("/api/classification/resolve", async (req, res, next) => {
   }
 });
 
+app.use("/api/automotive", lazyRouter(async () => {
+  const { automotiveRouter } = await import("./automotive/automotiveRouter");
+  return automotiveRouter;
+}));
 app.use("/api/planner", lazyRouter(async () => {
   const { plannerRouter } = await import("./planner/plannerRouter");
   return plannerRouter;

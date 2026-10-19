@@ -265,6 +265,7 @@ export default function HolographicOS({ onReboot }: Props) {
         </form>
       </HIOCockpit>
 
+      <a href="/automotive" className="fixed right-4 top-4 z-50 rounded-lg border border-cyan-300/30 bg-black/80 px-3 py-2 text-xs text-cyan-100">Vector Automotive</a>
       {settingsSection && (
         <SettingsWindow
           initialSection={settingsSection}
