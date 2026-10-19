@@ -381,6 +381,22 @@
     "storage": "supabase/automotive_schema.sql",
     "tenantSource": "verified RBAC context",
     "durableOnly": true,
-    "vehicleWrites": false
+    "vehicleWrites": false,
+    "obd": {
+      "bridge": "integrations/obd-bridge/bridge.py",
+      "primary": "j2534_0404_iso15765",
+      "secondary": [
+        "elm327_serial",
+        "elm327_bluetooth_spp",
+        "elm327_tcp"
+      ],
+      "sessions": "/api/automotive/obd/sessions",
+      "tools": [
+        "list_obd_sessions",
+        "read_obd_status"
+      ],
+      "readOnly": true,
+      "hardwareVerified": false
+    }
   }
 }

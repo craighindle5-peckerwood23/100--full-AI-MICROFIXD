@@ -1,3 +1,6 @@
+import {createCaseFromOBD} from './obd/caseWorkflow';
+import {OBDRepository} from './obd/repository';
+import {createOBDRouter} from './obd/obdRouter';
 import {Router,type Request,type RequestHandler} from 'express';
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
@@ -24,11 +27,13 @@ export function createAutomotiveRouter(repository?:(tenant:string)=>AutomotiveRe
      res.status(code==='ADMIN_REQUIRED'?403:code==='NOT_FOUND'?404:code==='REVISION_CONFLICT'?409:unavailable?503:422).json({error:unavailable?'Automotive dependency unavailable; no success was recorded':code,code:unavailable?'AUTOMOTIVE_DEPENDENCY_UNAVAILABLE':code});
    });
  };
+ router.use('/obd',createOBDRouter());
  const id=(req:Request)=>z.string().uuid().parse(req.params.id);
  router.get('/vehicles',handler(async(_,repo)=>repo.list<Vehicle>('vehicle')));
  router.post('/vehicles',handler(async(req,repo)=>repo.insert('vehicle',{...vehicleSchema.parse(req.body),id:randomUUID()})));
  router.get('/vin/:vin',handler(async(req)=>decodeVIN(req.params.vin.toUpperCase())));
  router.get('/cases',handler(async(_,repo)=>(await repo.list<DiagnosticCase>('case')).map(view)));
+ router.post('/cases/from-obd',handler(async(req,repo)=>view(await createCaseFromOBD(repo,new OBDRepository(database(),req.microfixdTenantId!),req.body,actor(req)))));
  router.post('/cases',handler(async(req,repo)=>view(await createCase(repo,req.body,actor(req)))));
  router.get('/cases/:id',handler(async(req,repo)=>view(await repo.get<DiagnosticCase>('case',id(req)))));
  router.post('/cases/:id/actions',handler(async(req,repo)=>{

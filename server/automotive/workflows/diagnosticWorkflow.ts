@@ -6,12 +6,12 @@ import {retrieve} from '../driveiq/retriever';
 import {generateHypotheses} from '../torquelogic/hypothesisGenerator';
 import {safetyAlerts} from '../redline/safetyEngine';
 import {recordEvent} from '../blackbox/eventStore';
-export async function createCase(repo:AutomotiveRepository,input:unknown,actor:string){
+export async function createCase(repo:AutomotiveRepository,input:unknown,actor:string,source?:DiagnosticCase['source']){
   const p=createCaseSchema.parse(input),vehicle=await repo.get<Vehicle>('vehicle',p.vehicleId);
   const hypotheses=generateHypotheses(retrieve(await repo.knowledge(vehicle,await embed(p.complaint+" "+p.dtcs.join(" "))),vehicle,p.dtcs,p.complaint));
   const c:DiagnosticCase={id:randomUUID(),vehicle,complaint:p.complaint,dtcs:p.dtcs,hazards:p.hazards,
-    state:hypotheses.length?'testing':'needs_evidence',revision:0,hypotheses,alerts:safetyAlerts(p.complaint,p.hazards),events:[]};
-  recordEvent(c,'created',actor,{complaint:c.complaint,dtcs:c.dtcs,evidenceIds:hypotheses.map(h=>h.evidence.id)});
+    state:hypotheses.length?'testing':'needs_evidence',revision:0,hypotheses,alerts:safetyAlerts(p.complaint,p.hazards),events:[],...(source?{source}:{})};
+  recordEvent(c,'created',actor,{complaint:c.complaint,dtcs:c.dtcs,evidenceIds:hypotheses.map(h=>h.evidence.id),...(source?{source}:{})});
   await repo.insert('case',c);return c;
 }
 export async function refreshEvidence(repo:AutomotiveRepository,c:DiagnosticCase,actor:string){

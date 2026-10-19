@@ -1,3 +1,4 @@
+import OBDPanel from './OBDPanel';
 import React,{useEffect,useState} from 'react';
 import {api} from '../lib/serverApi';
 import type {DiagnosticCase,Vehicle} from '../../server/automotive/schemas';
@@ -14,6 +15,7 @@ export default function AutomotiveWorkspace(){
  return <main className="automotive"><header><div><p className="eyebrow">MICROFIXD / VECTOR AUTOMOTIVE</p><h1>From trouble code to root cause.</h1><p>Evidence, diagnostic tests, repair records, and technician verification.</p></div><a href="/">Return to Microfixd</a></header>
  <div role="status" aria-live="polite">{busy?'Working…':notice}</div>{error&&<p role="alert" className="error">{error}</p>}
  <details><summary>Operator access</summary><p>Use your existing Microfixd account or operator credential. Credentials stay in this browser session.</p><form onSubmit={e=>{const f=fields(e);sessionStorage.setItem('microfixd_operator_token',String(f.token));e.currentTarget.reset();void run(load);}}><label>Operator token<input name="token" type="password" autoComplete="off" required/></label><button disabled={busy}>Connect</button></form></details>
+ <OBDPanel vehicles={vehicles} onCase={c=>{setCurrent(c as CaseView);void run(load);}}/>
  <div className="auto-grid"><section><h2>Vehicle profiles</h2><form onSubmit={e=>{const f=fields(e);void run(async()=>{const v=await api<Vehicle>('POST','/automotive/vehicles',{year:Number(f.year),make:f.make,model:f.model,engine:f.engine,...(f.vin?{vin:String(f.vin).toUpperCase()}: {})});await load();setVehicleId(v.id);setNotice('Vehicle saved.');});}}>
  <label>VIN (optional)<input name="vin" pattern="[A-HJ-NPR-Z0-9a-hj-npr-z]{17}" maxLength={17}/></label>
  <label>Year<input name="year" type="number" min="1981" max={new Date().getFullYear()+2} required/></label><label>Make<input name="make" required maxLength={80}/></label><label>Model<input name="model" required maxLength={80}/></label><label>Exact engine identifier<input name="engine" required maxLength={120}/></label><button disabled={busy}>Save vehicle</button></form>

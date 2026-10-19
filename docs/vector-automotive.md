@@ -52,7 +52,7 @@ Evidence status is untested/supported/refuted/inconclusive, never an invented pr
 
 Safety flags or detected safety-critical complaints hold the case; this MVP does not implement clearing those holds. Specialist tests require an explicit qualified-technician confirmation. Screening is conservative and not exhaustive.
 
-OBD connections/streaming, ECU/TCM/BCM writes and flashing, OEM bulk ingestion, recall synchronization, forecasting, automatic learning, automated numeric observation interpretation, and self-healing are future extensions. Their directories are not presented as working features. The current implementation is a bounded evidence-driven diagnostic workflow.
+ECU/TCM/BCM writes and flashing, OEM bulk ingestion, recall synchronization, forecasting, automatic learning, automated numeric observation interpretation, and self-healing are future extensions. Their directories are not presented as working features. The current implementation is a bounded evidence-driven diagnostic workflow.
 
 Run `node --import tsx --test tests/automotive.test.ts`, then `bash scripts/verify-production.sh`. Production capability requires deploying the reviewed commit and verifying authenticated API behavior; a passing build alone is not live proof.
 
@@ -62,3 +62,9 @@ Run `node --import tsx --test tests/automotive.test.ts`, then `bash scripts/veri
 - Browser: `node --import tsx tests/automotive-ui.mjs` completed the create/observe/repair/verify flow using synthetic fixtures through the actual router, and checked desktop/mobile layouts. This is not live OEM or OBD validation.
 - Supabase: additive schema installed on the existing Microfixd project; `supabase/tests/automotive.sql` passed against that project. Fixtures were rolled back. Checks cover revoked public grants, RLS, tenant/engine/year filtering in vector ranking, and compare-and-set update fencing.
 - OpenAI embedding generation and live NHTSA decoding were not exercised with production credentials/vehicles. Deployment and authenticated production API verification remain separate release steps.
+
+## Local OBD hardware integration
+
+See `integrations/obd-bridge/README.md` for the executable J2534/ELM327 bridge and supported profiles. The local bridge uploads authenticated, monotonic, retry-safe response samples to `/api/automotive/obd/sessions`. The workspace and governed `list_obd_sessions` / `read_obd_status` tools decode actual bytes with per-query freshness and preserve stale/disconnected/unknown states. `/api/automotive/cases/from-obd` creates a case from a live responding session after explicit vehicle confirmation, retaining the session ID, sequence and receipt time; VIN disagreement blocks attachment. This is generic read-only emissions OBD, not dealership-level all-module coverage. Physical hardware has not been validated.
+
+OBD extension validation: 105 TypeScript regression tests passed; eight Python adapter/ABI tests passed; actual TCP emulator-to-bridge-to-governed-tool end-to-end test passed; browser checked live-session display, stale transition, diagnostic workflow and desktop/mobile overflow. The OBD session schema and rollback-only access/tenant/sequence checks passed on the existing Supabase project. These results do not establish physical adapter or vehicle compatibility.
