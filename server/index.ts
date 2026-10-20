@@ -349,9 +349,11 @@ app.use("/api/automotive", lazyRouter(async () => {
   const { automotiveRouter } = await import("./automotive/automotiveRouter");
   return automotiveRouter;
 }));
-app.use("/api/planner", lazyRouter(async () => {
 app.use("/api/v1", lazyRouter(async () => {
-  const {orchestratorRouter} = await import("./routes/orchestratorRoutes");\n  return orchestratorRouter;\n}));\napp.use("/api/planner", lazyRouter(async () => {
+  const { orchestratorRouter } = await import("./routes/orchestratorRoutes");
+  return orchestratorRouter;
+}));
+app.use("/api/planner", lazyRouter(async () => {
   const { plannerRouter } = await import("./planner/plannerRouter");
   return plannerRouter;
 }));
