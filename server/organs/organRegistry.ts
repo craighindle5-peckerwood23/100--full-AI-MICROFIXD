@@ -21,6 +21,7 @@ export interface OrganRecord {
 }
 
 export const ORGAN_DEFINITIONS: { id: string; name: string; layer: string }[] = [
+  { id: "vector_automotive", name: "Vector Automotive Intelligence", layer: "automotive" },
   // ── Layer 1: Core Neural & Cognitive Organs (25) ──
   { id: "brain",                     name: "Brain (LLM Orchestrator)",           layer: "cognition" },
   { id: "reasoning_engine",          name: "Deep Reasoning Engine",             layer: "cognition" },

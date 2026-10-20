@@ -1,3 +1,4 @@
+import { executeAutomotiveOrgan } from "./organs/automotiveOrgan";
 import { executeCrawlOrgan } from "./organs/crawlOrgan";
 import { executeBrainOrgan } from "./organs/brainOrgan";
 import { executeMemoryOrgan } from "./organs/memoryOrgan";
@@ -32,6 +33,7 @@ function getCognitiveOrgans() {
 }
 
 export const EXECUTORS: Record<string, ExecutorFn> = {
+  vector_automotive: executeAutomotiveOrgan,
   crawl_engine: executeCrawlOrgan,
   brain: executeBrainOrgan,
   memory: executeMemoryOrgan,

@@ -439,6 +439,15 @@
       "source": "cognitive-shell/src/hio/HIO.ts",
       "node": "cognitive-shell/src/integration/ShellMount.tsx",
       "executable": false
+    },
+    {
+      "id": "vector_automotive",
+      "name": "Vector Automotive Intelligence",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/organs/organs/automotiveOrgan.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
     }
   ],
   "objects": [
@@ -731,6 +740,16 @@
       "id": "hio",
       "kind": "organ",
       "source": "cognitive-shell/src/hio/HIO.ts"
+    },
+    {
+      "id": "vector_automotive",
+      "kind": "runtime",
+      "source": "server/automotive/workflows/diagnosticWorkflow.ts"
+    },
+    {
+      "id": "vector_automotive",
+      "kind": "organ",
+      "source": "server/organs/organs/automotiveOrgan.ts"
     }
   ]
 }

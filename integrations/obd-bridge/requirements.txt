@@ -1,0 +1,2 @@
+# Required only for USB/serial or OS-paired Bluetooth SPP adapters.
+pyserial==3.5

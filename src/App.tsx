@@ -5,6 +5,7 @@
 
 import React, { lazy, Suspense, useState } from 'react';
 const SaasLanding = lazy(() => import('./marketing/SaasLanding'));
+const AutomotiveWorkspace = lazy(() => import('./automotive/AutomotiveWorkspace'));
 const CaseWorkspace = lazy(() => import('./casework/CaseWorkspace'));
 import { OrganProvider } from './context/OrganContext';
 import HolographicOS from './components/os/HolographicOS';
@@ -18,6 +19,11 @@ export default function App() {
   const accountsMode = isAccountsModeEnabled();
 
   if (['/saas','/saas/'].includes(window.location.pathname)) return <BrandProvider><Suspense fallback={<p>Loading workspace information…</p>}><SaasLanding /></Suspense></BrandProvider>;
+
+  if (['/automotive','/automotive/'].includes(window.location.pathname)) {
+    const workspace = <Suspense fallback={<p>Loading automotive workspace…</p>}><AutomotiveWorkspace /></Suspense>;
+    return <BrandProvider>{accountsMode ? <AccountGate>{workspace}</AccountGate> : workspace}</BrandProvider>;
+  }
 
   if (window.location.pathname === '/case-workspace') return <Suspense fallback={<p>Loading case workspace…</p>}><CaseWorkspace /></Suspense>;
 

@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import express from 'express';
+import {resolve,dirname,join} from 'node:path';
+import {readFileSync,writeFileSync,chmodSync} from 'node:fs';
+import {brotliDecompressSync} from 'node:zlib';
+import {createRequire} from 'node:module';
+import {chromium} from 'playwright';
+import {sessionView} from '../server/automotive/obd/interpreter.ts';
+import {createAutomotiveRouter} from '../server/automotive/automotiveRouter.ts';
+const vehicle={id:'00000000-0000-4000-8000-000000000001',year:2010,make:'BMW',model:'335i',engine:'SYNTHETIC'};
+const evidence={id:'00000000-0000-4000-8000-000000000002',source:'https://example.com/synthetic-fixture',title:'Synthetic evidence',excerpt:'Test fixture only',make:'BMW',model:'335i',engine:'SYNTHETIC',yearFrom:2010,yearTo:2010,dtcs:['P0300'],symptoms:[],cause:'Synthetic fault',repair:'Synthetic repair',test:{id:'test',title:'Synthetic test',procedure:'Fixture procedure',expected:'Fixture expected',verification:'Repeat fixture',risk:'routine',minutes:5}};
+const cases=new Map();const repo={list:async(kind)=>kind==='vehicle'?[vehicle]:[...cases.values()],get:async(kind,id)=>kind==='vehicle'?vehicle:cases.get(id),knowledge:async()=>[evidence],insert:async(kind,c)=>{if(kind==='case')cases.set(c.id,c);return c;},save:async(c)=>{cases.set(c.id,c);return c;}};
+let stale=false;
+const app=express();app.use(express.json());
+app.get('/api/automotive/obd/sessions',(_req,res)=>res.json([sessionView({id:'00000000-0000-4000-8000-000000000003',adapter:'j2534',label:'Synthetic UI adapter',owner:'fixture',createdAt:new Date().toISOString(),receivedAt:new Date(Date.now()-(stale?21000:0)).toISOString(),sequence:1,latest:{sequence:1,observedAt:new Date().toISOString(),status:'connected',protocol:'ISO15765-11bit-500000',adapterVersion:'UI fixture',responses:[{command:'010C',ecu:'7E8',payload:'410C1AF8'}],errors:[]},history:[]})]));
+app.post('/__test/stale',(_req,res)=>{stale=true;res.json({ok:true});});app.use('/api/automotive',(req,res,next)=>{req.microfixdTenantId='synthetic-ui';req.microfixdRole='admin';next();},createAutomotiveRouter(()=>repo));app.use(express.static(resolve('dist')));app.get('/automotive',(_req,res)=>res.sendFile(resolve('dist/index.html')));
+const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+const require=createRequire(import.meta.url);const bin=join(dirname(require.resolve('@sparticuz/chromium')),'../bin/chromium.br');
+const executablePath='/tmp/automotive-ui-chromium';writeFileSync(executablePath,brotliDecompressSync(readFileSync(bin)));chmodSync(executablePath,0o755);
+const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu']});
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[],base=`http://127.0.0.1:${server.address().port}`;page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(`http://127.0.0.1:${server.address().port}/automotive`);
+ await page.getByRole('heading',{name:'From trouble code to root cause.'}).waitFor();
+ await page.getByRole('heading',{name:'Vehicle connection',exact:true}).waitFor();
+ await page.getByText('rpm',{exact:true}).waitFor();
+ await page.getByLabel('Complaint',{exact:true}).fill('Synthetic complaint');await page.getByLabel('DTCs (comma separated)').fill('P0300');await page.getByRole('button',{name:'Create diagnostic case'}).click();
+ await page.getByRole('heading',{name:'BMW',exact:false}).waitFor();
+ await page.getByText('Record test observation',{exact:true}).click();await page.getByLabel('Measured finding and conditions').fill('Synthetic measured result');await page.getByLabel('Technician assessment').selectOption('supports');await page.getByRole('button',{name:'Save observation'}).click();
+ await page.getByLabel('Work actually performed').fill('Synthetic work');await page.getByLabel('I confirm the repair was performed').check();await page.getByRole('button',{name:'Record repair',exact:true}).click();
+ await page.getByLabel('Verification measurements and conditions').fill('Synthetic verified result');for(const label of ['Original complaint resolved','Relevant DTCs absent after appropriate operating cycle','Prescribed verification test passed','I performed this verification'])await page.getByLabel(label,{exact:true}).check();await page.getByRole('button',{name:'Save verification result'}).click();
+ await page.getByText('TORQUELOGIC / verified / REVISION 3',{exact:true}).waitFor();
+ assert.equal([...cases.values()][0].state,'verified');assert.deepEqual(errors,[]);
+ await page.request.post(base+'/__test/stale');await page.getByText('stale',{exact:true}).waitFor();
+ await page.screenshot({path:'/tmp/automotive-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/automotive-mobile.png',fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
+ console.log('Automotive UI: create, observe, repair, verify; desktop/mobile overflow checks passed. Synthetic adapter, not live hardware.');
+}finally{await browser.close();await new Promise(r=>server.close(r));}
