@@ -1,6 +1,6 @@
 # VECTOR automotive knowledge integration — phase 1
 
-Status: additive schema only. Migration not applied; no runtime APIs, vehicle integration, or validated predictions yet.
+Status: PR #30 supplies the canonical 16-table catalog. This PR adds only sensor specifications and structured diagnostic test specifications referencing the canonical tables. The addendum migration is not confirmed applied; no new runtime APIs or validated predictions are claimed.
 
 ## Relationship to Microfixd
 Use the existing Supabase database, mission/task spine, governed tool execution and MAID-Pro gateway. Do not create a parallel AI runtime or alternate database. Vehicle catalogs and sourced DTC definitions are shared reference data; repair cases are tenant-scoped and must be accessed only through authenticated service endpoints enforcing tenant ownership. RLS is enabled with no permissive policies as a fail-closed starting point. Before deployment, add narrowly scoped read policies for licensed reference data and tenant isolation for repair cases and their child records.
@@ -20,7 +20,7 @@ Enumerate actual supported modules by vehicle and gateway; include ECM, TCM, BCM
 Record OEM diagrams/CAD only when licensed; link geometry to component, variant, clearance envelope, fastener access, loads and safe work constraints. Tool concepts are proposals for engineering review, not fabrication instructions or safety certifications. For manufacturer submissions use a verified official specialty-tool suggestion channel, never an invented link.
 
 ## Next bounded slices
-1. Apply reviewed migration to development Supabase and add tenant-safe read-only catalog endpoints.
+1. Apply and verify the additive sensor/test migration after the canonical foundation, then add tenant-safe read-only catalog endpoints.
 2. Implement source ingest, deduplication, provenance and searchable retrieval with license checks.
 3. Add diagnostic case workflow, DTC test checklist and evidence-linked hypotheses.
 4. Add statistics from verified repair outcomes with proper denominators and calibration.
