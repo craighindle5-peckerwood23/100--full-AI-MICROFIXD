@@ -30,7 +30,7 @@
     "test:assistant": "node --import tsx --test tests/control-plane.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts",
     "test:engineering": "node --test tests/engineering-loop.test.mjs tests/engineering-state.test.mjs",
     "engineer:loop": "node scripts/engineering-loop.mjs",
-    "test:adapters": "node --import tsx --test tests/governed-adapter-runtime.test.ts tests/mission-dispatcher-wiring.test.ts tests/dispatcher-tracking-hook.test.ts tests/backoff-engine.test.ts"
+    "test:adapters": "node --import tsx --test tests/governed-adapter-runtime.test.ts tests/mission-dispatcher-wiring.test.ts tests/dispatcher-tracking-hook.test.ts tests/backoff-engine.test.ts tests/orchestrator-app-integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
