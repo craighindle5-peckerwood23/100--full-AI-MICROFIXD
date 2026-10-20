@@ -18,6 +18,8 @@ jobs:
         run: npm ci --include=dev
       - name: Engineering state and patch regression
         run: npm run test:engineering
+      - name: Governed adapter regression
+        run: npm run test:adapters
       - name: Production verification
         run: npm run verify:production
       - name: Upload failure evidence
