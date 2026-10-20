@@ -68,7 +68,7 @@ async function main(){
    if(files.includes(file))docs.push({path:file,text:(await readFile(path.join(workspace,file),'utf8')).slice(0,3500)});
   }
   const hints=objective.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=4);
-  const selected=files.filter(p=>/^(server|src|microfixd|tests)\\//.test(p)&&/\\.(ts|tsx|js|mjs)$/.test(p)).map(p=>({p,score:hints.filter(w=>p.toLowerCase().includes(w)).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,10);
+  const selected=files.filter(p=>p.startsWith('server/')||p.startsWith('src/')||p.startsWith('microfixd/')||p.startsWith('tests/')).filter(p=>/\.(ts|tsx|js|mjs)$/.test(p)).map(p=>({p,score:hints.filter(w=>p.toLowerCase().includes(w)).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,10);
   const context=[];for(const item of selected){const data=await readFile(path.join(workspace,item.p),'utf8');context.push({path:item.p,content:data.slice(0,6500)});}
   journal.discovery={trackedFiles:files.length,recentCommits:recent.stdout,docs:docs.map(d=>d.path),contextFiles:context.map(x=>x.path)};
   journal.state='planning';await save();
@@ -92,8 +92,7 @@ async function main(){
     // Export reviewed candidate without changing the user's existing checkout.
     const snapshot=[];for(const name of [...new Set(journal.iterations.flatMap(x=>x.paths))]){snapshot.push({path:name,content:await readFile(path.join(workspace,name),'utf8')});}
     journal.candidatePath='engineering-last-candidate.json';
-    await writeFile(path.join(root,journal.candidatePath),JSON.stringify({objective,id,files:snapshot},null,2)+'\
-');
+    await writeFile(path.join(root,journal.candidatePath),JSON.stringify({objective,id,files:snapshot},null,2)+String.fromCharCode(10));
     break;
    }
    messages.push({role:'assistant',content:JSON.stringify({reason:proposed.reason,paths:files.map(f=>f.path)})});
