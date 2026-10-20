@@ -67,11 +67,11 @@ async function main(){
   for(const file of ['README.md','package.json','docs/execution-spine.md']){
    if(files.includes(file))docs.push({path:file,text:(await readFile(path.join(workspace,file),'utf8')).slice(0,3500)});
   }
-  journal.discovery={trackedFiles:files.length,recentCommits:recent.stdout,docs:docs.map(d=>d.path)};
+  const hints=objective.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>=4);\n  const selected=files.filter(p=>/^(server|src|microfixd|tests)\\//.test(p)&&/\\.(ts|tsx|js|mjs)$/.test(p)).map(p=>({p,score:hints.filter(w=>p.toLowerCase().includes(w)).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,10);\n  const context=[];for(const item of selected){const data=await readFile(path.join(workspace,item.p),'utf8');context.push({path:item.p,content:data.slice(0,6500)});}\n  journal.discovery={trackedFiles:files.length,recentCommits:recent.stdout,docs:docs.map(d=>d.path),contextFiles:context.map(x=>x.path)};
   journal.state='planning';await save();
   const messages=[
    {role:'system',content:'You are Microfixd engineering planner. Output ONLY JSON of shape {"files":[{"path":"existing/path.ts","content":"complete new file contents"}],"reason":"short","question":null}. Do not invent changes or paths. Make minimal changes, never touch infra/secrets/security/governance, never write code that disables approval. If requirements conflict, emit {"files":[],"question":"specific conflict","choices":["A","B"]}. The runner validates paths and tests independently. Do not claim tests passed.'},
-   {role:'user',content:JSON.stringify({objective,files:files.filter(p=>p.startsWith('server/')||p.startsWith('src/')||p.startsWith('microfixd/')||p.startsWith('tests/')).slice(0,350),docs,recent:recent.stdout}).slice(0,LIMITS.contextBytes)}
+   {role:'user',content:JSON.stringify({objective,files:files.filter(p=>p.startsWith('server/')||p.startsWith('src/')||p.startsWith('microfixd/')||p.startsWith('tests/')).slice(0,350),docs,context,recent:recent.stdout}).slice(0,LIMITS.contextBytes)}
   ];
   for(let iteration=1;iteration<=MAX;iteration++){
    journal.state='reasoning';await save();
@@ -84,7 +84,7 @@ async function main(){
    const checked=await verify(workspace);
    journal.iterations.push({iteration,paths:staged.map(f=>f.path),hashes:staged.map(f=>({path:f.path,before:f.shaBefore,after:digest(f.after)})),tests:checked.results});
    await save();
-   if(checked.pass){journal.state='verified_in_sandbox';break;}
+   if(checked.pass){\n    journal.state='verified_in_sandbox';\n    // Export reviewed candidate without changing the user's existing checkout.\n    const snapshot=[];for(const name of [...new Set(journal.iterations.flatMap(x=>x.paths))]){snapshot.push({path:name,content:await readFile(path.join(workspace,name),'utf8')});}\n    journal.candidatePath='engineering-last-candidate.json';\n    await writeFile(path.join(root,journal.candidatePath),JSON.stringify({objective,id,files:snapshot},null,2)+'\\n');\n    break;\n   }
    messages.push({role:'assistant',content:JSON.stringify({reason:proposed.reason,paths:files.map(f=>f.path)})});
    messages.push({role:'user',content:JSON.stringify({result:'TEST_FAILED',diagnostics:checked.results,task:objective})});
    // The next model proposal may only edit the worktree, never the source checkout.
