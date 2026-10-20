@@ -1,15 +1,33 @@
 name: Execution spine regression
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
 permissions:
   contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
           cache: npm
-      - run: npm ci --include=dev
-      - run: npm run verify:production
+      - name: Install locked dependencies
+        run: npm ci --include=dev
+      - name: Engineering state and patch regression
+        run: npm run test:engineering
+      - name: Governed adapter regression
+        run: npm run test:adapters
+      - name: Production verification
+        run: npm run verify:production
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engineering-verification-failure
+          path: |
+            engineering-last-run.json
+            docs/system-probe-report.json
+          if-no-files-found: ignore

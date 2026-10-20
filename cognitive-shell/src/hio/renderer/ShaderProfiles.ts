@@ -11,7 +11,8 @@ export function selectShaderProfile(c:Cognition={},t:Telemetry={},operator?:Prof
  if(operator)return operator;
  if((t.errorRate??0)>.4||(t.systemLoad??0)>.85)return 'error';
  if(t.environment==='degraded'||t.environment==='offline-mode'||(t.systemLoad??0)>.7||(t.latencyNorm??0)>.6)return 'degraded';
- if(c.reflectionState==='thinking')return 'minimal';
+ // Thinking retains full-detail rendering; the activity shader carries the state.
+ if(c.reflectionState==='thinking')return 'full';
  if(c.policyMode==='strict')return 'diagnostic';
  return 'full';
 }
