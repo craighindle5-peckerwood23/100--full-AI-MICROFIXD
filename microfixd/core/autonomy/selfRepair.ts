@@ -63,7 +63,7 @@ export class SelfRepairOrgan {
     // Approval must precede any agent activity; a plan is not permission to mutate.
     let decision;
     try {
-      decision = await this.governance.evaluateAction("repair", "system_repair", {
+      decision = await this.governance.evaluateAction("repair", "system_repair_patch", {
         ...event,
         proposedActions: actions.map(action => action.label),
       });
