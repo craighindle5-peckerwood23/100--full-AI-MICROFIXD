@@ -33,10 +33,12 @@ type LazyHandler = () => Promise<RequestHandler>;
 function lazyRouter(load: LazyHandler): RequestHandler {
   let resolved: Promise<RequestHandler> | null = null;
   return (req, res, next) => {
-    resolved ??= load();
-    void resolved
-      .then((handler) => handler(req, res, next))
-      .catch(next);
+    // A failed dynamic import must not permanently poison this router.
+    resolved ??= load().catch((error) => {
+      resolved = null;
+      throw error;
+    });
+    void resolved.then((handler) => handler(req, res, next)).catch(next);
   };
 }
 
@@ -259,6 +261,52 @@ app.use((req, res, next) => {
       });
     })
     .catch(next);
+});
+
+// Authenticated, read-only runtime diagnostics. Bootstrap /api/health is liveness only.
+// These checks deliberately do not create or mutate missions/approvals.
+app.get("/api/health/operational", async (req, res) => {
+  if ((req as any).microfixdRole !== "admin") {
+    res.status(403).json({ code: "ADMIN_REQUIRED" });
+    return;
+  }
+  const checks: Record<string, { ready: boolean; detail: string }> = {};
+  try {
+    const { plannerClient } = await import("./planner/supabaseRuntime");
+    const client = plannerClient();
+    const tables = ["spine_rows", "spine_approvals", "spine_tool_runs", "spine_errors"];
+    for (const table of tables) {
+      try {
+        const { error } = await client.from(table).select("*", { head: true, count: "exact" }).limit(0);
+        checks[table] = { ready: !error, detail: error ? "Database query unavailable" : "Query succeeded" };
+      } catch {
+        checks[table] = { ready: false, detail: "Database connection unavailable" };
+      }
+    }
+    // Read-only probes cannot prove that spine_lease/spine_commit will execute.
+    checks.missionExecution = { ready: false, detail: "Unverified: requires a governed canary mission" };
+  } catch {
+    checks.database = { ready: false, detail: "Planner database initialization failed" };
+    checks.missionExecution = { ready: false, detail: "Planner unavailable" };
+  }
+  try {
+    const { getPending } = await import("./hitl/hitlManager");
+    const pending = getPending();
+    checks.legacyHitl = { ready: true, detail: `Process-local HITL queue loaded (${pending.length} pending); persistence unverified` };
+  } catch {
+    checks.legacyHitl = { ready: false, detail: "Legacy HITL queue unavailable" };
+  }
+  checks.durableHitl = {
+    ready: Boolean(checks.spine_approvals?.ready),
+    detail: checks.spine_approvals?.ready ? "Approval table query succeeded; decision flow unverified" : "Approval store unavailable",
+  };
+  const storageReady = ["spine_rows", "spine_approvals", "spine_tool_runs", "spine_errors"].every(k => checks[k]?.ready);
+  res.status(storageReady ? 200 : 503).json({
+    status: storageReady ? "storage-reachable" : "degraded",
+    fullyVerified: false,
+    checks,
+    ts: new Date().toISOString(),
+  });
 });
 
 // ── Lazy operational API surface ───────────────────────────────────────────
