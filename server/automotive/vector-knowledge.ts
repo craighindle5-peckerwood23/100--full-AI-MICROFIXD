@@ -14,7 +14,7 @@ export type RankedHypothesis = {
 };
 /** These frequencies are not calibrated probabilities of a repair succeeding. */
 export function rankByObservedFrequency(evidence: RepairEvidence[], minimumSample = 30): RankedHypothesis[] {
-  return evidence.map(e => {
+  return evidence.map((e): RankedHypothesis => {
     if (!Number.isInteger(e.sampleSize) || !Number.isInteger(e.confirmedCases) ||
         e.sampleSize <= 0 || e.confirmedCases < 0 || e.confirmedCases > e.sampleSize)
       throw new Error("Invalid evidence counts");
