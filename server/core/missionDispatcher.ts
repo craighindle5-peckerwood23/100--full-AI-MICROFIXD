@@ -1,3 +1,4 @@
+import {BackoffEngine} from '../utils/backoffEngine';
 import {GovernedAdapterRuntime, type ToolEnvelope, type ToolOutcome} from '../tools/governedAdapterRuntime';
 
 export interface MissionTask {
@@ -7,6 +8,7 @@ export interface MissionTask {
   payload: Record<string, unknown>;
   maxRetries: number;
   timeoutMs: number;
+  retrySafety?: 'read-only' | 'idempotent';
 }
 export interface DispatchResult {
   taskId: string;
@@ -53,7 +55,11 @@ export class MissionDispatcher {
         const response = await this.runtime.execute(envelope, AbortSignal.timeout(task.timeoutMs));
         if (response.status === 'succeeded') return {taskId: task.taskId, missionId: task.missionId, status: 'SUCCESS', adapterResponse: response, timestamp: stamp()};
         lastError = response.error ?? 'Adapter execution failed';
-        // External writes are not automatically retried: a failed acknowledgement may conceal a completed write.
+        // Only explicitly idempotent or read-only operations may be retried.
+        if (task.retrySafety && attempt < task.maxRetries) {
+          await BackoffEngine.executeWait({baseDelayMs:100,maxDelayMs:Math.max(100,Math.min(task.timeoutMs,5000)),attempt:attempt+1});
+          continue;
+        }
         break;
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
