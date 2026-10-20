@@ -33,3 +33,20 @@ test('unknown tool cannot execute arbitrary external action', async () => {
   const result = await new MissionDispatcher(runtime).dispatchMissionBatch([{...task('unknown'), endpoint: 'EXFILTRATE'}]);
   assert.equal(result[0].status, 'FAILED');
 });
+
+test('idempotent task retries with jitter after recorded adapter failure', async () => {
+  let attempts=0;
+  const runtime=new GovernedAdapterRuntime(async()=>true,async()=>{});
+  runtime.register({name:'safe_action',async execute(){attempts++;if(attempts===1)throw new Error('transient');return {ok:true};}});
+  const [result]=await new MissionDispatcher(runtime,1).dispatchMissionBatch([{...task('retry'),retrySafety:'idempotent',maxRetries:1}]);
+  assert.equal(result.status,'SUCCESS');
+  assert.equal(attempts,2);
+});
+test('external write without retry safety never repeats failed action', async () => {
+  let attempts=0;
+  const runtime=new GovernedAdapterRuntime(async()=>true,async()=>{});
+  runtime.register({name:'safe_action',async execute(){attempts++;throw new Error('unconfirmed write');}});
+  const [result]=await new MissionDispatcher(runtime).dispatchMissionBatch([task('write')]);
+  assert.equal(result.status,'FAILED');
+  assert.equal(attempts,1);
+});
