@@ -5,6 +5,8 @@ import {mapTelemetry} from '../cognitive-shell/src/hio/sync/TelemetrySync';
 import {mapViseme} from '../cognitive-shell/src/hio/animation/VisemeMapper';
 import {AnimationEngine} from '../cognitive-shell/src/hio/animation/AnimationEngine';
 import {selectShaderProfile} from '../cognitive-shell/src/hio/renderer/ShaderProfiles';
+import {chooseGraphicsQuality} from '../cognitive-shell/src/hio/renderer/GraphicsQuality';
+import {fragmentShader,auraFragmentShader} from '../cognitive-shell/src/hio/renderer/shaders/hologramShader';
 import {createShellStore} from '../cognitive-shell/src/core/shellState';
 
 test('HIO leaves missing cognition unknown and bounds adversarial telemetry',()=>{
@@ -25,7 +27,7 @@ test('dropout closes the jaw immediately and reduced motion suppresses distortio
 test('operator profile takes precedence and reset resumes automatic selection',()=>{
  assert.equal(selectShaderProfile({}, {systemLoad:1},'minimal'),'minimal');
  assert.equal(selectShaderProfile({}, {systemLoad:1}),'error');
- assert.equal(selectShaderProfile({reflectionState:'thinking'}, {}),'minimal');
+ assert.equal(selectShaderProfile({reflectionState:'thinking'}, {}),'full');
  assert.equal(selectShaderProfile({policyMode:'strict'}, {}),'diagnostic');
 });
 test('health updates do not interrupt speaking and idle voice never reopens the jaw',()=>{
@@ -42,4 +44,21 @@ test('real assurance bus signals reach HIO without inventing confidence from hea
  assert.equal(measured.cognition?.confidence,.81);
  assert.equal(hostSignals({type:'command:started'},measured).cognition?.confidence,undefined);
  assert.equal(hostSignals({type:'hitl:review_required'}).cognition?.policyMode,'defer');
+});
+
+test('cinematic detail scales safely from desktop to mobile',()=>{
+ const desktop=chooseGraphicsQuality(1536,960,2);
+ const mobile=chooseGraphicsQuality(390,844,3);
+ assert.equal(desktop.tier,'cinematic');
+ assert.equal(desktop.pixelRatio,1.8);
+ assert.equal(desktop.particleCount,2600);
+ assert.equal(mobile.tier,'efficient');
+ assert.ok(mobile.pixelRatio<=1.25);
+ assert.ok(mobile.particleCount<desktop.particleCount);
+ assert.equal(chooseGraphicsQuality(NaN,NaN,Infinity).tier,'efficient');
+});
+test('hologram materials preserve boot, expression, neural and halo uniforms',()=>{
+ for(const uniform of ['reveal','blink','activity','profileColor','opacity'])assert.ok(fragmentShader.includes('uniform float '+uniform)||fragmentShader.includes('uniform vec3 '+uniform));
+ assert.ok(fragmentShader.includes('fwidth('));
+ assert.ok(auraFragmentShader.includes('haloStrength'));
 });
