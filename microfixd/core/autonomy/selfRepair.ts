@@ -44,75 +44,56 @@ export class SelfRepairOrgan {
   }
 
   async executeRepair(event: RepairEvent): Promise<RepairEvent> {
-    event.status = "executing";
-    event.updatedAt = new Date().toISOString();
-    this.memory.remember("repair_executing", JSON.stringify(event));
+    const metrics = event.metrics ?? {};
+    const actions: Array<{ label: string; prompt: string }> = [];
+    if (Number(metrics.cpu) > 0.85) actions.push({label: "rebalance_threads", prompt: "Diagnose CPU saturation and propose a concrete, verifiable thread-pool correction."});
+    if (Number(metrics.memory) > 0.90) actions.push({label: "heap_compaction", prompt: "Diagnose high memory consumption and propose a concrete, verifiable cleanup."});
+    if (Number(metrics.network) > 0.80) actions.push({label: "flush_buffers", prompt: "Diagnose network congestion and propose a concrete, verifiable recovery."});
 
-    // 1. CPU spike repair
-    if (event.metrics.cpu > 0.85) {
-      event.actions.push("rebalance_threads");
-      try {
-        await this.router.route({
-          type: "code",
-          payload: {
-            systemPrompt: "You are a TS engineer.",
-            userPrompt: "Rebalance internal thread pools to reduce CPU load.",
-          },
-        });
-      } catch (err) {
-        // Suppress failure of actual agent run in mock / loop mode
-      }
-    }
-
-    // 2. Memory spike repair
-    if (event.metrics.memory > 0.90) {
-      event.actions.push("heap_compaction");
-      try {
-        await this.router.route({
-          type: "code",
-          payload: {
-            systemPrompt: "You are a TS engineer.",
-            userPrompt: "Perform heap compaction and memory cleanup routines.",
-          },
-        });
-      } catch (err) {
-        // Suppress
-      }
-    }
-
-    // 3. Network congestion repair
-    if (event.metrics.network > 0.80) {
-      event.actions.push("flush_buffers");
-      try {
-        await this.router.route({
-          type: "code",
-          payload: {
-            systemPrompt: "You are a TS engineer.",
-            userPrompt: "Flush network buffers and reset congestion windows.",
-          },
-        });
-      } catch (err) {
-        // Suppress
-      }
-    }
-
-    // 4. Governance validation
-    const approved = await this.governance.evaluateAction("repair", "system_repair", event);
-
-    if (approved.decision !== "ALLOW") {
+    const failed = async (reason: string) => {
       event.status = "failed";
       event.updatedAt = new Date().toISOString();
-      event.actions.push("blocked_by_governance");
-      this.memory.remember("repair_failed", JSON.stringify(event));
+      event.actions.push(reason);
+      await this.memory.remember("repair_failed", JSON.stringify(event));
       return event;
+    };
+
+    if (actions.length === 0) return failed("no_matching_repair_strategy");
+
+    // Approval must precede any agent activity; a plan is not permission to mutate.
+    let decision;
+    try {
+      decision = await this.governance.evaluateAction("repair", "system_repair", {
+        ...event,
+        proposedActions: actions.map(action => action.label),
+      });
+    } catch {
+      return failed("governance_unavailable");
+    }
+    if (decision.decision !== "ALLOW") {
+      return failed(decision.decision === "PENDING_APPROVAL" ? "awaiting_governance_approval" : "blocked_by_governance");
     }
 
-    // 5. Mark completed
-    event.status = "completed";
+    event.status = "executing";
     event.updatedAt = new Date().toISOString();
-    this.memory.remember("repair_completed", JSON.stringify(event));
+    await this.memory.remember("repair_executing", JSON.stringify(event));
 
-    return event;
+    for (const action of actions) {
+      try {
+        const result = await this.router.route({
+          type: "code",
+          payload: {systemPrompt: "You are a TypeScript diagnostics engineer. Do not claim a repair without measured verification.", userPrompt: action.prompt},
+        });
+        // An advisory/code-generation result is NOT an applied, verified repair.
+        event.actions.push(action.label + (result ? ":proposal_returned" : ":empty_response"));
+      } catch (error) {
+        return failed(action.label + ":agent_failure:" + (error instanceof Error ? error.message : String(error)));
+      }
+    }
+
+    // No actuator plus post-condition verification exists in this legacy organ.
+    // Fail closed rather than inaccurately announcing the system is repaired.
+    return failed("repair_not_applied_or_verified");
   }
 
   getEvents(): RepairEvent[] {
