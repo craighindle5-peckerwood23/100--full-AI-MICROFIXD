@@ -27,7 +27,9 @@
     "build:cognitive-shell": "tsc -p cognitive-shell/tsconfig.json --noEmit && vite build cognitive-shell --config cognitive-shell/vite.config.ts",
     "prepare:cognitive-shell": "npm install --prefix cognitive-shell --include=dev --no-audit --no-fund",
     "test:hio-ui": "node tests/hio-ui.mjs",
-    "test:assistant": "node --import tsx --test tests/control-plane.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts"
+    "test:assistant": "node --import tsx --test tests/control-plane.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts",
+    "test:engineering": "node --test tests/engineering-loop.test.mjs tests/engineering-state.test.mjs",
+    "engineer:loop": "node scripts/engineering-loop.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
