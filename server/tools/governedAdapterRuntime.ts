@@ -48,6 +48,7 @@ export function createHttpJsonAdapter(config: {
   timeoutMs?: number;
 }): ToolAdapter {
   const base = new URL(config.baseUrl);
+  if (base.pathname !== '/' || base.port) throw new ToolExecutionError('INVALID_CONFIGURATION', 'Root HTTPS origin without custom port required');
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash) {
     throw new ToolExecutionError('INVALID_CONFIGURATION', 'HTTPS base URL required');
   }
@@ -58,6 +59,7 @@ export function createHttpJsonAdapter(config: {
   return {
     name: config.name,
     async execute(args, parentSignal) {
+      if (parentSignal.aborted) throw new ToolExecutionError('ABORTED', 'Execution aborted');
       const path = requiredString(args.path, 'path');
       if (!allowed.has(path)) throw new ToolExecutionError('PATH_DENIED', 'Endpoint not allowlisted');
       const method = args.method === 'GET' ? 'GET' : args.method === 'POST' ? 'POST' : null;
