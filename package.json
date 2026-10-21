@@ -16,7 +16,7 @@
     "validate:classification": "node --import tsx scripts/validate-classification.mjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts tests/command-failure.test.ts tests/voice-delivery.test.ts tests/groq-recovery.test.ts tests/public-page-reader.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts tests/release-gate.test.ts tests/canary.test.ts tests/cognitive-shell.test.ts tests/cognitive-assurance.test.ts tests/hio.test.ts tests/casework.test.ts tests/control-plane.test.ts tests/automotive.test.ts tests/obd.test.ts",
+    "test": "node --import tsx --test tests/memory-sandbox.test.ts tests/sandbox-functional.test.ts tests/command-api.test.ts tests/command-failure.test.ts tests/voice-delivery.test.ts tests/groq-recovery.test.ts tests/public-page-reader.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts tests/release-gate.test.ts tests/canary.test.ts tests/cognitive-shell.test.ts tests/cognitive-assurance.test.ts tests/hio.test.ts tests/casework.test.ts tests/control-plane.test.ts tests/automotive.test.ts tests/obd.test.ts tests/obd-setup.test.ts",
     "test:services": "node scripts/test-services.mjs",
     "test:website": "npm run build && node --import tsx --test tests/public-website.test.ts",
     "test:settings": "npm run build && node tests/settings-ui.mjs",
@@ -30,7 +30,9 @@
     "test:assistant": "node --import tsx --test tests/control-plane.test.ts tests/execution-spine.test.ts tests/planner-runtime.test.ts tests/production-controls.test.ts",
     "test:engineering": "node --test tests/engineering-loop.test.mjs tests/engineering-state.test.mjs",
     "engineer:loop": "node scripts/engineering-loop.mjs",
-    "test:adapters": "node --import tsx --test tests/governed-adapter-runtime.test.ts tests/mission-dispatcher-wiring.test.ts tests/dispatcher-tracking-hook.test.ts tests/backoff-engine.test.ts tests/orchestrator-app-integration.test.ts tests/orchestrator-controller.test.ts"
+    "test:adapters": "node --import tsx --test tests/governed-adapter-runtime.test.ts tests/mission-dispatcher-wiring.test.ts tests/dispatcher-tracking-hook.test.ts tests/backoff-engine.test.ts tests/orchestrator-app-integration.test.ts tests/orchestrator-controller.test.ts",
+    "test:obd-bridge": "cd integrations/obd-bridge && python -m unittest discover -s tests -v",
+    "test:obd-e2e": "node --import tsx tests/obd-bridge-e2e.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -48,6 +50,7 @@
     "dotenv": "^17.2.3",
     "eventemitter3": "^5.0.4",
     "express": "^4.22.3",
+    "fflate": "0.8.3",
     "groq-sdk": "^1.6.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",

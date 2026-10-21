@@ -1,3 +1,4 @@
+import {obdConnectionSetup} from '../../automotive/obd/connectionSetup';
 import {OBDRepository} from '../../automotive/obd/repository';
 import {sessionView} from '../../automotive/obd/interpreter';
 import {z} from 'zod';
@@ -8,6 +9,7 @@ import type {DiagnosticCase} from '../../automotive/schemas';
 import {selectTest} from '../../automotive/torquelogic/testSelector';
 export async function executeAutomotiveOrgan(action:string,payload:unknown,client?:SupabaseClient){
  const p=z.object({tenant_id:z.string().min(1),case_id:z.string().uuid().optional(),obd_session_id:z.string().uuid().optional()}).passthrough().parse(payload);
+ if(action==='obd_setup')return obdConnectionSetup();
  if(['obd_sessions','obd_status'].includes(action)){
   const repo=new OBDRepository(client??database(),p.tenant_id);
   const sessions=action==='obd_sessions'?await repo.list():[await repo.get(z.string().uuid().parse(p.obd_session_id))];

@@ -12,6 +12,7 @@ import urllib.request
 from datetime import datetime, timezone
 from elm327 import ELM327, TCPStream, serial_stream
 from j2534 import J2534, installed_devices
+from discovery import discover, automatic_selection, guided_selection
 
 
 def utcnow():
@@ -130,8 +131,11 @@ def scan(adapter, uplink, once=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Microfixd read-only J2534/OBD hardware bridge')
+    parser.add_argument('--discover',action='store_true',help='List local drivers, architecture compatibility and serial ports without connecting')
     parser.add_argument('--list-j2534',action='store_true',help='Enumerate installed Windows J2534-1 04.04 drivers')
     source = parser.add_mutually_exclusive_group()
+    source.add_argument('--setup',action='store_true',help='Guided connection setup; no adapter model required')
+    source.add_argument('--auto',action='store_true',help='Use one compatible registered J2534 driver, otherwise one identified OBD serial candidate')
     source.add_argument('--j2534-dll',help='Primary: absolute path to the installed vendor 04.04 DLL')
     source.add_argument('--serial',help='ELM327 USB serial or paired Bluetooth SPP COM/rfcomm port')
     source.add_argument('--tcp',help='ELM327 Wi-Fi adapter host:port')
@@ -142,6 +146,19 @@ def main(argv=None):
     parser.add_argument('--label',default='Local vehicle adapter')
     parser.add_argument('--once',action='store_true',help='Perform discovery and one live-data sweep, then close')
     args = parser.parse_args(argv)
+    if args.discover:
+        print(json.dumps(discover(),indent=2))
+        return 0
+    if args.setup or args.auto:
+        try:
+            selection = guided_selection(discover()) if args.setup else automatic_selection(discover())
+            for key,value in selection.items():
+                setattr(args,key,value)
+            if args.setup and not args.server:
+                args.server = input('Microfixd server HTTPS origin: ').strip()
+        except (ValueError,EOFError,KeyboardInterrupt) as error:
+            print('Setup stopped: '+str(error),file=sys.stderr)
+            return 2
     if args.list_j2534:
         print(json.dumps({'pythonBits':8*__import__('ctypes').sizeof(__import__('ctypes').c_void_p),'devices':installed_devices()},indent=2))
         return 0
