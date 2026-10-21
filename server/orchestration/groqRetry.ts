@@ -46,6 +46,7 @@ export interface GroqRetryOptions {
   maxDelayMs?: number;
   fallbackModels?: string[];
   initialMaxTokens?: number;
+  beforeAttempt?: () => Promise<void>;
 }
 
 /**
@@ -90,6 +91,9 @@ export async function executeGroqWithRetry(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     attemptsMade=attempt;attemptedModels.add(currentModel);
     const attemptStart = Date.now();
+    // Reserve each dispatch before entering the provider error handler.
+    // Budget/lease failures must stop execution, never become provider retries.
+    await options.beforeAttempt?.();
     try {
       const completion = await groq.chat.completions.create({
         ...requestParams,

@@ -42,3 +42,7 @@ Expired missions wait for operator intervention; automatic resume does not exten
 `GET /api/planner/missions/:id/audit` checks tenant/parent links, content hashes, required subtask artifacts, success completeness, policy fingerprints, and final evidence hashes.
 Historical artifacts without provenance are reported as unverifiable rather than silently upgraded.
 Hashes detect inconsistency; they are not signatures or proof against a privileged database attacker.
+
+## Provider-limit recovery
+
+Groq mission calls allow up to three bounded attempts so output quota errors can reduce `max_tokens` before retrying. Every actual dispatch reserves its own durable token allowance; budget or lease failures stop before dispatch. Failed attempts remain conservatively charged. `PROVIDERS_EXHAUSTED` reports provider failure, not proof of uninitialized organs. Restore provider availability and resume the affected mission using the existing operator control; do not flush the queue or discard completed artifacts.

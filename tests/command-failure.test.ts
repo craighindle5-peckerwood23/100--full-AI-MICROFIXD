@@ -28,3 +28,30 @@ test('OpenRouter is primary even with Groq configured and preserves the complete
  try{const result=await completeTextWithFallback(messages,512);assert.equal(result.provider,'openrouter');assert.equal(result.content,'recovered');assert.equal(groqCalls,0);}
  finally{client.chat.completions.create=original;globalThis.fetch=oldFetch;for(const [name,value] of [['GROQ_API_KEY',oldKey],['OPENROUTER_API_KEY',oldRouter],['GEMINI_API_KEY',oldGemini]]){if(value===undefined)delete process.env[name!];else process.env[name!]=value;}}
 });
+
+
+test('mission Groq calls recover from the observed 1024 versus 1000 OTPM limit with a reservation per dispatch',async()=>{
+ const oldKey=process.env.GROQ_API_KEY;
+ process.env.GROQ_API_KEY='mission-retry-test';
+ const client=getGroqClient()!,original=client.chat.completions.create;
+ const seen:number[]=[];let reservations=0;
+ client.chat.completions.create=(async(p:any)=>{
+  seen.push(p.max_tokens);assert.equal(reservations,seen.length);
+  if(seen.length===1)throw Object.assign(new Error('Request too large on output tokens per minute (OTPM): Limit 1000, Requested 1024'),{status:429});
+  return {choices:[{message:{content:'[]'},finish_reason:'stop'}],usage:{total_tokens:4}};
+ }) as any;
+ try{
+  const result=await completeTextWithFallback([],1024,0,'groq',{beforeAttempt:async()=>{reservations++;}});
+  assert.deepEqual(seen,[1024,665]);assert.equal(result.provider,'groq');assert.equal(result.content,'[]');
+ }finally{client.chat.completions.create=original;if(oldKey===undefined)delete process.env.GROQ_API_KEY;else process.env.GROQ_API_KEY=oldKey;}
+});
+
+test('a denied reservation prevents a Groq retry and preserves the mission budget error',async()=>{
+ const oldKey=process.env.GROQ_API_KEY;process.env.GROQ_API_KEY='mission-budget-test';
+ const client=getGroqClient()!,original=client.chat.completions.create;let calls=0,reservations=0;
+ client.chat.completions.create=(async()=>{calls++;throw Object.assign(new Error('Request too large on output tokens per minute (OTPM): Limit 1000, Requested 1024'),{status:429});}) as any;
+ try{
+  await assert.rejects(completeTextWithFallback([],1024,0,'groq',{beforeAttempt:async()=>{if(++reservations===2)throw Object.assign(new Error('TOKEN_BUDGET_EXHAUSTED'),{code:'TOKEN_BUDGET_EXHAUSTED'});}}),error=>(error as any).code==='TOKEN_BUDGET_EXHAUSTED');
+  assert.equal(calls,1);assert.equal(reservations,2);
+ }finally{client.chat.completions.create=original;if(oldKey===undefined)delete process.env.GROQ_API_KEY;else process.env.GROQ_API_KEY=oldKey;}
+});

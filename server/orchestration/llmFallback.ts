@@ -48,11 +48,10 @@ export async function completeTextWithFallback(
   const groq = !preferredProvider || preferredProvider === 'groq' ? getGroqClient() : null;
   let groqError: unknown;
   if (groq) {
-    await options?.beforeAttempt?.('groq');
     try {
       const result = await executeGroqWithRetry(groq, {
         model: groqConfiguration().model, messages, max_tokens: maxTokens, temperature,
-      }, {maxRetries: options?.beforeAttempt ? 1 : 3});
+      }, {maxRetries: 3, beforeAttempt: options?.beforeAttempt ? () => options.beforeAttempt!('groq') : undefined});
       return {content: result.content, model: result.modelUsed, provider: 'groq',
         tokensUsed: result.completion.usage?.total_tokens || 0,
         truncated: result.completion.choices[0]?.finish_reason === 'length'};
