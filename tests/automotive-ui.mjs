@@ -1,3 +1,4 @@
+import {unzipSync} from 'fflate';
 import assert from 'node:assert/strict';
 import express from 'express';
 import {resolve,dirname,join} from 'node:path';
@@ -13,6 +14,7 @@ const cases=new Map();const repo={list:async(kind)=>kind==='vehicle'?[vehicle]:[
 let stale=false;
 const app=express();app.use(express.json());
 app.get('/api/automotive/obd/sessions',(_req,res)=>res.json([sessionView({id:'00000000-0000-4000-8000-000000000003',adapter:'j2534',label:'Synthetic UI adapter',owner:'fixture',createdAt:new Date().toISOString(),receivedAt:new Date(Date.now()-(stale?21000:0)).toISOString(),sequence:1,latest:{sequence:1,observedAt:new Date().toISOString(),status:'connected',protocol:'ISO15765-11bit-500000',adapterVersion:'UI fixture',responses:[{command:'010C',ecu:'7E8',payload:'410C1AF8'}],errors:[]},history:[]})]));
+app.get('/api/automotive/obd/readiness',(_req,res)=>res.json({cloudStorageReachable:true,hardwareReady:!stale,nextAction:stale?'Reconnect local bridge':'Select responding session'}));
 app.post('/__test/stale',(_req,res)=>{stale=true;res.json({ok:true});});app.use('/api/automotive',(req,res,next)=>{req.microfixdTenantId='synthetic-ui';req.microfixdRole='admin';next();},createAutomotiveRouter(()=>repo));app.use(express.static(resolve('dist')));app.get('/automotive',(_req,res)=>res.sendFile(resolve('dist/index.html')));
 const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
 const require=createRequire(import.meta.url);const bin=join(dirname(require.resolve('@sparticuz/chromium')),'../bin/chromium.br');
@@ -24,6 +26,11 @@ try{
  await page.getByRole('heading',{name:'From trouble code to root cause.'}).waitFor();
  await page.getByRole('heading',{name:'Vehicle connection',exact:true}).waitFor();
  await page.getByText('rpm',{exact:true}).waitFor();
+ await page.getByText(`python bridge.py --setup --server ${base}`,{exact:true}).waitFor();
+ const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'Download local connector'}).click();
+ const archive=await downloaded;assert.equal(archive.suggestedFilename(),'microfixd-obd-bridge.zip');
+ const zip=unzipSync(readFileSync(await archive.path()));assert.ok(zip['microfixd-obd-bridge/discovery.py']);assert.ok(zip['microfixd-obd-bridge/START-WINDOWS.cmd']);
+ await page.getByRole('button',{name:'Check connection readiness'}).click();await page.getByText(/Cloud session storage reachable/).waitFor();
  await page.getByLabel('Complaint',{exact:true}).fill('Synthetic complaint');await page.getByLabel('DTCs (comma separated)').fill('P0300');await page.getByRole('button',{name:'Create diagnostic case'}).click();
  await page.getByRole('heading',{name:'BMW',exact:false}).waitFor();
  await page.getByText('Record test observation',{exact:true}).click();await page.getByLabel('Measured finding and conditions').fill('Synthetic measured result');await page.getByLabel('Technician assessment').selectOption('supports');await page.getByRole('button',{name:'Save observation'}).click();

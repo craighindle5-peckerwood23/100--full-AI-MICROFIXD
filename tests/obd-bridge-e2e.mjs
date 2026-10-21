@@ -13,8 +13,8 @@ const adapter=net.createServer(socket=>{let buffer='';socket.on('data',data=>{bu
 const app=express();app.use(express.json());app.use('/api/automotive/obd',(req,res,next)=>{if(req.header('authorization')!=='Bearer SYNTHETIC-TEST-TOKEN')return res.sendStatus(403);req.microfixdTenantId='test-tenant';req.microfixdRole='operator';next();},createOBDRouter(()=>repo));
 const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
 try{
- const child=spawn('python',[resolve('integrations/obd-bridge/bridge.py'),'--tcp',`127.0.0.1:${adapter.address().port}`,'--server',`http://127.0.0.1:${server.address().port}`,'--once'],{env:{...process.env,MICROFIXD_OBD_TOKEN:'SYNTHETIC-TEST-TOKEN'}});
- let output='';child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+ const child=spawn('python',[resolve('integrations/obd-bridge/bridge.py'),'--setup','--server',`http://127.0.0.1:${server.address().port}`,'--once'],{env:{...process.env,MICROFIXD_OBD_TOKEN:'SYNTHETIC-TEST-TOKEN'}});
+ let output='',selected=false;child.stdout.on('data',b=>{output+=b;const option=output.match(/(\d+)\. ELM327 Wi-Fi \/ TCP adapter/);if(option&&!selected){selected=true;child.stdin.write(option[1]+'\n'+`127.0.0.1:${adapter.address().port}`+'\n');}});child.stderr.on('data',b=>output+=b);
  const timer=setTimeout(()=>child.kill(),15000);const code=await new Promise((r,j)=>{child.on('error',j);child.on('exit',r);});clearTimeout(timer);
  assert.equal(code,0,output);assert.equal(records.size,1);const session=[...records.values()][0];assert.equal(session.latest.status,'disconnected');
  const receipts=[],finished=[];const client={from:table=>{
@@ -27,6 +27,7 @@ try{
  assert.equal(result.raw.sessions[0].interpreted.readings.find(r=>r.name==='rpm').value,1726);
  assert.equal(result.raw.sessions[0].understanding.engineRunning,null); // Bridge closed: cached RPM is not current running proof.
  assert.equal(receipts[0].status,'approved');assert.equal(receipts[0].decided_by,'read-only-policy');assert.equal(finished.length,1);
+ const setup=await tools.executeTool({name:'obd_connection_setup',arguments:{}},{...context,subtask_id:'test-setup-subtask',tool_permissions:['obd_connection_setup']});assert.equal(setup.raw.localBridgeRequired,true);assert.equal(setup.raw.capabilities.hardwareCompatibilityVerified,false);assert.equal(finished.length,2);
  assert.ok(requests.every(c=>Object.hasOwn(replies,c)));assert.ok(!requests.includes('04'));
- console.log('PASS: TCP adapter emulator → actual Python bridge → authenticated Express router → session repository → governed read_obd_status → decoded VIN/DTC/RPM and disconnected state. No physical hardware was used.');
+ console.log('PASS: TCP adapter emulator → actual guided Python bridge → authenticated Express router → session repository → governed read_obd_status → decoded VIN/DTC/RPM and disconnected state. No physical hardware was used.');
 }finally{await new Promise(r=>server.close(r));await new Promise(r=>adapter.close(r));}

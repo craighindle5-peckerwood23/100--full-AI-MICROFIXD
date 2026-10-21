@@ -1,3 +1,4 @@
+import OBDSetup from './OBDSetup';
 import React,{useEffect,useState} from 'react';
 import {api} from '../lib/serverApi';
 import type {Vehicle,DiagnosticCase} from '../../server/automotive/schemas';
@@ -14,8 +15,8 @@ export default function OBDPanel({vehicles,onCase}:{vehicles:Vehicle[];onCase:(c
  const current=sessions.find(s=>s.id===selected)??sessions[0];
  return <section aria-label="Live OBD connection"><p className="eyebrow">LOCAL HARDWARE BRIDGE / READ-ONLY OBD</p><h2>Vehicle connection</h2>
  <p>J2534 Pass-Thru is primary. Secondary adapters use ELM327 over USB/serial, paired Bluetooth SPP, or Wi-Fi/TCP. Start the bridge on the computer connected to your adapter.</p>
- <code>python integrations/obd-bridge/bridge.py --list-j2534</code>
- <p>Launch instructions: <a href="https://github.com/craighindle5-peckerwood23/100--full-AI-MICROFIXD/blob/feat/vector-automotive-mvp/integrations/obd-bridge/README.md" target="_blank" rel="noreferrer">Local adapter setup</a></p>
+ <OBDSetup/>
+ <p>Launch instructions: <a href="https://github.com/craighindle5-peckerwood23/100--full-AI-MICROFIXD/blob/main/integrations/obd-bridge/README.md" target="_blank" rel="noreferrer">Local adapter setup</a></p>
  {error&&<p role="status">OBD sessions unavailable: {error}</p>}
  {!sessions.length?<p>No session received. A plugged-in cable alone does not establish a vehicle connection.</p>:<>
  <label>Adapter session<select value={current?.id??''} onChange={e=>setSelected(e.target.value)}>{sessions.map(s=><option key={s.id} value={s.id}>{s.label} · {s.state}</option>)}</select></label>

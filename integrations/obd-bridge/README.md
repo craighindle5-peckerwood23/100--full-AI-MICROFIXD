@@ -2,6 +2,22 @@
 
 This is executable read-only adapter integration, not a cloud server pretending it has a local USB port. Run the bridge on the computer physically connected to the vehicle interface. It uploads authenticated OBD responses to Microfixd and is visible in `/automotive` and the governed agent tools.
 
+## Start without knowing the adapter model
+
+In Microfixd, open `/automotive` → **Set up your adapter** → **Download local connector**. The authenticated download contains only the connector source, requirements, instructions and Windows launcher, with a SHA-256 integrity check. Extract it on the computer connected to the vehicle interface. Python 3.10+ is required.
+
+On Windows, run `START-WINDOWS.cmd`. On other systems, open a terminal in the extracted folder and run:
+
+```bash
+python bridge.py --setup
+```
+
+The guided flow lists installed compatible J2534 drivers first, then detected serial ports, plus manual serial and Wi-Fi/TCP options. It checks driver architecture without loading a DLL. Enter your Microfixd server HTTPS origin and existing operator/access token at the prompts; the token is not saved to disk. Install the manufacturer's driver locally for J2534, or `python -m pip install -r requirements.txt` for serial/paired Bluetooth SPP if needed.
+
+For inventory only, use `python bridge.py --discover`; no credential or adapter connection is required. For unattended selection after configuring your environment, use `python bridge.py --auto --server` followed by your actual HTTPS server origin. Automatic selection uses one compatible registered J2534 driver, or one serial device whose description identifies an OBD candidate. Multiple candidates, mismatched drivers and unknown serial devices lead to an explicit setup message instead of a guessed connection. A detected driver does not prove the physical adapter is plugged in; the existing vehicle-response probe still establishes connectivity.
+
+The workspace's **Check connection readiness** queries durable session storage and reports whether a fresh responding vehicle session exists. The callable `obd_connection_setup` tool exposes supported transports, commands and setup endpoints even if storage is unconfigured. It does not silently launch hardware from Render. No network scan is performed for Wi-Fi, and BLE/GATT remains unsupported.
+
 ## Primary: J2534 Pass-Thru
 
 Requires Windows, Python 3.10+, the adapter manufacturer's installed **J2534-1 API 04.04** driver, and Python bitness matching that DLL. API 05.00-only drivers are not supported by this implementation. No vendor DLL is bundled. Use only your installed, trusted manufacturer driver.

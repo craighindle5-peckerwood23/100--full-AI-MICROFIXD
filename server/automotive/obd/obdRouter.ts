@@ -1,3 +1,5 @@
+import {obdConnectionSetup} from './connectionSetup';
+import {bridgePackage} from './bridgePackage';
 import {isDeepStrictEqual} from 'node:util';
 import {Router} from 'express';
 import {randomUUID} from 'node:crypto';
@@ -12,6 +14,9 @@ export function createOBDRouter(factory?:(tenant:string)=>OBDRepository){
  const handler=(work:(req:any,repo:OBDRepository)=>Promise<unknown>)=>(req:any,res:any)=>{void Promise.resolve().then(()=>work(req,factory?factory(req.microfixdTenantId):new OBDRepository(database(),req.microfixdTenantId))).then(data=>res.json(data)).catch(e=>{
   const message=e instanceof Error?e.message:'';const code=/^[A-Z_]+$/.test(message)?message:'OBD_FAILED';res.status(e instanceof z.ZodError?400:code==='NOT_FOUND'?404:code==='OWNER_REQUIRED'?403:code==='REVISION_CONFLICT'?409:/FAILED|UNCONFIGURED/.test(code)?503:422).json({error:e instanceof z.ZodError?'Invalid OBD input':code});
  });};
+ router.get('/capabilities',(_req,res)=>res.json(obdConnectionSetup()));
+ router.get('/bridge-package',(_req,res)=>{try{res.setHeader('Cache-Control','no-store');res.json(bridgePackage());}catch{res.status(503).json({error:'CONNECTOR_PACKAGE_UNAVAILABLE'});}});
+ router.get('/readiness',handler(async(_,repo)=>{const sessions=(await repo.list()).map(s=>sessionView(s));const connected=sessions.filter(s=>s.state==='connected'&&s.understanding.vehicleResponding);return {cloudStorageReachable:true,connectedVehicleSessions:connected.length,hardwareReady:connected.length>0,bridgeRequired:true,sessionStates:sessions.map(s=>({id:s.id,state:s.state})),nextAction:connected.length?'Select a responding session and confirm vehicle identity':'Run the local connector setup on the computer attached to your adapter'};}));
  const identity=(r:any)=>r.microfixdUserId||`shared:${r.microfixdRole}`;
  router.get('/sessions',handler(async(_,repo)=>(await repo.list()).map(s=>sessionView(s))));
  router.post('/sessions',handler(async(req,repo)=>{const p=obdSessionSchema.parse(req.body);return sessionView(await repo.create({id:randomUUID(),...p,owner:identity(req),createdAt:new Date().toISOString(),sequence:0,history:[]}));}));
