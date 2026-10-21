@@ -33,6 +33,7 @@ export default function MissionControlRoom({ initialMissionId = '' }: { initialM
   const [reservedTokens,setReservedTokens]=useState(0);
   const [approvals,setApprovals]=useState<any[]>([]);
   const [toolRuns,setToolRuns]=useState<any[]>([]);
+  const [completionReview,setCompletionReview]=useState<{status:string;reason:string}|null>(null);
   const [reconciliation,setReconciliation]=useState('');
   const [submitting,setSubmitting]=useState(false);
   const [submissionKey,setSubmissionKey]=useState<string|null>(null);
@@ -44,10 +45,10 @@ export default function MissionControlRoom({ initialMissionId = '' }: { initialM
       if(stopped)return;
       const mapped=result.missions.map(mapMission);
       if(selectedMissionId){const detail=await api<{mission:DurableMission;tasks:Task[];artifacts:Artifact[];approvals:any[];tool_runs:any[];messages:any[];budget:{reserved_tokens:number}|null}>('GET',`/planner/missions/${selectedMissionId}`);
-       if(!stopped){setReservedTokens(detail.budget?.reserved_tokens??0);setApprovals(detail.approvals);setToolRuns(detail.tool_runs);}
+       if(!stopped){setReservedTokens(detail.budget?.reserved_tokens??0);setApprovals(detail.approvals);setToolRuns(detail.tool_runs);const reviews=detail.messages.filter(m=>m.content?.kind==='completion_review');setCompletionReview(reviews.at(-1)?.content?.review??null);}
        const current=mapped.find(m=>m.id===selectedMissionId);
        if(current){current.nodes=detail.tasks.map(t=>({id:t.task_id,label:String(t.input_context.objective??'Task'),type:'task',status:t.status==='succeeded'?'completed':t.status==='running'?'running':'pending',assignedAgent:t.agent_id??'Planner'}));
-        current.progress=detail.tasks.length?Math.round(detail.tasks.filter(t=>t.status==='succeeded').length/detail.tasks.length*100):0;
+        current.progress=detail.tasks.length?Math.min(detail.mission.status==='succeeded'?100:99,Math.round(detail.tasks.filter(t=>t.status==='succeeded').length/detail.tasks.length*100)):0;
         current.logs=[...detail.messages.map(m=>JSON.stringify(m.content)),...detail.artifacts.filter(a=>a.subtask_id).map(a=>JSON.stringify(a.content))];}}
       if(!stopped){setMissions(mapped);setError('');if(!selectedMissionId&&mapped.length)setSelectedMissionId(mapped[0].id);}
     }catch(e){if(!stopped)setError(e instanceof Error?e.message:'Mission service unavailable');}};
@@ -73,6 +74,7 @@ export default function MissionControlRoom({ initialMissionId = '' }: { initialM
         <textarea aria-label="Verified tool result JSON" className="w-full bg-black border p-2" value={reconciliation} onChange={e=>setReconciliation(e.target.value)} placeholder={'{"raw":{},"normalized":{"result":{}},"evidence":{"confirmation":"What you verified"}}'} />
         <button className="px-3 py-2" onClick={()=>void reconcile(run)}>Submit verified result and resume</button>
       </div>)}
+      {completionReview&&<div role="status" className="border border-cyan-500/40 rounded p-3 text-xs"><strong>Objective assessment: {completionReview.status}</strong><p>{completionReview.reason}</p></div>}
       <p className="text-xs">Mission tokens charged or reserved: {reservedTokens}</p>
       {currentMission.status==='paused'&&<div className="flex gap-2 text-xs"><input aria-label="Mission token budget" type="number" min={1} max={100000} value={tokenBudget} onChange={e=>setTokenBudget(Number(e.target.value))} className="bg-black border p-2"/><button onClick={()=>void api('POST',`/planner/missions/${selectedMissionId}/resume`,{max_tokens:tokenBudget}).then(()=>setError('')).catch(e=>setError(String(e)))}>Retry paused mission</button></div>}
       {/* Top Banner Controls */}

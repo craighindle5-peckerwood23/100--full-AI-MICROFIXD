@@ -46,3 +46,11 @@ Hashes detect inconsistency; they are not signatures or proof against a privileg
 ## Provider-limit recovery
 
 Groq mission calls allow up to three bounded attempts so output quota errors can reduce `max_tokens` before retrying. Every actual dispatch reserves its own durable token allowance; budget or lease failures stop before dispatch. Failed attempts remain conservatively charged. `PROVIDERS_EXHAUSTED` reports provider failure, not proof of uninitialized organs. Restore provider availability and resume the affected mission using the existing operator control; do not flush the queue or discard completed artifacts.
+
+## Objective completion and bounded continuation
+
+New intake pins `completion_policy: objective-v1` server-side. Finishing a generated plan now triggers a separate, budgeted assessment of persisted evidence against the whole original objective. The reviewer returns `complete`, `continue`, or `blocked`, actual evidence IDs, and a concise reason. Inventory/probe output is explicitly described as discovery rather than proof of requested downstream work. Evidence previews are bounded and marked when truncated. This is a fallible model assessment, not independent factual certification.
+
+Continuation appends validated atomic tasks under the existing lease, permissions, approval policy, deadline and token budget. The review and next tasks commit together. At most two continuation rounds and sixteen total subtasks are permitted. An identical prior request/input, exhausted continuation bound, missing input, invalid response, or provider failure cannot produce mission success. Uncertain external effects still require reconciliation. Completed tools and agent outputs remain checkpointed across restarts; a persisted completion decision is reused if final assembly crashes.
+
+Caller-authored explicit plans are assessed deterministically as completed exact actions; their review states that a broader semantic objective is not certified. Generated plans receive model review. Final evidence records the assessment method, snapshot and evidence IDs; audit rejects new-policy success without a matching assessment. Historical results are not rewritten. Mission detail exposes `completion_reviews`; Mission Control shows the latest assessment and caps unfinished task progress at 99%.

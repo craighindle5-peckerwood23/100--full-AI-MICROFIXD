@@ -22,6 +22,15 @@ export function auditMission(mission:Mission,tasks:Task[],subtasks:Subtask[],art
  if(mission.status==='succeeded'){
   if(!tasks.length||tasks.some(t=>t.status!=='succeeded')||!subtasks.length||subtasks.some(s=>s.status!=='succeeded'))add('INCOMPLETE_SUCCESS',mission.mission_id);
   if(!final||final.type!=='mission_result'||final.task_id!==null||final.subtask_id!==null)add('INVALID_FINAL_ARTIFACT',mission.mission_id);
+  if(mission.constraints.completion_policy){
+   const review=final?.evidence.completion_review as any;
+   const sources=artifacts.filter(a=>a.subtask_id!==null);
+   const snapshot=contentHash({tasks:tasks.map(t=>t.task_id),artifacts:sources.map(a=>({id:a.artifact_id,hash:a.hash}))});
+   if(!review||review.status!=='complete'||!['model_review','explicit_plan'].includes(review.method)
+    ||typeof review.reason!=='string'||!review.reason.trim()||typeof review.review_id!=='string'||review.snapshot!==snapshot
+    ||!Array.isArray(review.evidence_artifact_ids)||!review.evidence_artifact_ids.length
+    ||review.evidence_artifact_ids.some((id:string)=>!sources.some(a=>a.artifact_id===id)))add('OBJECTIVE_REVIEW_MISSING_OR_INVALID',mission.mission_id);
+  }
   const output=final?.content as any;
   const sourcesForOutput=artifacts.filter(a=>a.subtask_id!==null);
   if(!Array.isArray(output?.outputs)||output.outputs.length!==sourcesForOutput.length||sourcesForOutput.some(source=>output.outputs.filter((entry:any)=>entry?.artifact_id===source.artifact_id&&contentHash(entry.content)===source.hash).length!==1))add('FINAL_OUTPUT_LINK_MISMATCH',mission.mission_id);

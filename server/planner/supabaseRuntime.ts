@@ -1,3 +1,4 @@
+import {completionPrompt,parseCompletionOutput} from './completionReview';
 import {parsePlanOutput,planningErrorCode} from './planOutput';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -87,10 +88,22 @@ export function createPlannerRuntime(client: SupabaseClient, tenant: string, mis
       const steps:unknown=parsePlanOutput(result.content);
       if(toolPlanning){
         if(!Array.isArray(steps)||!steps.length||steps.length>8||steps.some(step=>!step||typeof step!=='object'||Array.isArray(step)))throw new Error('INVALID_PLAN');
-        return validatePlan(steps.map(step=>({agent_id:agents.executor,tool_permissions:allowed,input_context:{objective:m.objective},expected_output_schema:{type:'object',required:[step.tool_request?'result':'answer'],properties:step.tool_request?{result:{type:'object'}}:{answer:{type:'string'}},additionalProperties:false},subtasks:[{agent_id:agents.executor,tool_request:step.tool_request??null,input:{objective:m.objective,...step.input}}]})),m);
+        return atomicPlan(steps,m,agents.executor);
       }
       if(!Array.isArray(steps)||!steps.length||steps.length>8||steps.some(s=>typeof s!=='string'||!s.trim()||s.length>2000))throw new Error('INVALID_PLAN');
       return steps.map(step=>({agent_id:agents.executor,tool_permissions:[],input_context:{objective:m.objective},expected_output_schema:{type:'object',properties:{answer:{type:'string'}},required:['answer'],additionalProperties:false},subtasks:[{agent_id:agents.executor,tool_request:null,input:{objective:m.objective,step}}]}));
+    },
+    reviewCompletion:async(m,tasks,artifacts)=>{
+      // An explicit caller-authored plan promises exact actions only. Generated plans
+      // require a separate assessment against the original objective after execution.
+      if(Array.isArray(m.constraints.plan))return {status:'complete',reason:'Explicit plan actions have verified artifacts; broader semantic objective is not certified.',
+        evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:[],method:'explicit_plan'};
+      const allowed=(m.constraints.tool_permissions??[]) as string[];
+      const result=await modelCall(completionPrompt(m,tasks,artifacts,allowed.map(name=>getTool(name))),768,0,providerFor(agents.supervisor));
+      if(result.truncated)throw new Error('INVALID_COMPLETION_REVIEW');
+      const review=parseCompletionOutput(result.content,artifacts);
+      const next_tasks=review.status==='continue'?atomicPlan(review.next_steps,m,agents.executor):[];
+      return {status:review.status,reason:review.reason,evidence_artifact_ids:review.evidence_artifact_ids,next_tasks,method:'model_review'};
     },
     invokeAgent:async(input,agent,context)=>{
       await ensureAgents();
@@ -138,4 +151,13 @@ export function validatePlan(value: JSONValue[], mission: Mission): PlannedTask[
   if(!Array.isArray(t.tool_permissions)||t.tool_permissions.some(p=>!ENABLED_TOOLS.includes(p)||!Array.isArray(allowed)||!allowed.includes(p))||!validSchema(t.expected_output_schema)||!Array.isArray(t.subtasks)||!t.subtasks.length)throw new Error('INVALID_PLAN');
   return {agent_id:t.agent_id??null,tool_permissions:t.tool_permissions,input_context:t.input_context??{},expected_output_schema:t.expected_output_schema,subtasks:t.subtasks.map(s=>{if(!s||typeof s!=='object'||Array.isArray(s)||s.tool_request&&(typeof s.tool_request!=='object'||!t.tool_permissions.includes(s.tool_request.name)))throw new Error('INVALID_PLAN');return {agent_id:s.agent_id??t.agent_id??null,tool_request:s.tool_request??null,input:s.input??{}};})};
  });
+}
+
+function atomicPlan(steps:any[],m:Mission,agent:string):PlannedTask[]{
+ return validatePlan(steps.map(step=>{
+  if(!step||typeof step!=='object'||Array.isArray(step)||!step.input||typeof step.input!=='object'||Array.isArray(step.input))throw new Error('INVALID_PLAN');
+  return {agent_id:agent,tool_permissions:m.constraints.tool_permissions??[],input_context:{objective:m.objective,step:step.input.step??step.tool_request?.name??'bounded task'},
+   expected_output_schema:{type:'object',required:[step.tool_request?'result':'answer'],properties:step.tool_request?{result:{type:'object'}}:{answer:{type:'string'}},additionalProperties:false},
+   subtasks:[{agent_id:agent,tool_request:step.tool_request??null,input:{...step.input,objective:m.objective}}]};
+ }),m);
 }

@@ -23,3 +23,12 @@ test('planner accepts JSON code fences and a single steps wrapper, never surroun
  assert.equal(planningErrorCode(new Error('secret-token-value')),'PLANNING_FAILED');
  assert.equal(planningErrorCode(new SyntaxError('invalid response')),'INVALID_PLAN_JSON');
 });
+
+test('completion review requires real evidence IDs and well-formed bounded next steps',async()=>{
+ const {parseCompletionOutput,completionEvidence}=await import('../server/planner/completionReview');
+ const artifacts:any[]=[{artifact_id:'real',hash:'digest',content:{result:{organs:[{id:'paragon',native_executor:true}],tools:[{name:'list_system_capabilities'}]}},evidence:{tool:'list_system_capabilities'}}];
+ assert.equal((completionEvidence(artifacts)[0].content_preview).includes('inventory_only'),true);
+ const good={status:'complete',reason:'Inventory requested and returned',evidence_artifact_ids:['real'],next_steps:[]};
+ assert.equal(parseCompletionOutput(JSON.stringify(good),artifacts).status,'complete');
+ for(const bad of [{...good,evidence_artifact_ids:['forged']},{...good,evidence_artifact_ids:[]},{...good,status:'continue'},{...good,next_steps:[{}]},{...good,extra:'injected'}])assert.throws(()=>parseCompletionOutput(JSON.stringify(bad),artifacts),/INVALID_COMPLETION/);
+});

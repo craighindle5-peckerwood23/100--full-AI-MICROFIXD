@@ -106,6 +106,13 @@ export class AgentBus {
     return this.repository.getMessagesForAgent(agentId, missionId);
   }
 }
+export interface CompletionReview {
+  status: 'complete' | 'continue' | 'blocked';
+  reason: string;
+  evidence_artifact_ids: UUID[];
+  next_tasks: PlannedTask[];
+  method: 'model_review' | 'explicit_plan';
+}
 export interface PlannerDependencies {
   // Transaction must commit all writes or none. Lock must span the entire callback.
   repository: Repositories;
@@ -113,6 +120,7 @@ export interface PlannerDependencies {
   withMissionLock<T>(tenantId: string, missionId: UUID, work: () => Promise<T>): Promise<T>;
   plan(mission: Mission): Promise<PlannedTask[]>;
   recordPlanningError?(mission:Mission,error:unknown):Promise<void>;
+  reviewCompletion?(mission: Mission, tasks: Task[], artifacts: Artifact[]): Promise<CompletionReview>;
   executeTool(request: JSONObject, context: ExecutionContext): Promise<ExecutionResult>;
   invokeAgent(input: JSONValue, agentId: UUID | undefined, context: ExecutionContext): Promise<ExecutionResult>;
   validate: SchemaValidator;
@@ -179,6 +187,9 @@ export class PlannerService {
         });
         tasks = await r.getTasks(current.mission_id);
       } else await r.updateMissionStatus(current.mission_id, 'running');
+      // Continuation plans are committed with their review under this mission's lease.
+      // Restarts reuse completed outputs; no external effect is replayed to replan.
+      for (;;) {
       const canonical: Artifact[] = [];
       for (const task of tasks) {
         if (task.status === 'blocked' || task.status === 'failed') {
@@ -260,13 +271,75 @@ export class PlannerService {
         canonical.push(artifacts.find(a => a.artifact_id === decision.canonical_artifact_id)!);
         await r.updateTaskStatus(task.task_id, 'succeeded');
       }
-      // Deterministic assembly avoids an additional model call and retains every verified output.
       const artifacts = await r.getArtifacts(current.mission_id);
+      let completion: JSONObject | undefined;
+      if (current.constraints.completion_policy && !this.d.reviewCompletion) {
+        await r.updateMissionStatus(current.mission_id, 'waiting');
+        return r.getMission(current.mission_id);
+      }
+      if (this.d.reviewCompletion) {
+        const sources = artifacts.filter(a => a.subtask_id !== null);
+        const snapshot = contentHash({tasks:tasks.map(t=>t.task_id),artifacts:sources.map(a=>({id:a.artifact_id,hash:a.hash}))});
+        const reviewId = artifactId(current.mission_id, 'completion:' + snapshot);
+        const reviewer = '56742fe9-fb8c-4385-b54c-d9e2241e5118';
+        const messages = await r.getMessagesForAgent(reviewer, current.mission_id);
+        const prior = messages.find(m=>m.message_id===reviewId);
+        let review: CompletionReview;
+        try {
+          if (deadlineExceeded(current)) throw Object.assign(new Error('MISSION_DEADLINE_EXCEEDED'), {code:'MISSION_DEADLINE_EXCEEDED'});
+          review = prior ? (prior.content as unknown as {review:CompletionReview}).review
+            : await this.d.reviewCompletion(current, tasks, sources);
+          if (!review || !['complete','continue','blocked'].includes(review.status)
+            || !['model_review','explicit_plan'].includes(review.method)
+            || typeof review.reason!=='string' || !review.reason.trim() || review.reason.length>2000
+            || !Array.isArray(review.evidence_artifact_ids) || new Set(review.evidence_artifact_ids).size!==review.evidence_artifact_ids.length
+            || review.evidence_artifact_ids.some(id=>!sources.some(a=>a.artifact_id===id&&a.tenant_id===current.tenant_id))
+            || !Array.isArray(review.next_tasks)
+            || (review.status==='complete' && !review.evidence_artifact_ids.length)
+            || (review.status!=='continue' && review.next_tasks.length)) throw new Error('INVALID_COMPLETION_REVIEW');
+          let next = review.next_tasks;
+          const rounds = messages.filter(m=>m.content&&typeof m.content==='object'&&!Array.isArray(m.content)&&m.content.kind==='completion_review').length;
+          const count = (await Promise.all(tasks.map(t=>r.getSubtasks(t.task_id)))).flat().length;
+          const allowed = current.constraints.tool_permissions;
+          const previous = (await Promise.all(tasks.map(t=>r.getSubtasks(t.task_id)))).flat();
+          if(review.status==='continue' && next.some(t=>t.subtasks.some(s=>previous.some(p=>contentHash({request:p.tool_request,input:p.input})===contentHash({request:s.tool_request,input:s.input}))))){
+            review={...review,status:'blocked',reason:'CONTINUATION_NO_PROGRESS: '+review.reason,next_tasks:[]};next=[];
+          }
+          if (review.status==='continue') {
+            if (prior || rounds>=2 || !next.length || next.length>8 || count+next.reduce((n,t)=>n+t.subtasks.length,0)>this.d.budget.max_subtasks) {
+              review={...review,status:'blocked',reason:'CONTINUATION_BUDGET_EXHAUSTED: '+review.reason,next_tasks:[]};next=[];
+            } else if (next.some(t=>!t.subtasks.length||!Object.keys(t.expected_output_schema).length||t.tool_permissions.some(p=>!Array.isArray(allowed)||!allowed.includes(p)))) {
+              throw new Error('INVALID_CONTINUATION_PLAN');
+            }
+          }
+          await this.d.transaction(async tx=>{
+            if(!prior)await tx.createMessage({message_id:reviewId,tenant_id:current.tenant_id,mission_id:current.mission_id,
+              from_agent:reviewer,to_agent:reviewer,artifacts:review.evidence_artifact_ids,confidence:0,created_at:new Date().toISOString(),
+              content:{kind:'completion_review',snapshot,review:review as unknown as JSONValue}});
+            for(const p of next){
+              const task:Task={task_id:randomUUID(),mission_id:current.mission_id,tenant_id:current.tenant_id,agent_id:p.agent_id,
+                tool_permissions:p.tool_permissions,input_context:p.input_context,expected_output_schema:p.expected_output_schema,status:'queued',attempts:0};
+              await tx.createTask(task);
+              for(const sub of p.subtasks)await tx.createSubtask({...sub,subtask_id:randomUUID(),task_id:task.task_id,tenant_id:current.tenant_id,status:'queued',attempts:0,raw_output:null,normalized_output:null});
+            }
+            if(review.status==='blocked')await tx.updateMissionStatus(current.mission_id,'waiting');
+          });
+          if(review.status==='blocked')return r.getMission(current.mission_id);
+          if(review.status==='continue'){tasks=await r.getTasks(current.mission_id);continue;}
+          completion={review_id:reviewId,snapshot,status:review.status,reason:review.reason,method:review.method,evidence_artifact_ids:review.evidence_artifact_ids};
+        } catch(error) {
+          await this.d.recordPlanningError?.(current,error);
+          await r.updateMissionStatus(current.mission_id,'waiting');
+          return r.getMission(current.mission_id);
+        }
+      }
+      // Assembly retains verified outputs and the separately persisted completion assessment.
       const final = makeArtifact(current, null, null, { outputs: artifacts.filter(a => a.subtask_id !== null).map(a => ({ artifact_id: a.artifact_id, content: a.content })),
-        canonical_artifacts: canonical.map(a => a.artifact_id) }, { artifact_ids: artifacts.filter(a => a.subtask_id !== null).map(a => a.artifact_id), provenance: artifacts.filter(a => a.subtask_id !== null).map(a => ({artifact_id:a.artifact_id, task_id:a.task_id, subtask_id:a.subtask_id, content_hash:a.hash, evidence_hash:contentHash(a.evidence)})) });
+        canonical_artifacts: canonical.map(a => a.artifact_id) }, { ...(completion?{completion_review:completion}:{}), artifact_ids: artifacts.filter(a => a.subtask_id !== null).map(a => a.artifact_id), provenance: artifacts.filter(a => a.subtask_id !== null).map(a => ({artifact_id:a.artifact_id, task_id:a.task_id, subtask_id:a.subtask_id, content_hash:a.hash, evidence_hash:contentHash(a.evidence)})) });
       await this.d.transaction(async tx => { await tx.createArtifact(final); await tx.attachResultArtifact(current.mission_id, final.artifact_id);
         await tx.updateMissionStatus(current.mission_id, 'succeeded'); });
       return r.getMission(current.mission_id);
+      }
     });
   }
 }

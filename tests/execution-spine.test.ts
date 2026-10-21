@@ -129,3 +129,83 @@ test('planning failure is recorded before terminal state and executes no tools',
  assert.deepEqual(events,['INVALID_PLAN_JSON']);assert.equal(f.calls(),0);
  assert.equal((await f.repository.getTasks(f.mission.mission_id)).length,0);
 });
+
+test('objective review continues after discovery without replaying completed effects',async()=>{
+ const f=fixture();let reviews=0;
+ f.deps.budget.max_subtasks=4;
+ const planner=new PlannerService({...f.deps,reviewCompletion:async(_m,_tasks,artifacts)=>{
+  reviews++;
+  if(reviews===1){const next=await f.deps.plan();next[0].subtasks[0].input={step:'fulfil remaining requirement'};
+   return {status:'continue',reason:'Discovery did not fulfil the requested output',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:next,method:'model_review'};}
+  return {status:'complete',reason:'Both required outputs are present',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:[],method:'model_review'};
+ }});
+ const result=await planner.planAndExecuteMission(f.mission);assert.equal(result.status,'succeeded');assert.equal(f.calls(),2);assert.equal(reviews,2);
+ const final=(await f.repository.getArtifacts(f.mission.mission_id)).find(a=>a.type==='mission_result')!;
+ assert.equal((final.evidence.completion_review as any).status,'complete');
+ assert.equal((await f.repository.getTasks(f.mission.mission_id)).length,2);
+ await new PlannerService(f.deps).planAndExecuteMission(f.mission);assert.equal(f.calls(),2);
+});
+
+test('blocked, malformed and cross-mission completion claims never finalize success',async()=>{
+ for(const kind of ['blocked','foreign','missing-reviewer']){
+  const f=fixture();f.mission.constraints.completion_policy='objective-v1';
+  const review:any={status:kind==='blocked'?'blocked':'complete',reason:'Unmet original objective',evidence_artifact_ids:kind==='foreign'?['foreign-artifact']:[],next_tasks:[],method:'model_review'};
+  const deps=kind==='missing-reviewer'?f.deps:{...f.deps,reviewCompletion:async()=>review};
+  assert.equal((await new PlannerService(deps).planAndExecuteMission(f.mission)).status,'waiting');
+  assert.equal((await f.repository.getMission(f.mission.mission_id)).result_artifact_id,null);assert.equal(f.calls(),1);
+ }
+});
+
+test('identical continuation and permission expansion are blocked before new effects',async()=>{
+ for(const expand of [false,true]){
+  const f=fixture();f.deps.budget.max_subtasks=4;
+  const planner=new PlannerService({...f.deps,reviewCompletion:async(_m,_t,artifacts)=>{
+   const next=await f.deps.plan();if(expand){next[0].tool_permissions=['write'];next[0].subtasks[0].input={new:true};}
+   return {status:'continue',reason:'Another action requested',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:next,method:'model_review'};
+  }});
+  assert.equal((await planner.planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),1);
+  assert.equal((await f.repository.getTasks(f.mission.mission_id)).length,1);
+ }
+});
+
+test('continuation count is durable and bounded even across operator resumes',async()=>{
+ const f=fixture();let reviews=0;f.deps.budget.max_subtasks=8;
+ const deps={...f.deps,reviewCompletion:async(_m,_t,artifacts)=>{
+  const next=await f.deps.plan();next[0].subtasks[0].input={round:++reviews};
+  return {status:'continue' as const,reason:'Work remains',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:next,method:'model_review' as const};
+ }};
+ assert.equal((await new PlannerService(deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),3);assert.equal(reviews,3);
+ await f.repository.updateMissionStatus(f.mission.mission_id,'queued');
+ assert.equal((await new PlannerService(deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),3);assert.equal(reviews,3);
+});
+
+test('restart reuses completion checkpoint after final commit fails',async()=>{
+ const f=fixture();let reviews=0,fail=true;
+ const transaction=f.deps.transaction;
+ f.deps.transaction=async work=>transaction(async r=>{
+  const attach=r.attachResultArtifact.bind(r);r.attachResultArtifact=async(...args)=>{if(fail){fail=false;throw Error('final commit interrupted');}return attach(...args);};
+  try{return await work(r);}finally{r.attachResultArtifact=attach;}
+ });
+ const deps={...f.deps,reviewCompletion:async(_m,_t,artifacts)=>{reviews++;return {status:'complete' as const,reason:'Evidence meets objective',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:[],method:'model_review' as const};}};
+ await assert.rejects(new PlannerService(deps).planAndExecuteMission(f.mission),/interrupted/);
+ assert.equal((await new PlannerService(deps).planAndExecuteMission(f.mission)).status,'succeeded');assert.equal(reviews,1);assert.equal(f.calls(),1);
+});
+
+test('provider failure during completion review preserves completed work for recovery',async()=>{
+ const f=fixture();let reviews=0;
+ const deps={...f.deps,reviewCompletion:async(_m,_t,artifacts)=>{if(++reviews===1)throw Object.assign(new Error('PROVIDERS_EXHAUSTED'),{code:'PROVIDERS_EXHAUSTED'});return {status:'complete' as const,reason:'Evidence meets objective',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:[],method:'model_review' as const};}};
+ assert.equal((await new PlannerService(deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),1);
+ await f.repository.updateMissionStatus(f.mission.mission_id,'queued');
+ assert.equal((await new PlannerService(deps).planAndExecuteMission(f.mission)).status,'succeeded');assert.equal(f.calls(),1);
+});
+
+test('mission audit rejects a completion claim detached from the current evidence snapshot',async()=>{
+ const {auditMission}=await import('../server/planner/missionAudit');
+ const f=fixture();f.mission.constraints.completion_policy='objective-v1';
+ const deps={...f.deps,reviewCompletion:async(_m,_t,artifacts)=>({status:'complete' as const,reason:'Evidence meets objective',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:[],method:'model_review' as const})};
+ const m=await new PlannerService(deps).planAndExecuteMission(f.mission),tasks=await f.repository.getTasks(m.mission_id);
+ const subs=(await Promise.all(tasks.map(t=>f.repository.getSubtasks(t.task_id)))).flat(),artifacts=await f.repository.getArtifacts(m.mission_id);
+ assert.equal(auditMission(m,tasks,subs,artifacts).verified,true);
+ const final=artifacts.find(a=>a.type==='mission_result')!;delete final.evidence.completion_review;
+ assert.ok(auditMission(m,tasks,subs,artifacts).issues.some(i=>i.code==='OBJECTIVE_REVIEW_MISSING_OR_INVALID'));
+});
