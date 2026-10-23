@@ -1,5 +1,8 @@
 /** Real Chromium actions only. No simulated successes or host-side evaluation. */
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
+// BrowserManager instances share the packaged binary, so they must await the
+// same extraction rather than treating a partially written file as ready.
+let packagedExecutable: Promise<string> | null = null;
 export class BrowserManager {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
@@ -11,8 +14,14 @@ export class BrowserManager {
     this.starting=(async()=>{
       const packaged = !process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && process.env.NODE_ENV === 'production';
       const serverlessChromium = packaged ? (await import('@sparticuz/chromium')).default : null;
+      if (serverlessChromium && !packagedExecutable) {
+        packagedExecutable = serverlessChromium.executablePath().catch(error => {
+          packagedExecutable = null;
+          throw error;
+        });
+      }
       const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-        || (serverlessChromium ? await serverlessChromium.executablePath() : undefined);
+        || (serverlessChromium ? await packagedExecutable! : undefined);
       const browser=await chromium.launch({headless,executablePath,
         chromiumSandbox: !packaged && process.env.PLAYWRIGHT_CHROMIUM_SANDBOX !== 'false',
         args: serverlessChromium ? [...serverlessChromium.args, '--disable-dev-shm-usage'] : ['--disable-dev-shm-usage']});
