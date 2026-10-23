@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { AgentBus, DatabaseRepositories, PlannerService, type Database, type Mission, type Row, type Table } from '../server/planner/executionSpine';
+import { AgentBus, DatabaseRepositories, PlannerService, type Database, type Mission, type Row, type Table, type JSONObject } from '../server/planner/executionSpine';
 function fixture() {
   const rows = new Map<string, Row>();
   const db: Database = {
@@ -18,7 +18,7 @@ function fixture() {
     repository,
     async transaction<T>(work:(r:DatabaseRepositories)=>Promise<T>) { const before = structuredClone(rows); try { return await work(repository); } catch(e) { rows.clear(); for (const [k,v] of before) rows.set(k,v); throw e; } },
     async withMissionLock<T>(_t:string,_m:string,work:()=>Promise<T>) { return work(); },
-    async plan() { return [{agent_id:null,tool_permissions:['read'],input_context:{},expected_output_schema:{type:'object'},subtasks:[{agent_id:null,tool_request:{name:'read'},input:{}}]}]; },
+    async plan() { return [{agent_id:null,tool_permissions:['read'],input_context:{},expected_output_schema:{type:'object'},subtasks:[{agent_id:null,tool_request:{name:'read'} as JSONObject,input:{}}]}]; },
     async executeTool() { calls++; return {raw:{ok:true},normalized:{ok:true},evidence:{source:'test',confidence:0.9}}; },
     async invokeAgent() { throw Error('UNEXPECTED'); },
     validate:(v:unknown)=>!!v && typeof v === 'object',
@@ -151,7 +151,7 @@ test('objective review continues after discovery without replaying completed eff
  f.deps.budget.max_subtasks=4;
  const planner=new PlannerService({...f.deps,reviewCompletion:async(_m,_tasks,artifacts)=>{
   reviews++;
-  if(reviews===1){const next=await f.deps.plan();next[0].subtasks[0].input={step:'fulfil remaining requirement'};
+  if(reviews===1){const next=await f.deps.plan();next[0].subtasks[0].input={step:'fulfil remaining requirement'};next[0].subtasks[0].tool_request={name:'read',arguments:{page:2}};
    return {status:'continue',reason:'Discovery did not fulfil the requested output',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:next,method:'model_review'};}
   return {status:'complete',reason:'Both required outputs are present',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:[],method:'model_review'};
  }});
@@ -176,7 +176,7 @@ test('identical continuation and permission expansion are blocked before new eff
  for(const expand of [false,true]){
   const f=fixture();f.deps.budget.max_subtasks=4;
   const planner=new PlannerService({...f.deps,reviewCompletion:async(_m,_t,artifacts)=>{
-   const next=await f.deps.plan();if(expand){next[0].tool_permissions=['write'];next[0].subtasks[0].input={new:true};}
+   const next=await f.deps.plan();next[0].subtasks[0].input={narration:'Different narration for the same action'};if(expand){next[0].tool_permissions=['write'];next[0].subtasks[0].tool_request={name:'write'};}
    return {status:'continue',reason:'Another action requested',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:next,method:'model_review'};
   }});
   assert.equal((await planner.planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),1);
@@ -187,7 +187,7 @@ test('identical continuation and permission expansion are blocked before new eff
 test('continuation count is durable and bounded even across operator resumes',async()=>{
  const f=fixture();let reviews=0;f.deps.budget.max_subtasks=8;
  const deps={...f.deps,reviewCompletion:async(_m,_t,artifacts)=>{
-  const next=await f.deps.plan();next[0].subtasks[0].input={round:++reviews};
+  const next=await f.deps.plan();next[0].subtasks[0].input={round:++reviews};next[0].subtasks[0].tool_request={name:'read',arguments:{page:reviews}};
   return {status:'continue' as const,reason:'Work remains',evidence_artifact_ids:artifacts.map(a=>a.artifact_id),next_tasks:next,method:'model_review' as const};
  }};
  assert.equal((await new PlannerService(deps).planAndExecuteMission(f.mission)).status,'waiting');assert.equal(f.calls(),3);assert.equal(reviews,3);

@@ -1,5 +1,6 @@
 import type {Artifact, Mission, Task} from './executionSpine';
 import {validateSchema} from './schema';
+import {artifactPreview} from './taskContinuity';
 
 /** Bounded evidence for objective review; previews are explicitly not full documents. */
 export function completionEvidence(artifacts:Artifact[]) {
@@ -8,9 +9,10 @@ export function completionEvidence(artifacts:Artifact[]) {
     const content=result&&Array.isArray(result.organs)&&Array.isArray(result.tools)
       ? {inventory_only:true,tools:result.tools.map((t:any)=>t.name),native_organs:result.organs.filter((o:any)=>o.native_executor).map((o:any)=>o.id)}
       : a.content;
+    if(content===a.content)return {...artifactPreview(a),tool:a.evidence.tool??null};
     const serialized=JSON.stringify(content);
     return {artifact_id:a.artifact_id,tool:a.evidence.tool??null,hash:a.hash,
-      content_preview:serialized.slice(0,1600),truncated:serialized.length>1600};
+      content_preview:serialized.slice(0,1600),truncated:serialized.length>1600,projection:'capability_inventory',read_tool:'read_mission_artifact'};
   });
 }
 export function completionPrompt(mission:Mission,tasks:Task[],artifacts:Artifact[],tools:unknown[]) {

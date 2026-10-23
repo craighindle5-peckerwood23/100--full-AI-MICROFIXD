@@ -7,6 +7,7 @@ import { ENABLED_TOOLS, systemCapabilities } from './governedTools';
 import {canonicalJSON} from './executionSpine';
 import type { Mission } from './executionSpine';
 import {auditMission} from './missionAudit';
+import {readMissionArtifact, loadMissionNotes} from './taskContinuity';
 export const plannerRouter=Router();
 const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex').slice(0,32);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 plannerRouter.get('/capabilities',(_req,res)=>res.json(systemCapabilities()));
@@ -36,6 +37,16 @@ export const submitMission:import('express').RequestHandler=async(req,res)=>{
  }catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
 };
 plannerRouter.post('/missions',submitMission);
+plannerRouter.get('/missions/:id/artifacts/:artifact',async(req,res)=>{
+ try{res.json(await readMissionArtifact(plannerClient(),(req as any).microfixdTenantId,req.params.id,
+  {artifact_id:req.params.artifact,offset:req.query.offset===undefined?0:Number(req.query.offset),limit:req.query.limit===undefined?4000:Number(req.query.limit)}));}
+ catch(error){const code=error instanceof Error?error.message:'';
+  res.status(code==='INVALID_ARTIFACT_PAGE'?400:code==='ARTIFACT_NOT_FOUND'?404:code==='INVALID_ARTIFACT_EVIDENCE'?409:503).json({code:code.startsWith('CONTINUITY_STORAGE_ERROR')?'CONTINUITY_STORAGE_UNAVAILABLE':code||'CONTINUITY_UNAVAILABLE'});}
+});
+plannerRouter.get('/missions/:id/notes',async(req,res)=>{
+ try{res.json({notes:await loadMissionNotes(plannerClient(),(req as any).microfixdTenantId,req.params.id)});}
+ catch{res.status(503).json({code:'CONTINUITY_STORAGE_UNAVAILABLE'});}
+});
 plannerRouter.get('/missions',async(req,res)=>{
  try{const {data,error}=await plannerClient().from('spine_rows').select('data').eq('tenant_id',(req as any).microfixdTenantId).eq('kind','missions').order('sequence',{ascending:false}).limit(50);if(error)throw error;res.json({missions:data.map(r=>r.data)});}catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
 });

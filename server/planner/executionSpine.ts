@@ -6,6 +6,10 @@ export function canonicalJSON(value: unknown): string {
  const text=JSON.stringify(value);if(text===undefined)throw new Error('INVALID_JSON');return text;
 }
 export function contentHash(value: unknown): string {return createHash('sha256').update(canonicalJSON(value)).digest('hex');}
+/** Narration changes cannot disguise an identical tool action; paging arguments can. */
+export function executionIdentity(step: {tool_request?: JSONObject | null; input: JSONValue}): string {
+  return contentHash(step.tool_request ? {request: step.tool_request} : {input: step.input});
+}
 export const EXECUTION_POLICY_VERSION = 'spine-2026-10-09.1';
 export type UUID = string;
 export type JSONValue = null | boolean | number | string | JSONValue[] | { [key: string]: JSONValue };
@@ -305,7 +309,8 @@ export class PlannerService {
           const count = (await Promise.all(tasks.map(t=>r.getSubtasks(t.task_id)))).flat().length;
           const allowed = current.constraints.tool_permissions;
           const previous = (await Promise.all(tasks.map(t=>r.getSubtasks(t.task_id)))).flat();
-          if(review.status==='continue' && next.some(t=>t.subtasks.some(s=>previous.some(p=>contentHash({request:p.tool_request,input:p.input})===contentHash({request:s.tool_request,input:s.input}))))){
+           const nextKeys=next.flatMap(t=>t.subtasks.map(executionIdentity));
+           if(review.status==='continue' && (new Set(nextKeys).size!==nextKeys.length || nextKeys.some(key=>previous.some(p=>executionIdentity(p)===key)))){
             review={...review,status:'blocked',reason:'CONTINUATION_NO_PROGRESS: '+review.reason,next_tasks:[]};next=[];
           }
           if (review.status==='continue') {
