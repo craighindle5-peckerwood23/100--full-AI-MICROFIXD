@@ -9,6 +9,12 @@ export interface IngestionRecord {
 export interface RecordStore {
   upsert(record: IngestionRecord): Promise<void>;
 }
+/** JSONB may reorder keys; provenance hashes must remain stable after storage. */
+export function sourceContentHash(payload:Record<string,unknown>):string {
+  const canonical=(value:unknown):unknown=>Array.isArray(value)?value.map(canonical):value&&typeof value==='object'
+    ?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([key,item])=>[key,canonical(item)])):value;
+  return createHash('sha256').update(JSON.stringify(canonical(payload))).digest('hex');
+}
 const ENDPOINTS: Record<NhtsaKind, string> = {
   recalls: "https://api.nhtsa.gov/recalls/recallsByVehicle",
   complaints: "https://api.nhtsa.gov/complaints/complaintsByVehicle",
@@ -48,7 +54,7 @@ export async function fetchNhtsa(
     const payload = item as Record<string, unknown>;
     const canonical = JSON.stringify(payload);
     if (canonical.length > 100_000) continue;
-    const hash = createHash("sha256").update(canonical).digest("hex");
+    const hash = sourceContentHash(payload);
     const external = kind === "recalls" ? payload.NHTSACampaignNumber : payload.odiNumber ?? payload.ODINumber;
     const key = typeof external === "string" || typeof external === "number"
       ? String(external) : hash;

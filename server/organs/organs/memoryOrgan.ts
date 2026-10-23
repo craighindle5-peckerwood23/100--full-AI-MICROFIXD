@@ -2,7 +2,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import {rememberKnowledge, recallKnowledge, recallProcedures} from '../../memory/knowledgeMemory';
-import {packMemoryContext} from '../../memory/contextWindow';
+import {storedContext} from '../../memory/contextGraph';
 let client: SupabaseClient | undefined;
 function database(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
@@ -61,9 +61,7 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
         reason: "transient_memory_unavailable",
       };
     }
-    const knowledge = typeof p.knowledge_query === 'string'
-      ? await recallKnowledge(db, identity, p.knowledge_query, 8) : {memories: []};
-    const packed = packMemoryContext(result.memories, knowledge.memories.map(memory => ({...memory, type: 'knowledge'})), max_chars);
+    const packed = await storedContext(db, identity, result.memories, String(p.knowledge_query??p.query??'').slice(0,4000), max_chars);
     return {...packed, window: {requested, ...packed.window}};
   }
   if (action === "store") {

@@ -7,9 +7,11 @@ import {database} from '../../automotive/database/session';
 import {AutomotiveRepository} from '../../automotive/database/repository';
 import type {DiagnosticCase} from '../../automotive/schemas';
 import {selectTest} from '../../automotive/torquelogic/testSelector';
+import {searchVehicleReferences} from '../../automotive/sourceReferences';
 export async function executeAutomotiveOrgan(action:string,payload:unknown,client?:SupabaseClient){
  const p=z.object({tenant_id:z.string().min(1),case_id:z.string().uuid().optional(),obd_session_id:z.string().uuid().optional()}).passthrough().parse(payload);
  if(action==='obd_setup')return obdConnectionSetup();
+ if(action==='references')return searchVehicleReferences(client??database(),z.string().min(1).max(4000).parse(p.query));
  if(['obd_sessions','obd_status'].includes(action)){
   const repo=new OBDRepository(client??database(),p.tenant_id);
   const sessions=action==='obd_sessions'?await repo.list():[await repo.get(z.string().uuid().parse(p.obd_session_id))];

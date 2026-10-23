@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { buildNhtsaUrl, fetchNhtsa, type IngestionRecord, type NhtsaKind, type VehicleQuery } from "./nhtsa-ingestion";
+import { buildNhtsaUrl, fetchNhtsa, type NhtsaKind, type VehicleQuery } from "./nhtsa-ingestion";
+import {saveNhtsaRecord} from './sourceReferences';
 
 type Job = { id: string; source_id: string; source_key: string; request_url: string; lease_token: string };
 function clientFromEnv(): SupabaseClient {
@@ -36,14 +37,7 @@ export async function runOneIngestionJob(db: SupabaseClient, fetcher: typeof fet
   try {
     const { kind, vehicle } = parseJob(job);
     await fetchNhtsa(kind, vehicle, {
-      upsert: async (record: IngestionRecord) => {
-        const { error: upsertError } = await db.from("automotive_source_records").upsert({
-          source_id: record.sourceId, source_key: record.sourceKey,
-          source_url: record.sourceUrl, payload: record.payload,
-          content_sha256: record.contentSha256, fetched_at: new Date().toISOString(),
-        }, { onConflict: "source_id,source_key" });
-        if (upsertError) throw upsertError;
-      },
+      upsert: record=>saveNhtsaRecord(db,record),
     }, fetcher);
     success = true;
   } catch (e) {

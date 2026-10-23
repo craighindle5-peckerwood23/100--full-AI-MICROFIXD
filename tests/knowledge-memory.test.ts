@@ -13,6 +13,7 @@ function storage() {
     const request = input instanceof Request ? input : new Request(input, init), url = new URL(request.url);
     const params = url.searchParams;
     if (fail) return Response.json({code:'42501',message:'denied'}, {status:403});
+    if(url.pathname.endsWith('/automotive_source_records'))return Response.json([]);
     assert.match(url.pathname, /rest\/v1\/(microfixd_memory_records|spine_rows)$/);
     if (request.method === 'POST') {
       const value = await request.json();

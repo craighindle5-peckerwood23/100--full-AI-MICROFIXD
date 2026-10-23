@@ -12,6 +12,7 @@ import {transition} from './torquelogic/stateMachine';
 import {selectTest} from './torquelogic/testSelector';
 import {decodeVIN} from './integrations/vinDecoder';
 import {embed} from './driveiq/embedder';
+import {importVehicleReferences,searchVehicleReferences} from './sourceReferences';
 type Context=Request&{microfixdTenantId?:string;microfixdUserId?:string;microfixdRole?:string};
 const actor=(r:Context)=>r.microfixdUserId||`shared:${r.microfixdRole}`;
 const view=(c:DiagnosticCase)=>({...c,nextTest:selectTest(c),repairCandidates:c.state==='testing'&&!c.alerts.length?c.hypotheses.filter(h=>h.status==='supported').map(h=>({hypothesisId:h.id,repair:h.evidence.repair,source:h.evidence.source})):[]});
@@ -29,6 +30,12 @@ export function createAutomotiveRouter(repository?:(tenant:string)=>AutomotiveRe
  };
  router.use('/obd',createOBDRouter());
  const id=(req:Request)=>z.string().uuid().parse(req.params.id);
+ router.get('/references',handler(async req=>searchVehicleReferences(database(),z.string().min(1).max(4000).parse(req.query.query))));
+ router.post('/references/import',handler(async req=>{
+   if(req.microfixdRole!=='admin')throw new Error('ADMIN_REQUIRED');
+   const input=z.object({kind:z.enum(['recalls','complaints']),make:z.string().min(1).max(70),model:z.string().min(1).max(70),modelYear:z.number().int().min(1981).max(2100)}).strict().parse(req.body);
+   return importVehicleReferences(database(),input.kind,input);
+ }));
  router.get('/vehicles',handler(async(_,repo)=>repo.list<Vehicle>('vehicle')));
  router.post('/vehicles',handler(async(req,repo)=>repo.insert('vehicle',{...vehicleSchema.parse(req.body),id:randomUUID()})));
  router.get('/vin/:vin',handler(async(req)=>decodeVIN(req.params.vin.toUpperCase())));

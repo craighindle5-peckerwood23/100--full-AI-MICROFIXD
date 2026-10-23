@@ -77,6 +77,7 @@ test('mounted API rejects anonymous, validates inputs, forbids non-admin imports
  const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',()=>r()));const url=`http://127.0.0.1:${(server.address() as any).port}/api/automotive`;
  try{
   assert.equal((await fetch(url+'/vehicles')).status,403);
+  assert.equal((await fetch(url+'/references/import',{method:'POST',headers:{'x-test-user':'yes','content-type':'application/json'},body:JSON.stringify({kind:'recalls',make:'BMW',model:'335I',modelYear:2010})})).status,403);
   assert.equal((await fetch(url+'/vehicles',{headers:{'x-test-user':'yes'}})).status,200);
   assert.equal((await fetch(url+'/vehicles',{method:'POST',headers:{'x-test-user':'yes','content-type':'application/json'},body:'{}'})).status,400);
   assert.equal((await fetch(url+'/knowledge',{method:'POST',headers:{'x-test-user':'yes','content-type':'application/json'},body:'{}'})).status,403);
