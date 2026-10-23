@@ -11,6 +11,9 @@ test('repair validation protects isolation, governance, tests, dependencies and 
  const sources=new Map([['server/automotive/example.ts','old']]);
  assert.throws(()=>validateRepairPatch({files:[{path:'src/unrequested.ts',content:'new'}]},sources));
  assert.throws(()=>validateRepairPatch({files:[{path:'server/automotive/example.ts',content:'old'}]},sources));
+ assert.deepEqual(validateRepairPatch({edits:[{path:'server/automotive/example.ts',old_text:'old',new_text:'new'}]},sources),[{path:'server/automotive/example.ts',content:'new'}]);
+ assert.throws(()=>validateRepairPatch({edits:[{path:'server/automotive/example.ts',old_text:'missing',new_text:'new'}]},sources),/NOT_UNIQUE/);
+ assert.throws(()=>validateRepairPatch({edits:[{path:'server/automotive/example.ts',old_text:'old',new_text:'new'}]},new Map([['server/automotive/example.ts','old old']])),/NOT_UNIQUE/);
  assert.ok(getTool('repair_source_code'));assert.equal(READ_TOOLS.has('repair_source_code'),false);
 });
 test('repair uses a separate Render candidate, rejects stale green results, and promotes only an exact verified commit',async()=>{

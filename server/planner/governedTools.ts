@@ -17,6 +17,7 @@ import {parseIsolatedRequest,runIsolatedCode,sandboxConfigured} from '../sandbox
 import {validateSkill,saveWorkflowSkill,listWorkflowSkills} from './workflowSkills';
 import {SPECIALISTS} from './specialists';
 import {repairSource} from '../engineering/sourceRepair';
+import {rememberKnowledge} from '../memory/knowledgeMemory';
 export const ENABLED_TOOLS=TOOL_REGISTRY.map(tool=>tool.name);
 export const BROWSER_TOOLS=new Set(['run_browser_workflow','inspect_browser_page','navigate_browser','scrape_url','take_screenshot','click_element','crawl_website']);
 export const READ_TOOLS=new Set(['search_vehicle_catalog','search_vehicle_references','list_workflow_skills','read_mission_artifact','search_mission_history','recall_knowledge','recall_procedures','obd_connection_setup','list_obd_sessions','read_obd_status','list_automotive_cases','read_automotive_case','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
@@ -123,7 +124,14 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
    const payload=tool.organ==='memory'?{...args as JSONObject,tenant_id:tenant,session_id:structured?`${tenant}:${mission}`:`${tenant}:tools`,event_id:context.subtask_id,tags:typeof (args as JSONObject).tags==='string'?String((args as JSONObject).tags).split(',').map(t=>t.trim()).filter(Boolean):[]}:args;
    raw=JSON.parse(JSON.stringify(await getExecutor(tool.organ)(tool.action,payload as Record<string,unknown>))) as JSONValue;
   }
-  }catch(error){if(protectedAction)throw new ExecutionPause('RECONCILIATION_REQUIRED');throw error;}
+  }catch(error){
+   if(name==='repair_source_code'){
+    const message=error instanceof Error?error.message:'';
+    const code=/^[A-Z][A-Z0-9_]{2,100}$/.test(message)?message:error instanceof SyntaxError?'REPAIR_INVALID_MODEL_JSON':error instanceof TypeError?'REPAIR_DEPENDENCY_TYPE_ERROR':'REPAIR_EXECUTION_FAILED';
+    await rememberKnowledge(client,{tenant_id:tenant,session_id:`${tenant}:${mission}`},{kind:'project_state',scope:'session',key:`repair.${context.subtask_id}.failed`,event_id:`${context.subtask_id}:failed`,content:JSON.stringify({phase:'failed',code})});
+   }
+   if(protectedAction)throw new ExecutionPause('RECONCILIATION_REQUIRED');throw error;
+  }
   if(raw&&typeof raw==='object'&&!Array.isArray(raw)&&('error' in raw||raw.success===false))throw new Error('TOOL_EXECUTION_FAILED');
   const result:ExecutionResult={raw,normalized:{result:raw},evidence:{tool:name,request_hash:hash,idempotency_key:context.idempotency_key,completed_at:new Date().toISOString()}};
   const {error:finishError}=await client.rpc('spine_finish_tool',{p_tenant:tenant,p_mission:mission,p_subtask:context.subtask_id,p_owner:owner,p_hash:hash,p_result:result});
