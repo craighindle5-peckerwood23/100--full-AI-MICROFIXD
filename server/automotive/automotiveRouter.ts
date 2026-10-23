@@ -13,6 +13,8 @@ import {selectTest} from './torquelogic/testSelector';
 import {decodeVIN} from './integrations/vinDecoder';
 import {embed} from './driveiq/embedder';
 import {importVehicleReferences,searchVehicleReferences} from './sourceReferences';
+import {searchCatalog,syncCatalog,CATALOG_SOURCE} from './vehicleCatalog';
+import {createAutoDevRouter} from './integrations/autoDev';
 type Context=Request&{microfixdTenantId?:string;microfixdUserId?:string;microfixdRole?:string};
 const actor=(r:Context)=>r.microfixdUserId||`shared:${r.microfixdRole}`;
 const view=(c:DiagnosticCase)=>({...c,nextTest:selectTest(c),repairCandidates:c.state==='testing'&&!c.alerts.length?c.hypotheses.filter(h=>h.status==='supported').map(h=>({hypothesisId:h.id,repair:h.evidence.repair,source:h.evidence.source})):[]});
@@ -29,6 +31,19 @@ export function createAutomotiveRouter(repository?:(tenant:string)=>AutomotiveRe
    });
  };
  router.use('/obd',createOBDRouter());
+ router.use('/oem',createAutoDevRouter());
+ router.get('/catalog',handler(async req=>searchCatalog(database(),z.string().max(100).default('').parse(req.query.query),z.string().min(1).max(300).optional().parse(req.query.make),z.coerce.number().int().min(0).max(100000).default(0).parse(req.query.offset))));
+ router.post('/catalog/sync',handler(async req=>{
+   if(req.microfixdRole!=='admin')throw new Error('ADMIN_REQUIRED');
+   return syncCatalog(database());
+ }));
+ router.get('/catalog/status',handler(async()=>{
+   const db=database();const states=await Promise.all(['queued','running','completed','failed'].map(async state=>{
+     const {count,error}=await db.from('automotive_ingestion_jobs').select('id',{count:'exact',head:true}).eq('source_id',CATALOG_SOURCE).eq('state',state);
+     if(error)throw new Error('CATALOG_STATUS_FAILED');return [state,count];
+   }));
+   return {jobs:Object.fromEntries(states),workerEnabled:process.env.AUTOMOTIVE_INGESTION_ENABLED!=='0',coverage:'model_names_only',continuousAvailability:'depends_on_host_uptime'};
+ }));
  const id=(req:Request)=>z.string().uuid().parse(req.params.id);
  router.get('/references',handler(async req=>searchVehicleReferences(database(),z.string().min(1).max(4000).parse(req.query.query))));
  router.post('/references/import',handler(async req=>{

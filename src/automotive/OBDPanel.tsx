@@ -1,4 +1,5 @@
 import OBDSetup from './OBDSetup';
+import OEMBuildLookup from './OEMBuildLookup';
 import React,{useEffect,useState} from 'react';
 import {api} from '../lib/serverApi';
 import type {Vehicle,DiagnosticCase} from '../../server/automotive/schemas';
@@ -22,6 +23,7 @@ export default function OBDPanel({vehicles,onCase}:{vehicles:Vehicle[];onCase:(c
  <label>Adapter session<select value={current?.id??''} onChange={e=>setSelected(e.target.value)}>{sessions.map(s=><option key={s.id} value={s.id}>{s.label} · {s.state}</option>)}</select></label>
  {current&&<><p role="status"><strong>{current.state}</strong> · Last bridge receipt: {current.ageSeconds===null?'none':`${current.ageSeconds}s ago`}</p><p>Session ID: <code>{current.id}</code></p><p>{current.understanding.nextAction}</p><p>Protocol: {current.latest?.protocol??'unknown'} · Adapter: {current.adapter}</p>
  <p>VIN: {current.interpreted?.vin??'not confirmed'} · Engine running: {current.understanding.engineRunning===null?'unknown':current.understanding.engineRunning?'yes':'no'}</p>
+ {current.interpreted?.vin&&<OEMBuildLookup vin={current.interpreted.vin}/>}
  <p>{current.state==='connected'?'Recent decoded readings (each query has its own freshness window)':'Historical readings only; do not treat these as current vehicle state.'}</p>
  <div className="obd-readings">{current.interpreted?.readings.map((r,i)=><p key={`${r.ecu}-${r.name}-${i}`}><strong>{r.name}</strong>: {r.value} {r.unit} <small>ECU: {r.ecu}</small></p>)}</div>
  <h3>Observed DTCs</h3>{current.interpreted?.dtcs.length?<ul>{current.interpreted.dtcs.map((d,i)=><li key={i}>{d.code} · {d.kind} · ECU {d.ecu}</li>)}</ul>:<p>No DTC responses in the recent snapshot. This does not prove the vehicle is fault-free.</p>}

@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildNhtsaUrl, fetchNhtsa, type NhtsaKind, type VehicleQuery } from "./nhtsa-ingestion";
 import {saveNhtsaRecord} from './sourceReferences';
+import {CATALOG_SOURCE,importModels} from './vehicleCatalog';
 
 type Job = { id: string; source_id: string; source_key: string; request_url: string; lease_token: string };
 function clientFromEnv(): SupabaseClient {
@@ -35,10 +36,11 @@ export async function runOneIngestionJob(db: SupabaseClient, fetcher: typeof fet
   let success = false;
   let failure: string | null = null;
   try {
-    const { kind, vehicle } = parseJob(job);
-    await fetchNhtsa(kind, vehicle, {
-      upsert: record=>saveNhtsaRecord(db,record),
-    }, fetcher);
+    if(job.source_id===CATALOG_SOURCE)await importModels(db,job.source_key,job.request_url,fetcher);
+    else {
+      const { kind, vehicle } = parseJob(job);
+      await fetchNhtsa(kind, vehicle, {upsert: record=>saveNhtsaRecord(db,record)}, fetcher);
+    }
     success = true;
   } catch (e) {
     failure = e instanceof Error ? e.message : "unknown error";
@@ -61,3 +63,17 @@ export async function runWorkerBatch(db: SupabaseClient, limit = 10, fetcher: ty
   return stats;
 }
 export async function runConfiguredWorker(limit = 10) { return runWorkerBatch(clientFromEnv(), limit); }
+
+/** One fenced job at a time. Durable queue resumes after restart; free hosts can sleep. */
+export function startIngestionWorker() {
+  if(process.env.AUTOMOTIVE_INGESTION_ENABLED==='0'||!process.env.SUPABASE_URL||!(process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_SECRET_KEY))return ()=>{};
+  let stopped=false;let timer:ReturnType<typeof setTimeout>;
+  const tick=async()=>{
+    let delay=5000;
+    try{const stats=await runConfiguredWorker(1);if(stats.failed)delay=60000;else if(stats.idle)delay=60000;}
+    catch{delay=60000;console.error('[automotive-ingestion] worker dependency unavailable; queue retained');}
+    finally{if(!stopped)timer=setTimeout(()=>void tick(),delay).unref();}
+  };
+  timer=setTimeout(()=>void tick(),1000).unref();
+  return ()=>{stopped=true;clearTimeout(timer);};
+}

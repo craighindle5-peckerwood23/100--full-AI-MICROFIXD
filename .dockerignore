@@ -1,0 +1,11 @@
+**/node_modules
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+**/dist
+**/*.log
+engineering-last-*.json
+repair-verification.json
+upload

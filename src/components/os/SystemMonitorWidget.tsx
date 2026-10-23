@@ -45,7 +45,7 @@ export function SystemMonitorWidget() {
     // Subscribe to autonomous repair events from telemetry module
     const unsubRepairs = telemetry.subscribeRepairs((repair) => {
       setRepairs(prev => [repair, ...prev.slice(0, 14)]);
-      setLastNotification(`AUTONOMOUS FIX: ${repair.subsystem} (${repair.action})`);
+      setLastNotification(`SIMULATED FIX: ${repair.subsystem} (${repair.action})`);
       sound.playTick();
 
       // Clear notification after 4s
@@ -87,6 +87,8 @@ export function SystemMonitorWidget() {
     sound.playTick();
     const exportData = {
       timestamp: new Date().toISOString(),
+      dataSource: 'browser_simulation',
+      verifiedServerRepairs: false,
       current: currentMetric,
       history: metrics.map(d => ({
         time: d.time.toISOString(),
@@ -192,12 +194,13 @@ export function SystemMonitorWidget() {
 
   return (
     <div className="w-full flex flex-col gap-2">
+      <p className="text-xs text-[#fcd34d]">Demonstration data. These controls simulate resource recovery; they do not repair server code.</p>
       {/* Top Header Controls Bar */}
       <div className="flex flex-wrap justify-between items-center gap-2 pb-1 border-b border-[#1b2635]">
         <div className="flex items-center gap-2">
           <Activity size={14} className={status === 'critical' ? 'text-[#ff4f4f] animate-pulse' : 'text-[#4fd1ff]'} />
           <span className="text-[11px] font-mono font-bold tracking-wider text-[#e8f4ff] uppercase">
-            Live Telemetry Grid & Autonomous Repairs
+            Telemetry Simulation / Demo Repairs
           </span>
           <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full border ${
             status === 'critical' 
@@ -223,7 +226,7 @@ export function SystemMonitorWidget() {
             title="Toggle Continuous Autonomous Auto-Remediation"
           >
             <Zap size={10} className={autoRepairActive ? 'text-[#4fff9a]' : 'text-[#7f9bb5]'} />
-            <span>AUTO-FIX: {autoRepairActive ? 'ENABLED' : 'PAUSED'}</span>
+            <span>DEMO AUTO-FIX: {autoRepairActive ? 'ENABLED' : 'PAUSED'}</span>
           </button>
 
           {/* Manual Autonomous Repair Trigger */}
@@ -235,10 +238,10 @@ export function SystemMonitorWidget() {
                 ? 'bg-[#00f5ff] text-[#05070b] border-[#00f5ff] animate-pulse' 
                 : 'bg-[#00f5ff]/10 hover:bg-[#00f5ff]/20 border-[#00f5ff]/50 text-[#00f5ff]'
             }`}
-            title="Execute Real-Time Autonomous Repair on all metrics"
+            title="Simulate repair; no server action is performed"
           >
             <Wrench size={11} />
-            <span>{isHealing ? 'HEALING...' : 'AUTONOMOUS FIX'}</span>
+            <span>{isHealing ? 'HEALING...' : 'SIMULATE FIX'}</span>
           </button>
 
           <button 
@@ -453,7 +456,7 @@ export function SystemMonitorWidget() {
           onClick={() => setShowRepairLog(!showRepairLog)}
           className="flex items-center gap-1 text-[10px] font-mono text-[#4fd1ff] hover:text-[#00f5ff] transition cursor-pointer"
         >
-          <span>{repairs.length} Autonomous Repairs Logged</span>
+          <span>{repairs.length} Simulated Repairs Logged</span>
           {showRepairLog ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </button>
       </div>
@@ -462,8 +465,8 @@ export function SystemMonitorWidget() {
       {showRepairLog && (
         <div className="bg-[#0b1018] border border-[#1b2635] rounded-lg p-2.5 flex flex-col gap-2 max-h-48 overflow-y-auto scrollbar-thin animate-in fade-in slide-in-from-top-1">
           <div className="flex justify-between items-center text-[10px] font-mono text-[#7f9bb5] pb-1 border-b border-[#1b2635]">
-            <span className="font-bold uppercase text-[#00f5ff]">Real-Time Autonomous Repair Ledger</span>
-            <span>Agent: Repair Agent // Invariant Verified</span>
+            <span className="font-bold uppercase text-[#00f5ff]">Simulation Event Log</span>
+            <span>Demo events only; server repair is separate</span>
           </div>
 
           {repairs.length === 0 ? (

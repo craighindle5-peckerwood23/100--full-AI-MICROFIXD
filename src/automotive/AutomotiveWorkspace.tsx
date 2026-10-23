@@ -1,4 +1,5 @@
 import OBDPanel from './OBDPanel';
+import OEMBuildLookup from './OEMBuildLookup';
 import React,{useEffect,useState} from 'react';
 import {api} from '../lib/serverApi';
 import type {DiagnosticCase,Vehicle} from '../../server/automotive/schemas';
@@ -20,6 +21,7 @@ export default function AutomotiveWorkspace(){
  <label>VIN (optional)<input name="vin" pattern="[A-HJ-NPR-Z0-9a-hj-npr-z]{17}" maxLength={17}/></label>
  <label>Year<input name="year" type="number" min="1981" max={new Date().getFullYear()+2} required/></label><label>Make<input name="make" required maxLength={80}/></label><label>Model<input name="model" required maxLength={80}/></label><label>Exact engine identifier<input name="engine" required maxLength={120}/></label><button disabled={busy}>Save vehicle</button></form>
  <details><summary>Decode a VIN</summary><form onSubmit={e=>{const f=fields(e);void run(async()=>{const decoded=await api<{year:number;make:string;model:string;engine:string}>('GET',`/automotive/vin/${encodeURIComponent(String(f.vin).toUpperCase())}`);setNotice(`NHTSA: ${decoded.year} ${decoded.make} ${decoded.model}; engine: ${decoded.engine||'unknown'}. Confirm exact engine identifier before saving the vehicle.`);});}}><label>17-character VIN<input name="vin" required minLength={17} maxLength={17}/></label><button disabled={busy}>Decode</button></form></details>
+ <OEMBuildLookup vin={vehicles.find(v=>v.id===vehicleId)?.vin}/>
  <h2>Start diagnostic session</h2><form onSubmit={e=>{const f=fields(e);void run(async()=>{const c=await api<CaseView>('POST','/automotive/cases',{vehicleId,complaint:f.complaint,dtcs:String(f.dtcs).toUpperCase().split(/[\s,]+/).filter(Boolean),hazards:f.hazard?[f.hazard]:[]});setCurrent(c);await load();});}}>
  <label>Vehicle<select required value={vehicleId} onChange={e=>setVehicleId(e.target.value)}><option value="">Select vehicle</option>{vehicles.map(v=><option key={v.id} value={v.id}>{v.year} {v.make} {v.model} / {v.engine}</option>)}</select></label>
  <label>Complaint<textarea name="complaint" required maxLength={4000}/></label><label>DTCs (comma separated)<input name="dtcs" placeholder="P0300, P0171"/></label><label>Known safety issue<select name="hazard"><option value="">None reported / unknown</option>{['brakes','steering','fuel_leak','overheating','high_voltage','airbag'].map(h=><option key={h}>{h}</option>)}</select></label><button disabled={busy||!vehicleId}>Create diagnostic case</button></form>

@@ -44,6 +44,6 @@ approval/reconciliation pauses. The registered self-healer has no native
 executor. Existing core repair and auto-deploy entrypoints explicitly require
 a verified governed pipeline; proposal generation is not applied repair.
 
-Automatic self-repair deployment is still unimplemented. This release does
-not replay uncertain tool effects, expand budgets/origins, approve old actions,
-or rewrite historical status rows.
+The subsequent Render repair runner and protected `repair_source_code` tool are documented in
+`repair-runner-and-vehicle-catalog.md`. Incident-triggered repair remains incomplete.
+Uncertain effects still require reconciliation; historical status rows are not rewritten.

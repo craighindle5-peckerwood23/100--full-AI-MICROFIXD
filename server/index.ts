@@ -610,6 +610,12 @@ if (
       .catch((error) => console.error("[planner] worker start failed", error));
   }, 15_000).unref();
 
+  setTimeout(() => {
+    void import('./automotive/ingestion-worker').then(({startIngestionWorker})=>{
+      server.once('close',startIngestionWorker());
+    }).catch(()=>console.error('[automotive-ingestion] worker start failed'));
+  }, 20_000).unref();
+
   if (process.env.MICROFIXD_STARTUP_PROBES === "1") {
     setTimeout(() => {
       void import("./organs/startupProbe")

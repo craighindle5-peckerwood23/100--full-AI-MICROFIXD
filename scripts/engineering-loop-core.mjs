@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 
 export const LIMITS=Object.freeze({iterations:5,files:8,bytesPerFile:60000,totalPatchBytes:150000,contextBytes:40000,logBytes:14000});
 export const ALLOWED_TESTS=Object.freeze(['npm test','npm run lint','npm run build','npm run test:spine','npm run test:system-probes']);
-export const PROTECTED_PREFIXES=Object.freeze(['.git/','.github/workflows/','supabase/','server/security/','server/hitl/','server/planner/','server/engineering/','.env','package-lock.json']);
+export const PROTECTED_PREFIXES=Object.freeze(['.git/','.github/','infrastructure/','scripts/','tests/','governance/','package.json','cognitive-shell/package','render.yaml','.dockerignore','.github/workflows/','supabase/','server/security/','server/hitl/','server/planner/','server/engineering/','.env','package-lock.json']);
 export function digest(input){return createHash('sha256').update(input).digest('hex');}
 export function safePath(root,relative){
  if(typeof relative!=='string'||!relative||relative.includes('\\')||path.isAbsolute(relative)||relative.split('/').some(p=>!p||p==='.'||p==='..'))throw Error('UNSAFE_PATH');

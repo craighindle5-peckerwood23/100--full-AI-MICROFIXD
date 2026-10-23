@@ -70,7 +70,7 @@ export function createPlannerRuntime(client: SupabaseClient, tenant: string, mis
     if(error)throw new Error(error.code);
     return result;
   };
-  const governed=createGovernedTools(client,tenant,mission,owner);
+  const governed=createGovernedTools(client,tenant,mission,owner,modelCall);
   const deps: PlannerDependencies={repository,validate:validateSchema,budget:{max_attempts:3,backoff_ms:500,max_subtasks:16},
     transaction:async work=>{const operations:Operation[]=[];const result=await work(new DatabaseRepositories(new SupabaseDatabase(client,tenant,mission,owner,operations),tenant));await db.commit(operations);return result;},
     withMissionLock:async(t,id,work)=>{
