@@ -13,7 +13,7 @@ import {BrowserManager} from '../playwright/browserManager';
 import {validateSchema} from './schema';
 import {readMissionArtifact, searchMissionHistory, saveMissionNote} from './taskContinuity';
 export const ENABLED_TOOLS=TOOL_REGISTRY.map(tool=>tool.name);
-export const BROWSER_TOOLS=new Set(['navigate_browser','scrape_url','take_screenshot','click_element','crawl_website']);
+export const BROWSER_TOOLS=new Set(['inspect_browser_page','navigate_browser','scrape_url','take_screenshot','click_element','crawl_website']);
 export const READ_TOOLS=new Set(['read_mission_artifact','search_mission_history','recall_knowledge','recall_procedures','obd_connection_setup','list_obd_sessions','read_obd_status','list_automotive_cases','read_automotive_case','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
 export function requestHash(value:JSONValue):string {
  const canonical=(v:JSONValue):string=>Array.isArray(v)?`[${v.map(canonical).join(',')}]`:v&&typeof v==='object'?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`:JSON.stringify(v);
@@ -77,7 +77,8 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
       if(next.depth<maxDepth)for(const link of await browser.findLinks()){try{const safe=publicPageURL(link);if(new URL(safe).origin===new URL(url).origin&&!seen.has(safe)&&queue.length<100)queue.push({url:safe,depth:next.depth+1});}catch{}}
      }
      raw={pages,count:pages.length,maxDepth,maxPages};
-    }else if(name==='click_element')raw=await browser.click(String((args as JSONObject).selector));
+    }else if(name==='inspect_browser_page')raw=await browser.inspect();
+    else if(name==='click_element')raw=await browser.click(String((args as JSONObject).selector));
     else if(name==='take_screenshot')raw={screenshot:await browser.screenshot(),url:navigation!.url};
     else if(name==='scrape_url')raw={text:(await browser.getText(String((args as JSONObject).selector??'body'))).slice(0,16000),url:navigation!.url,title:navigation!.title};
     else raw=navigation!;

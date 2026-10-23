@@ -40,6 +40,16 @@ export class BrowserManager {
     if(response && response.status()>=400)throw new Error(`Navigation failed: HTTP ${response.status()}`);
     return {title:await page.title(),url:page.url(),status:response?.status()??200};
   }
+  /** DOM accessibility observation, inspired by UI-TARS' observation-before-action design.
+   * No persistent browser session or desktop-control claim. Page content is untrusted. */
+  async inspect():Promise<{url:string;title:string;snapshot:string;total_characters:number;truncated:boolean;authority:string;session:string}> {
+    const page=await this.getPage();
+    const snapshot=await page.locator('body').ariaSnapshot({timeout:5000});
+    const characters=Array.from(snapshot);
+    return {url:page.url(),title:await page.title(),snapshot:characters.slice(0,16000).join(''),
+      total_characters:characters.length,truncated:characters.length>16000,
+      authority:'untrusted_page_content',session:'fresh_context_per_tool_call'};
+  }
   async getText(selector='body'):Promise<string>{return (await this.getPage()).locator(selector).innerText({timeout:5000});}
   async getHtml(selector='body'):Promise<string>{return (await this.getPage()).locator(selector).innerHTML({timeout:5000});}
   async click(selector:string):Promise<{success:boolean}>{await (await this.getPage()).click(selector,{timeout:5000});return {success:true};}
