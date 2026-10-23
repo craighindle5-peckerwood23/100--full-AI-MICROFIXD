@@ -20,7 +20,7 @@ export function createAutoDevRouter(fetcher:typeof fetch=fetch,key:()=>string|un
       finally{await reader.cancel();}
       const data=JSON.parse(Buffer.concat(chunks).toString('utf8'));
       if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('INVALID_RESPONSE');
-      if(upstream.ok&&(!('build' in data)||(upstream.status===207&&data.build!==null)))throw new Error('INVALID_BUILD_RESPONSE');
+      if(upstream.ok&&(!('build' in data)||(upstream.status===207&&data.build!==null)||(data.build!==null&&(typeof data.build!=='object'||Array.isArray(data.build)))))throw new Error('INVALID_BUILD_RESPONSE');
       if(upstream.ok&&(upstream.status===200||upstream.status===207)){
         for(const respVin of [data?.build?.vin,data?.vehicle?.vin]){
           if(respVin!==undefined&&respVin!==null&&String(respVin).trim().toUpperCase()!==vin)throw new Error('INVALID_BUILD_RESPONSE');
