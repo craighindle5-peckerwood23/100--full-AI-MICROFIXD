@@ -21,7 +21,7 @@ test('repair validation protects isolation, governance, tests, dependencies and 
 test('repair uses a separate Render candidate, rejects stale green results, and promotes only an exact verified commit',async()=>{
  const original={token:process.env.GITHUB_TOKEN,url:process.env.MICROFIXD_REPAIR_RUNNER_URL};process.env.GITHUB_TOKEN='fixture-secret';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture-runner.onrender.com';
  const events:any[]=[];let checks=0,mainReads=0;const base='a'.repeat(40),candidate='b'.repeat(40);
- const db:any={from:()=>({upsert:async(row:any)=>{events.push(['durable',JSON.parse(row.content).phase]);return {error:null};}})};
+ const db:any={from:()=>({insert:async(row:any)=>{events.push(['checkpoint',row.operation.phase]);return {error:null};},upsert:async(row:any)=>{events.push(['durable',JSON.parse(row.content).phase]);return {error:null};}})};
  const json=(value:any,status=200)=>new Response(JSON.stringify(value),{status});
  const request:typeof fetch=async(input,options)=>{
   const url=String(input),body=options?.body?JSON.parse(String(options.body)):null;events.push([options?.method??'GET',url,body]);
@@ -69,8 +69,9 @@ test('automatic incidents require enabled owner standing authorization before en
 });
 test('deployment recovery performs reads only and requires matching candidate, main, isolated receipt and live commit',async()=>{
  const prior={token:process.env.GITHUB_TOKEN,url:process.env.MICROFIXD_REPAIR_RUNNER_URL};process.env.GITHUB_TOKEN='fixture';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture.onrender.com';
- const candidate='a'.repeat(40);let healthy=true;const b:any={select:()=>b,eq:()=>b,contains:(_column:string,value:any)=>{assert.equal(value.session_id,'owner:mission');return b;},limit:async()=>({data:[{content:JSON.stringify({phase:'candidate_created',evidence:{candidate,files:[{path:'server/automotive/example.ts',after:'b'.repeat(64)}]}})}],error:null})};
+ const candidate='a'.repeat(40);let healthy=true;const b:any={select:()=>b,eq:()=>b,contains:(column:string,value:any)=>{assert.equal(column,'operation');assert.equal(value.subtask_id,'task');return b;},limit:async()=>({data:[{operation:{phase:'candidate_created',evidence:{candidate,files:[{path:'server/automotive/example.ts',after:'b'.repeat(64)}]}}}],error:null})};
  const request:typeof fetch=async(input,options)=>{assert.equal(options?.method,undefined);const url=String(input);return Response.json(url.includes('api.github.com')?{object:{sha:candidate}}:url.endsWith('/verification')?{commit:candidate,status:'verified',network:healthy?'none':'enabled',productionSecrets:false,gate:'production+engineering+adapters'}:{commit:candidate});};
- try{assert.equal((await readCompletedRepair({from:()=>b} as any,{tenant:'owner',mission:'mission',subtask:'task'},request))?.status,'live_verified');healthy=false;assert.equal(await readCompletedRepair({from:()=>b} as any,{tenant:'owner',mission:'mission',subtask:'task'},request),null);}
+ const store:any={from:(table:string)=>{assert.equal(table,'spine_events','ordinary memory assertions cannot authorize repair recovery');return b;}};
+ try{assert.equal((await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request))?.status,'live_verified');healthy=false;assert.equal(await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request),null);}
  finally{if(prior.token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=prior.token;if(prior.url===undefined)delete process.env.MICROFIXD_REPAIR_RUNNER_URL;else process.env.MICROFIXD_REPAIR_RUNNER_URL=prior.url;}
 });

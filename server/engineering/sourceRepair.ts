@@ -56,7 +56,11 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
     if(!response.ok)throw new Error(`REPAIR_GITHUB_HTTP_${response.status}`);
     return response.json();
   };
-  const record=async(phase:string,evidence:unknown)=>rememberKnowledge(db,{tenant_id:scope.tenant,session_id:`${scope.tenant}:${scope.mission}`},{kind:'project_state',scope:'session',key:`repair.${scope.subtask}.${phase}`,content:JSON.stringify({phase,evidence}),event_id:`${scope.subtask}:${phase}`});
+  const record=async(phase:string,evidence:unknown)=>{
+    const {error}=await db.from('spine_events').insert({tenant_id:scope.tenant,mission_id:scope.mission,operation:{op:'repair_checkpoint',subtask_id:scope.subtask,phase,evidence}});
+    if(error)throw new Error('REPAIR_CHECKPOINT_FAILED');
+    return rememberKnowledge(db,{tenant_id:scope.tenant,session_id:`${scope.tenant}:${scope.mission}`},{kind:'project_state',scope:'session',key:`repair.${scope.subtask}.${phase}`,content:JSON.stringify({phase,evidence}),event_id:`${scope.subtask}:${phase}`});
+  };
   await authorize();
   const base=(await api('git/ref/heads/main')).object.sha;
   const parent=await api(`git/commits/${base}`);

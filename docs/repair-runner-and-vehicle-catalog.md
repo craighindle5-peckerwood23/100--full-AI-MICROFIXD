@@ -34,8 +34,8 @@ independent certification or a cryptographic attestation.
 
 The controller accepts only the candidate's exact receipt, rechecks the mission
 lease, cancellation/deadline and unchanged main, then fast-forwards main. It
-waits for the same commit at production `/api/health`. Progress receipts persist
-in the canonical Supabase memory table, scoped to the mission; the ordinary tool
+waits for the same commit at production `/api/health`. Controller checkpoints persist in the immutable Supabase spine event ledger;
+mission-scoped memory copies provide context, not authority for recovery; the ordinary tool
 ledger prevents replay after an uncertain external effect. No local state file
 is used by this path. Reconciliation is required after uncertain operations.
 There is no automatic rollback. Full source repair can take up to 35 minutes;

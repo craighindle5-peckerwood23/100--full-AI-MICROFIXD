@@ -4,10 +4,12 @@ import {repairPath,repairURL} from './sourceRepair';
 /** Observe an already-promoted repair after a process restart. Never replay an external write. */
 export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string;mission:string;subtask:string},fetcher:typeof fetch=fetch){
  if(!process.env.MICROFIXD_REPAIR_RUNNER_URL||!process.env.GITHUB_TOKEN)return null;
- const {data,error}=await db.from('microfixd_memory_records').select('content').eq('tenant_id',scope.tenant).eq('agent_id','knowledge')
-  .contains('metadata',{scope:'session',session_id:`${scope.tenant}:${scope.mission}`,key:`repair.${scope.subtask}.candidate_created`}).limit(2);
+ // Only controller-written immutable events can establish a candidate. Ordinary
+ // model/user knowledge assertions are context, never authority for recovery.
+ const {data,error}=await db.from('spine_events').select('operation').eq('tenant_id',scope.tenant).eq('mission_id',scope.mission)
+  .contains('operation',{op:'repair_checkpoint',subtask_id:scope.subtask,phase:'candidate_created'}).limit(2);
  if(error)throw new Error('REPAIR_RECOVERY_STORAGE_FAILED');if(data?.length!==1)return null;
- const entry=JSON.parse(data[0].content),candidate=entry.evidence?.candidate,files=entry.evidence?.files;
+ const entry=data[0].operation,candidate=entry.evidence?.candidate,files=entry.evidence?.files;
  if(entry.phase!=='candidate_created'||typeof candidate!=='string'||!/^[a-f0-9]{40}$/.test(candidate)||!Array.isArray(files)||!files.length||files.length>8)return null;
  for(const file of files){repairPath(file.path);if(!/^[a-f0-9]{64}$/.test(file.after))return null;}
  const runner=repairURL(process.env.MICROFIXD_REPAIR_RUNNER_URL);
