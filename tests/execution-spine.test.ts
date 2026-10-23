@@ -32,6 +32,22 @@ test('durable result is reused without another tool or synthesis call',async()=>
   const result=await p.planAndExecuteMission(f.mission); assert.equal(result.status,'succeeded'); assert.ok(result.result_artifact_id);
   await new PlannerService(f.deps).planAndExecuteMission(f.mission); assert.equal(f.calls(),1);
 });
+test('procedure persistence retries before finalization without repeating a completed tool',async()=>{
+ const f=fixture();let attempts=0;
+ const planner=new PlannerService({...f.deps,rememberCompletion:async(m,tasks,artifacts,final)=>{
+  attempts++;assert.equal(m.tenant_id,'a');assert.ok(tasks.every(t=>t.status==='succeeded'));
+  assert.ok(artifacts.some(a=>a.subtask_id));assert.equal(final.type,'mission_result');
+  if(attempts===1)throw Error('knowledge database unavailable');
+ }});
+ await assert.rejects(()=>planner.planAndExecuteMission(f.mission),/knowledge database unavailable/);
+ assert.notEqual((await f.repository.getMission(f.mission.mission_id)).status,'succeeded');
+ assert.equal((await planner.planAndExecuteMission(f.mission)).status,'succeeded');assert.equal(f.calls(),1);assert.equal(attempts,2);
+});
+test('blocked work is never supplied to procedure learning',async()=>{
+ const f=fixture();let learned=false;f.deps.executeTool=async()=>{throw Error('failed tool');};
+ const result=await new PlannerService({...f.deps,rememberCompletion:async()=>{learned=true;}}).planAndExecuteMission(f.mission);
+ assert.equal(result.status,'waiting');assert.equal(learned,false);
+});
 test('bounded failures block task and wait for human recovery',async()=>{
   const f=fixture(); let attempts=0; f.deps.executeTool=async()=>{attempts++;throw Error('quota');};
   assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'waiting');

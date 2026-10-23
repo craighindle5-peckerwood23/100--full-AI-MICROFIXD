@@ -67,7 +67,7 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
   "core.model": async (_action, payload: any) => {
     const prompt = typeof payload === "string" ? payload : payload?.prompt || payload?.task;
     if (!prompt) throw new Error("CORE_MODEL_PROMPT_REQUIRED");
-    return executeBrainOrgan("complete", { messages:[{role:"user",content:String(prompt)}], session_id:payload?.session_id || "core" });
+    return executeBrainOrgan("complete", { messages:[{role:"user",content:String(prompt)}], tenant_id:payload?.tenant_id, session_id:payload?.session_id || "core" });
   },
   "core.tools": async () => {
     const organs = getCognitiveOrgans();

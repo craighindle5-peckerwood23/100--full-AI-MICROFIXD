@@ -4,7 +4,7 @@ import {probeOrgan} from './probes';
 const active=new Map<string,number>();
 export async function dispatchOrgan(id:string,action:string,payload:unknown,tenant:string){
  const organ=organRegistry.get(id);if(!organ)throw Error('UNKNOWN_ORGAN');if(organ.isolated)throw Error('ORGAN_ISOLATED');
- if(id==='vector_automotive'&&action!=='probe'){
+ if(['vector_automotive','memory','brain','core.memory','core.model','knowledge_retriever'].includes(id)&&action!=='probe'){
   if(!tenant)throw Error('TENANT_REQUIRED');
   payload={...(payload&&typeof payload==='object'&&!Array.isArray(payload)?payload:{}),tenant_id:tenant};
  }

@@ -13,6 +13,7 @@ export async function executeKnowledgeOrgan(action:string,payload:unknown){
   const query=text(p.query||p.task).trim();
   if(!query)throw new Error('Knowledge retrieval requires query or task');
   const result=await executeMemoryOrgan('context',{
+    tenant_id:text(p.tenant_id||'global'),
     session_id:text(p.session_id||'default'),
     query,
     limit:Math.max(1,Math.min(50,Number(p.limit)||12)),

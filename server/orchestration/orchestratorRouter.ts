@@ -21,7 +21,7 @@ export const orchestratorRouter = Router();
 
 orchestratorRouter.post("/output/ack", async (req,res) => {
   try {
-    const result = await executeMemoryOrgan("ack_output",req.body);
+    const result = await executeMemoryOrgan("ack_output",{...req.body, tenant_id:(req as any).microfixdTenantId});
     if(!result.duplicate && result.state === "completed")broadcast("mission:completed",{missionId:result.cmdId,response_id:result.response_id,session_id:req.body.session_id,outcome:"succeeded",event_id:`playback:${result.response_id}`});
     if(!result.duplicate)broadcast(result.state === "completed" ? "command:complete" : "command:playback_failed",{...result,session_id:req.body.session_id});
     res.json(result);
@@ -33,7 +33,7 @@ orchestratorRouter.post("/run", async (req, res,next) => {
   const { task, session_id = crypto.randomUUID(), source = "api", priority = "normal", context } = req.body;
   if (!task) return res.status(400).json({ error: "task required" });
   try {
-    const result = await runCommand({ task, session_id:`${(req as any).microfixdTenantId}:${session_id}`, source, priority, context:{...context,responseOnly:true} });
+    const result = await runCommand({ task, tenant_id:(req as any).microfixdTenantId, session_id:`${(req as any).microfixdTenantId}:${session_id}`, source, priority, context:{...context,responseOnly:true} });
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: String(err) });

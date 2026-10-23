@@ -1,6 +1,8 @@
 /** Durable server memory. Database errors must never be reported as successful writes. */
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
+import {rememberKnowledge, recallKnowledge, recallProcedures} from '../../memory/knowledgeMemory';
+import {packMemoryContext} from '../../memory/contextWindow';
 let client: SupabaseClient | undefined;
 function database(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
@@ -17,6 +19,10 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
   const tenant = String(p.tenant_id || "global");
   const agent = String(p.organ || "brain");
   const limit = Math.max(1, Math.min(100, Number(p.limit) || 10));
+  const identity = {tenant_id: tenant, session_id: session};
+  if (action === 'remember_knowledge') return rememberKnowledge(db, identity, p);
+  if (action === 'recall_knowledge') return recallKnowledge(db, identity, String(p.query || ''), Math.min(30, limit));
+  if (action === 'recall_procedures') return recallProcedures(db, identity, String(p.query || ''), Math.min(10, limit));
   if (action === "ack_output") {
     if (!p.session_id || !p.response_id || !["played", "failed", "cancelled"].includes(p.status)) throw new Error("Valid response_id and playback status required");
     const { data: output, error: readError } = await db.from("microfixd_memory_records")
@@ -55,15 +61,10 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
         reason: "transient_memory_unavailable",
       };
     }
-    const selected:any[]=[];let used=2;
-    for(const memory of result.memories){
-      if(memory.agent_id === "delivery")continue;
-      const record={id:memory.id,content:memory.content,created_at:memory.created_at};
-      const size=JSON.stringify(record).length+1;
-      if(used+size>max_chars)break;
-      selected.push(record);used+=size;
-    }
-    return {context:JSON.stringify(selected.reverse()),window:{requested,returned:selected.length,max_chars,used_chars:used,omitted:result.memories.length-selected.length}};
+    const knowledge = typeof p.knowledge_query === 'string'
+      ? await recallKnowledge(db, identity, p.knowledge_query, 8) : {memories: []};
+    const packed = packMemoryContext(result.memories, knowledge.memories.map(memory => ({...memory, type: 'knowledge'})), max_chars);
+    return {...packed, window: {requested, ...packed.window}};
   }
   if (action === "store") {
     if (typeof p.content !== "string" || !p.content.trim()) throw new Error("Memory content required");

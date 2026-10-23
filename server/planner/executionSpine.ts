@@ -121,6 +121,9 @@ export interface PlannerDependencies {
   plan(mission: Mission): Promise<PlannedTask[]>;
   recordPlanningError?(mission:Mission,error:unknown):Promise<void>;
   reviewCompletion?(mission: Mission, tasks: Task[], artifacts: Artifact[]): Promise<CompletionReview>;
+  // Persist a historical procedure before finalization. It is usable only once
+  // the final artifact is attached to a succeeded mission. Retries are idempotent.
+  rememberCompletion?(mission: Mission, tasks: Task[], artifacts: Artifact[], final: Artifact): Promise<void>;
   executeTool(request: JSONObject, context: ExecutionContext): Promise<ExecutionResult>;
   invokeAgent(input: JSONValue, agentId: UUID | undefined, context: ExecutionContext): Promise<ExecutionResult>;
   validate: SchemaValidator;
@@ -336,6 +339,7 @@ export class PlannerService {
       // Assembly retains verified outputs and the separately persisted completion assessment.
       const final = makeArtifact(current, null, null, { outputs: artifacts.filter(a => a.subtask_id !== null).map(a => ({ artifact_id: a.artifact_id, content: a.content })),
         canonical_artifacts: canonical.map(a => a.artifact_id) }, { ...(completion?{completion_review:completion}:{}), artifact_ids: artifacts.filter(a => a.subtask_id !== null).map(a => a.artifact_id), provenance: artifacts.filter(a => a.subtask_id !== null).map(a => ({artifact_id:a.artifact_id, task_id:a.task_id, subtask_id:a.subtask_id, content_hash:a.hash, evidence_hash:contentHash(a.evidence)})) });
+      if (this.d.rememberCompletion) await this.d.rememberCompletion(current, await r.getTasks(current.mission_id), artifacts, final);
       await this.d.transaction(async tx => { await tx.createArtifact(final); await tx.attachResultArtifact(current.mission_id, final.artifact_id);
         await tx.updateMissionStatus(current.mission_id, 'succeeded'); });
       return r.getMission(current.mission_id);

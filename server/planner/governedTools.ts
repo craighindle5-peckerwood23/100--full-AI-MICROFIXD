@@ -13,7 +13,7 @@ import {BrowserManager} from '../playwright/browserManager';
 import {validateSchema} from './schema';
 export const ENABLED_TOOLS=TOOL_REGISTRY.map(tool=>tool.name);
 export const BROWSER_TOOLS=new Set(['navigate_browser','scrape_url','take_screenshot','click_element','crawl_website']);
-export const READ_TOOLS=new Set(['obd_connection_setup','list_obd_sessions','read_obd_status','list_automotive_cases','read_automotive_case','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
+export const READ_TOOLS=new Set(['recall_knowledge','recall_procedures','obd_connection_setup','list_obd_sessions','read_obd_status','list_automotive_cases','read_automotive_case','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
 export function requestHash(value:JSONValue):string {
  const canonical=(v:JSONValue):string=>Array.isArray(v)?`[${v.map(canonical).join(',')}]`:v&&typeof v==='object'?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`:JSON.stringify(v);
  return createHash('sha256').update(canonical(value)).digest('hex');
@@ -88,7 +88,8 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
   else if(name==='list_system_capabilities')raw=JSON.parse(JSON.stringify(systemCapabilities()));
   else if(name==='probe_system_organ')raw=JSON.parse(JSON.stringify(await probeOrgan(String((args as JSONObject).organ_id),context.idempotency_key,tenant)));
   else {
-   const payload=tool.organ==='memory'?{...args as JSONObject,tenant_id:tenant,session_id:`${tenant}:tools`,tags:typeof (args as JSONObject).tags==='string'?String((args as JSONObject).tags).split(',').map(t=>t.trim()).filter(Boolean):[]}:args;
+   const structured=['remember_knowledge','recall_knowledge','recall_procedures'].includes(name);
+   const payload=tool.organ==='memory'?{...args as JSONObject,tenant_id:tenant,session_id:structured?`${tenant}:${mission}`:`${tenant}:tools`,event_id:context.subtask_id,tags:typeof (args as JSONObject).tags==='string'?String((args as JSONObject).tags).split(',').map(t=>t.trim()).filter(Boolean):[]}:args;
    raw=JSON.parse(JSON.stringify(await getExecutor(tool.organ)(tool.action,payload as Record<string,unknown>))) as JSONValue;
   }
   }catch(error){if(protectedAction)throw new ExecutionPause('RECONCILIATION_REQUIRED');throw error;}

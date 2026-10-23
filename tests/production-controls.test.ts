@@ -93,6 +93,12 @@ test('standing owner authorization records exact receipts, preserves rejection, 
   await runner.executeTool(request,context);assert.equal(receipts.get('store').status,'approved');assert.equal(receipts.get('store').decided_by,'owner-id');assert.equal(receipts.get('store').request_hash,requestHash(request));
   assert.equal(payload.session_id,'tenant-a:tools');assert.equal(payload.tenant_id,'tenant-a');assert.deepEqual(payload.tags,['one','two']);
   await runner.executeTool(request,context);assert.equal(calls,1);
+  await runner.executeTool({name:'remember_knowledge',arguments:{key:'vehicle',content:'Recorded vehicle state',scope:'tenant'}},{...context,subtask_id:'knowledge',tool_permissions:['remember_knowledge']});
+  assert.equal(payload.tenant_id,'tenant-a');assert.equal(payload.session_id,'tenant-a:mission-a');assert.equal(payload.event_id,'knowledge');
+  for(const name of ['recall_knowledge','recall_procedures']){
+   await runner.executeTool({name,arguments:{query:'vehicle'}},{...context,subtask_id:name,tool_permissions:[name],constraints:{tool_approval_mode:'manual'}});
+   assert.equal(receipts.get(name).decided_by,'read-only-policy');
+  }
   await assert.rejects(()=>runner.executeTool(request,{...context,tenant_id:'tenant-b'}),/TENANT_MISMATCH/);
   await assert.rejects(()=>runner.executeTool(request,{...context,subtask_id:'manual',constraints:{tool_approval_mode:'manual'}}),/WAITING_APPROVAL/);
   receipts.set('rejected',{status:'rejected'});await assert.rejects(()=>runner.executeTool(request,{...context,subtask_id:'rejected'}),/WAITING_APPROVAL/);assert.equal(receipts.get('rejected').status,'rejected');

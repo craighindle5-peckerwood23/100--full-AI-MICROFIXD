@@ -10,7 +10,7 @@ function safeMessage(error: unknown): string {
 
 export async function recordCommandFailure(
   error: unknown,
-  context: {cmdId: string; session_id: string; stages: string[]},
+  context: {cmdId: string; session_id: string; tenant_id?: string; stages: string[]},
   store = executeMemoryOrgan,
 ) {
   const detail = error as any;
@@ -22,7 +22,7 @@ export async function recordCommandFailure(
     record_id: undefined as string | undefined, persistence_error: undefined as string | undefined,
   };
   try {
-    const result = await store('store', {session_id:context.session_id, organ:'command_failure',
+    const result = await store('store', {tenant_id:context.tenant_id || 'global',session_id:context.session_id, organ:'command_failure',
       content:JSON.stringify({...failure, stages:context.stages}), tags:['command_failure'],
       metadata:{cmdId:context.cmdId, stage:failure.stage, code:failure.code}});
     if (!result?.stored || !result?.id) throw new Error('Failure storage did not confirm a durable record');

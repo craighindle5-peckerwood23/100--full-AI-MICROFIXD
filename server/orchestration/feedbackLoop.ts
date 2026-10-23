@@ -25,6 +25,7 @@ class FeedbackLoop {
     task:         string,
     output:       string,
     organResults: Record<string, unknown>,
+    tenantId = 'global',
   ): Promise<FeedbackReport> {
     const organs      = organRegistry.all();
     const organScores: Record<string, number> = {};
@@ -50,7 +51,7 @@ class FeedbackLoop {
       ts:           new Date().toISOString(),
     };
 
-    await executeMemoryOrgan("store", { session_id: sessionId, organ: "feedback", tags: ["learning", "feedback"], content: JSON.stringify({ task, output, report }) });
+    await executeMemoryOrgan("store", { tenant_id: tenantId, session_id: sessionId, organ: "feedback", tags: ["learning", "feedback"], content: JSON.stringify({ task, output, report }) });
     history.push(report);
     if (history.length > 200) history.shift();
 

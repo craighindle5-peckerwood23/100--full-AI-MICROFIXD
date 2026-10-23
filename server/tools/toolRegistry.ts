@@ -69,6 +69,20 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
   },
   // ── Memory ────────────────────────────────────────────────────────────
   {
+    name: 'remember_knowledge',
+    description: 'Persist a fact, preference, goal, constraint or project state in tenant-scoped structured memory. The newest value for the same key supersedes earlier values while preserving history. Stored assertions are not independently verified facts. Optional subject/predicate/object links related knowledge.',
+    parameters: {type:'object',properties:{key:{type:'string',description:'Stable claim key, e.g. vehicle-335i.current-dtc'},content:{type:'string',description:'Complete assertion or state to retain'},kind:{type:'string',description:'Memory category',enum:['fact','preference','goal','constraint','project_state']},scope:{type:'string',description:'tenant persists across missions; session stays within this mission',enum:['tenant','session']},subject:{type:'string',description:'Relationship subject; provide all three relationship fields together'},predicate:{type:'string',description:'Relationship predicate'},object:{type:'string',description:'Relationship object'},confidence:{type:'number',description:'Uncalibrated confidence from 0 to 1; does not certify truth'},tags:{type:'string',description:'Comma-separated search tags'}},required:['key','content']},
+    organ:'memory',action:'remember_knowledge',
+  },
+  {
+    name:'recall_knowledge',description:'Recall ranked structured memory and one-hop related entities within this tenant and mission. Returns current assertions, confidence and superseded record IDs; original history is retained.',
+    parameters:{type:'object',properties:{query:{type:'string',description:'Search terms or entity name'},limit:{type:'number',description:'Maximum results, up to 30'}},required:['query']},organ:'memory',action:'recall_knowledge',
+  },
+  {
+    name:'recall_procedures',description:'Find historical tool sequences from completed, artifact-backed missions in this tenant. These are planning references, not executable tools or standing authorization. Re-plan with current arguments and permissions.',
+    parameters:{type:'object',properties:{query:{type:'string',description:'Task or procedure to look up'},limit:{type:'number',description:'Maximum results, up to 10'}},required:['query']},organ:'memory',action:'recall_procedures',
+  },
+  {
     name: "store_memory",
     description: "Store information to long-term memory.",
     parameters: { type: "object", properties: { content: { type: "string", description: "Content to store" }, tags: { type: "string", description: "Comma-separated tags" } }, required: ["content"] },

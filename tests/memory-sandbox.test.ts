@@ -16,8 +16,13 @@ globalThis.fetch = async (input: any, init: any) => {
     const row = await request.json(); rows.push(row);
     return new Response(JSON.stringify({id:row.id}), {headers:{'Content-Type':'application/json'}});
   }
-  const session = JSON.parse(new URL(request.url).searchParams.get('metadata')!.slice(3)).session_id;
-  return new Response(JSON.stringify(rows.filter(r => r.metadata.session_id === session)), {headers:{'Content-Type':'application/json'}});
+  const params = new URL(request.url).searchParams;
+  const metadata = params.get('metadata') ? JSON.parse(params.get('metadata')!.slice(3)) : {};
+  return new Response(JSON.stringify(rows.filter(row =>
+    Object.entries(metadata).every(([key,value]) => row.metadata[key] === value)
+    && (!params.get('tenant_id') || row.tenant_id === params.get('tenant_id')!.slice(3))
+    && (!params.get('agent_id') || row.agent_id === params.get('agent_id')!.slice(3))
+  )), {headers:{'Content-Type':'application/json'}});
 };
 test('durable write uses canonical table and recall isolates sessions', async () => {
   const result = await executeMemoryOrgan('store', {content:'repair fact',session_id:'a',metadata:{session_id:'forged'}});
