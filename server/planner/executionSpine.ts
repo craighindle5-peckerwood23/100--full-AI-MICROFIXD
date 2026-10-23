@@ -122,6 +122,7 @@ export interface PlannerDependencies {
   repository: Repositories;
   transaction<T>(work: (repository: Repositories) => Promise<T>): Promise<T>;
   withMissionLock<T>(tenantId: string, missionId: UUID, work: () => Promise<T>): Promise<T>;
+  validateTaskBudget?(tasks:(PlannedTask|Task)[]):void;
   plan(mission: Mission): Promise<PlannedTask[]>;
   recordPlanningError?(mission:Mission,error:unknown):Promise<void>;
   reviewCompletion?(mission: Mission, tasks: Task[], artifacts: Artifact[]): Promise<CompletionReview>;
@@ -171,7 +172,7 @@ export class PlannerService {
       let tasks = await r.getTasks(current.mission_id);
       if (!tasks.length) {
         let plan: PlannedTask[];
-        try { plan = await this.d.plan(current); } catch (error) {
+        try { plan = await this.d.plan(current); this.d.validateTaskBudget?.(plan); } catch (error) {
           await this.d.recordPlanningError?.(current,error);
           await r.updateMissionStatus(current.mission_id, ['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) ? 'waiting' : 'failed');
           return r.getMission(current.mission_id);
@@ -305,6 +306,7 @@ export class PlannerService {
             || (review.status==='complete' && !review.evidence_artifact_ids.length)
             || (review.status!=='continue' && review.next_tasks.length)) throw new Error('INVALID_COMPLETION_REVIEW');
           let next = review.next_tasks;
+          try{this.d.validateTaskBudget?.([...tasks,...next]);}catch{review={...review,status:'blocked',reason:'SPECIALIST_BUDGET_EXHAUSTED',next_tasks:[]};next=[];}
           const rounds = messages.filter(m=>m.content&&typeof m.content==='object'&&!Array.isArray(m.content)&&m.content.kind==='completion_review').length;
           const count = (await Promise.all(tasks.map(t=>r.getSubtasks(t.task_id)))).flat().length;
           const allowed = current.constraints.tool_permissions;

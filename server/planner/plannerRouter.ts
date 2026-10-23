@@ -8,9 +8,11 @@ import {canonicalJSON} from './executionSpine';
 import type { Mission } from './executionSpine';
 import {auditMission} from './missionAudit';
 import {readMissionArtifact, loadMissionNotes} from './taskContinuity';
+import {readWorkflowSkill,compileSkill,listWorkflowSkills} from './workflowSkills';
 export const plannerRouter=Router();
 const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex').slice(0,32);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 plannerRouter.get('/capabilities',(_req,res)=>res.json(systemCapabilities()));
+plannerRouter.get('/skills',async(req,res)=>{try{res.json(await listWorkflowSkills(plannerClient(),(req as any).microfixdTenantId));}catch{res.status(503).json({code:'SKILL_STORAGE_UNAVAILABLE'});}});
 plannerRouter.get('/tools',(_req,res)=>res.json({tools:ENABLED_TOOLS.map(name=>getTool(name)).filter(Boolean)}));
 export const submitMission:import('express').RequestHandler=async(req,res)=>{
  try{
@@ -20,9 +22,14 @@ export const submitMission:import('express').RequestHandler=async(req,res)=>{
   if(req.body.deadline_at!==undefined&&(typeof req.body.deadline_at!=='string'||!Number.isFinite(Date.parse(req.body.deadline_at))||Date.parse(req.body.deadline_at)<=Date.now()))return res.status(400).json({code:'INVALID_DEADLINE'});
   const admin=(req as any).microfixdRole==='admin';
   const mission:Mission={mission_id:uuid(`${tenant}:${key}`),tenant_id:tenant,created_by:(req as any).microfixdUserId??'operator',created_at:new Date().toISOString(),objective:req.body.objective.trim(),constraints:{completion_policy:'objective-v1',tool_approval_mode:admin&&req.body.tool_approval_mode!=='manual'?'preauthorized':'manual',approval_actor:admin?((req as any).microfixdUserId??'admin'):null,...(req.body.deadline_at?{deadline_at:req.body.deadline_at}:{}),max_tokens:Number.isInteger(req.body.max_tokens)?Math.max(1,Math.min(100000,req.body.max_tokens)):32000,browser_origins:Array.isArray(req.body.browser_origins)?req.body.browser_origins.filter((v:unknown)=>{try{return typeof v==='string'&&new URL(v).origin===v&&v.startsWith('https://');}catch{return false;}}):[],tool_permissions:Array.isArray(req.body.tool_permissions)?req.body.tool_permissions.filter((t:unknown)=>typeof t==='string'&&ENABLED_TOOLS.includes(t)):[...ENABLED_TOOLS],...(req.body.plan?{plan:req.body.plan}:{})},status:'queued',result_artifact_id:null};
+  if(req.body.skill_id!==undefined){
+   if(req.body.plan||typeof req.body.skill_id!=='string'||typeof req.body.skill_revision!=='string'||!req.body.skill_inputs||typeof req.body.skill_inputs!=='object'||Array.isArray(req.body.skill_inputs))return res.status(400).json({code:'INVALID_SKILL_REQUEST'});
+   try{const selected=await readWorkflowSkill(plannerClient(),tenant,req.body.skill_id,req.body.skill_revision);mission.constraints.plan=JSON.parse(JSON.stringify(compileSkill(selected.skill,req.body.skill_inputs,mission.constraints.tool_permissions as string[])));mission.constraints.workflow_skill={id:selected.skill.id,revision:selected.revision};}
+   catch(error){return res.status(400).json({code:error instanceof Error?error.message:'INVALID_SKILL_REQUEST'});}
+  }
   if(admin&&!(mission.constraints.browser_origins as string[]).length){
    const urls=[...mission.objective.matchAll(/https:\/\/[^\s<>"']+/g)].map(m=>m[0].replace(/[),.;!?]+$/,''));
-   for(const task of Array.isArray(req.body.plan)?req.body.plan:[])for(const sub of Array.isArray(task?.subtasks)?task.subtasks:[])if(typeof sub.tool_request?.arguments?.url==='string')urls.push(sub.tool_request.arguments.url);
+   for(const task of Array.isArray(mission.constraints.plan)?mission.constraints.plan:[])for(const sub of Array.isArray((task as any)?.subtasks)?(task as any).subtasks:[])if(typeof sub.tool_request?.arguments?.url==='string')urls.push(sub.tool_request.arguments.url);
    mission.constraints.browser_origins=[...new Set(urls.flatMap(url=>{try{const parsed=new URL(url);return parsed.protocol==='https:'?[parsed.origin]:[];}catch{return [];}}))];
   }
   if(req.body.plan){try{validatePlan(req.body.plan,mission);}catch{return res.status(400).json({code:'INVALID_PLAN'});}}
@@ -104,12 +111,13 @@ plannerRouter.get('/agents',async(req,res)=>{
  if(error)throw error;res.json({agents:data});}catch{res.status(503).json({code:'STORAGE_UNAVAILABLE'});}
 });
 export function startPlannerWorker():()=>void {
- let busy=false,stopped=false;
+ let busy=false,stopped=false,cursor=0;
  const tick=async()=>{
   if(busy||stopped)return;busy=true;
-  try{const client=plannerClient();const {data,error}=await client.from('spine_rows').select('data').eq('kind','missions').in('data->>status',['queued','running']).order('sequence').limit(10);
+  try{const client=plannerClient();const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
    if(error)throw error;
-   for(const row of data){if(stopped)break;const m=row.data as Mission;try{await createPlannerRuntime(client,m.tenant_id,m.mission_id).planner.planAndExecuteMission(m);}catch(error){console.error('[planner] work deferred',error instanceof Error?error.message:'storage error');}}
+   if(!data.length)cursor=0;
+   for(const row of data){if(stopped)break;cursor=Number(row.sequence);const m=row.data as Mission;try{await createPlannerRuntime(client,m.tenant_id,m.mission_id).planner.planAndExecuteMission(m);}catch(error){console.error('[planner] work deferred',error instanceof Error?error.message:'storage error');}}
   }catch{console.error('[planner] durable storage unavailable');}finally{busy=false;}
  };
  const timer=setInterval(()=>{void tick();},5000);void tick();

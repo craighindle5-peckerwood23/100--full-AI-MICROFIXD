@@ -41,6 +41,7 @@ export function recordGroqDebugLog(log: GroqDebugLog): void {
 }
 
 export interface GroqRetryOptions {
+  signal?:AbortSignal;
   maxRetries?: number;
   baseDelayMs?: number;
   maxDelayMs?: number;
@@ -93,13 +94,14 @@ export async function executeGroqWithRetry(
     const attemptStart = Date.now();
     // Reserve each dispatch before entering the provider error handler.
     // Budget/lease failures must stop execution, never become provider retries.
+    options.signal?.throwIfAborted();
     await options.beforeAttempt?.();
     try {
       const completion = await groq.chat.completions.create({
         ...requestParams,
         model: currentModel,
         max_tokens: currentMaxTokens,
-      });
+      },{signal:options.signal});
 
       const attemptLatency = Date.now() - attemptStart;
       const totalLatency = Date.now() - startTime;
@@ -128,6 +130,7 @@ export async function executeGroqWithRetry(
         attempts: attempt,
       };
     } catch (err: any) {
+      if(options.signal?.aborted)throw err;
       lastError = err;
       const attemptLatency = Date.now() - attemptStart;
       const statusCode = err?.status || err?.statusCode || 500;

@@ -12,9 +12,13 @@ import {publicPageURL} from '../tools/publicPageReader';
 import {BrowserManager} from '../playwright/browserManager';
 import {validateSchema} from './schema';
 import {readMissionArtifact, searchMissionHistory, saveMissionNote} from './taskContinuity';
+import {parseBrowserWorkflow,runBrowserWorkflow} from '../playwright/browserWorkflow';
+import {parseIsolatedRequest,runIsolatedCode,sandboxConfigured} from '../sandbox/isolatedCode';
+import {validateSkill,saveWorkflowSkill,listWorkflowSkills} from './workflowSkills';
+import {SPECIALISTS} from './specialists';
 export const ENABLED_TOOLS=TOOL_REGISTRY.map(tool=>tool.name);
-export const BROWSER_TOOLS=new Set(['inspect_browser_page','navigate_browser','scrape_url','take_screenshot','click_element','crawl_website']);
-export const READ_TOOLS=new Set(['read_mission_artifact','search_mission_history','recall_knowledge','recall_procedures','obd_connection_setup','list_obd_sessions','read_obd_status','list_automotive_cases','read_automotive_case','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
+export const BROWSER_TOOLS=new Set(['run_browser_workflow','inspect_browser_page','navigate_browser','scrape_url','take_screenshot','click_element','crawl_website']);
+export const READ_TOOLS=new Set(['list_workflow_skills','read_mission_artifact','search_mission_history','recall_knowledge','recall_procedures','obd_connection_setup','list_obd_sessions','read_obd_status','list_automotive_cases','read_automotive_case','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
 export function requestHash(value:JSONValue):string {
  const canonical=(v:JSONValue):string=>Array.isArray(v)?`[${v.map(canonical).join(',')}]`:v&&typeof v==='object'?`{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(',')}}`:JSON.stringify(v);
  return createHash('sha256').update(canonical(value)).digest('hex');
@@ -40,6 +44,10 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
    const url=new URL(publicPageURL(String((args as JSONObject).url??'')));
    if(url.protocol!=='https:'||url.username||url.password||!Array.isArray(context.constraints.browser_origins)||!context.constraints.browser_origins.includes(url.origin))throw new Error('INVALID_BROWSER_URL');
   }
+  const workflow=name==='run_browser_workflow'?parseBrowserWorkflow((args as JSONObject).workflow_json,(args as JSONObject).mode??'dom'):null;
+  const isolated=name==='run_isolated_code'?parseIsolatedRequest(args as JSONObject):null;
+  if(isolated&&!sandboxConfigured())throw new Error('ISOLATED_SANDBOX_NOT_CONFIGURED');
+  const skill=name==='save_workflow_skill'?validateSkill(JSON.parse(String((args as JSONObject).definition_json))):null;
   let organPayload:Record<string,unknown>|undefined;
   if(name==='invoke_system_organ'){
    organPayload=organInvocationPayload(args as JSONObject,tenant,mission);
@@ -77,13 +85,17 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
       if(next.depth<maxDepth)for(const link of await browser.findLinks()){try{const safe=publicPageURL(link);if(new URL(safe).origin===new URL(url).origin&&!seen.has(safe)&&queue.length<100)queue.push({url:safe,depth:next.depth+1});}catch{}}
      }
      raw={pages,count:pages.length,maxDepth,maxPages};
-    }else if(name==='inspect_browser_page')raw=await browser.inspect();
+    }else if(name==='run_browser_workflow')raw=await runBrowserWorkflow(browser,workflow!);
+    else if(name==='inspect_browser_page')raw=await browser.inspect();
     else if(name==='click_element')raw=await browser.click(String((args as JSONObject).selector));
     else if(name==='take_screenshot')raw={screenshot:await browser.screenshot(),url:navigation!.url};
     else if(name==='scrape_url')raw={text:(await browser.getText(String((args as JSONObject).selector??'body'))).slice(0,16000),url:navigation!.url,title:navigation!.title};
     else raw=navigation!;
    }finally{await browser.stop();}
-  }else if(name==='read_mission_artifact')raw=JSON.parse(JSON.stringify(await readMissionArtifact(client,tenant,mission,args as JSONObject)));
+  }else if(name==='run_isolated_code')raw=await runIsolatedCode(isolated!,{tenant,mission,subtask:context.subtask_id});
+  else if(name==='save_workflow_skill')raw=await saveWorkflowSkill(client,tenant,context.subtask_id,skill);
+  else if(name==='list_workflow_skills')raw=JSON.parse(JSON.stringify(await listWorkflowSkills(client,tenant)));
+  else if(name==='read_mission_artifact')raw=JSON.parse(JSON.stringify(await readMissionArtifact(client,tenant,mission,args as JSONObject)));
   else if(name==='search_mission_history')raw=JSON.parse(JSON.stringify(await searchMissionHistory(client,tenant,mission,args as JSONObject)));
   else if(name==='write_mission_note')raw=JSON.parse(JSON.stringify(await saveMissionNote(client,tenant,mission,owner,args as JSONObject,context)));
   else if(name==='invoke_system_organ')raw=JSON.parse(JSON.stringify(await dispatchOrgan(String((args as JSONObject).organ_id),String((args as JSONObject).action),organPayload,tenant)));
@@ -108,7 +120,7 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
 }
 
 export function systemCapabilities(){
- return {tools:TOOL_REGISTRY.map(tool=>({...tool,durable:ENABLED_TOOLS.includes(tool.name),endpoint:'/api/planner/missions',required_credentials:tool.organ==='github_connector'?['GITHUB_TOKEN']:[],credentials_configured:tool.organ==='github_connector'?Boolean(process.env.GITHUB_TOKEN?.trim()):null})),organs:organRegistry.all().map(organ=>({id:organ.id,name:organ.name,layer:organ.layer,isolated:organ.isolated,native_executor:Object.hasOwn(EXECUTORS,organ.id),status_endpoint:`/api/organs/${organ.id}/status`,execution_endpoint:`/api/organs/${organ.id}/execute`,durable_tools:TOOL_REGISTRY.filter(tool=>tool.organ===organ.id&&ENABLED_TOOLS.includes(tool.name)).map(tool=>tool.name),note:Object.hasOwn(EXECUTORS,organ.id)?'Concrete executor; supported actions and credentials still required.':'Routing probe available; arbitrary task execution is not verified.'}))};
+ return {specialists:SPECIALISTS,browser_control:{supported_modes:['dom'],visual_grounding_configured:false,native_desktop_configured:false,workflow_max_actions:8,cross_call_sessions:false},isolated_sandbox:{provider:'e2b',configured:sandboxConfigured(),network_default:false,ttl_ms:120000},tools:TOOL_REGISTRY.map(tool=>({...tool,durable:ENABLED_TOOLS.includes(tool.name),endpoint:'/api/planner/missions',required_credentials:tool.name==='run_isolated_code'?['E2B_API_KEY']:tool.organ==='github_connector'?['GITHUB_TOKEN']:[],credentials_configured:tool.name==='run_isolated_code'?sandboxConfigured():tool.organ==='github_connector'?Boolean(process.env.GITHUB_TOKEN?.trim()):null})),organs:organRegistry.all().map(organ=>({id:organ.id,name:organ.name,layer:organ.layer,isolated:organ.isolated,native_executor:Object.hasOwn(EXECUTORS,organ.id),status_endpoint:`/api/organs/${organ.id}/status`,execution_endpoint:`/api/organs/${organ.id}/execute`,durable_tools:TOOL_REGISTRY.filter(tool=>tool.organ===organ.id&&ENABLED_TOOLS.includes(tool.name)).map(tool=>tool.name),note:Object.hasOwn(EXECUTORS,organ.id)?'Concrete executor; supported actions and credentials still required.':'Routing probe available; arbitrary task execution is not verified.'}))};
 }
 
 export function organInvocationPayload(args:JSONObject,tenant:string,mission:string):Record<string,unknown>{
