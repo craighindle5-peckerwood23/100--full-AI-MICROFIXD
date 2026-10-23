@@ -9,6 +9,7 @@ import type { Mission } from './executionSpine';
 import {auditMission} from './missionAudit';
 import {readMissionArtifact, loadMissionNotes} from './taskContinuity';
 import {readWorkflowSkill,compileSkill,listWorkflowSkills} from './workflowSkills';
+import {recoverWaitingRepairs} from '../engineering/repairRecovery';
 export const plannerRouter=Router();
 const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex').slice(0,32);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 plannerRouter.get('/capabilities',(_req,res)=>res.json(systemCapabilities()));
@@ -114,7 +115,7 @@ export function startPlannerWorker():()=>void {
  let busy=false,stopped=false,cursor=0;
  const tick=async()=>{
   if(busy||stopped)return;busy=true;
-  try{const client=plannerClient();const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
+  try{const client=plannerClient();try{await recoverWaitingRepairs(client);}catch{console.error('[repair] completion recovery deferred');}const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
    if(error)throw error;
    if(!data.length)cursor=0;
    for(const row of data){if(stopped)break;cursor=Number(row.sequence);const m=row.data as Mission;try{await createPlannerRuntime(client,m.tenant_id,m.mission_id).planner.planAndExecuteMission(m);}catch(error){console.error('[planner] work deferred',error instanceof Error?error.message:'storage error');}}

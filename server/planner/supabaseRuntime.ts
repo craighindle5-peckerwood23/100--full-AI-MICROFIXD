@@ -1,4 +1,5 @@
 import {completionPrompt,parseCompletionOutput} from './completionReview';
+import {enqueueSourceIncident} from '../engineering/repairIncidents';
 import {parsePlanOutput,planningErrorCode} from './planOutput';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID, createHash } from 'node:crypto';
@@ -151,7 +152,7 @@ export function createPlannerRuntime(client: SupabaseClient, tenant: string, mis
       const {data,error}=await client.from('spine_agent_results').select('request_hash,result').eq('tenant_id',tenant).eq('mission_id',mission).eq('subtask_id',sub.subtask_id).maybeSingle();if(error)throw new Error(error.code);if(!data)return null;
       if(data.request_hash!==requestHash({input:sub.input,agent_id:sub.agent_id??agents.executor}))throw new Error('REQUEST_CHANGED');return data.result;
     },
-    recordError:async(context,error,attempt)=>{const {error:failure}=await client.from('spine_errors').insert({tenant_id:tenant,mission_id:mission,subtask_id:context.subtask_id,attempt,code:String((error as any)?.code??(error instanceof Error?error.message:'EXECUTION_ERROR')).replace(/[^A-Z_]/g,'').slice(0,80)||'EXECUTION_ERROR'});if(failure)throw new Error(failure.code);},
+    recordError:async(context,error,attempt)=>{const {error:failure}=await client.from('spine_errors').insert({tenant_id:tenant,mission_id:mission,subtask_id:context.subtask_id,attempt,code:String((error as any)?.code??(error instanceof Error?error.message:'EXECUTION_ERROR')).replace(/[^A-Z_]/g,'').slice(0,80)||'EXECUTION_ERROR'});if(failure)throw new Error(failure.code);try{await enqueueSourceIncident(client,context,error);}catch{console.error('[repair] incident queue unavailable; original failure retained');}},
     validateTaskBudget:tasks=>checkSpecialistBudget(tasks),
     retryable:error=>[429,500,502,503,504].includes(Number((error as any)?.status)),
   };

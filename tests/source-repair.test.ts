@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {repairPath,repairURL,validateRepairPatch,repairSource} from '../server/engineering/sourceRepair';
 import {getTool} from '../server/tools/toolRegistry';
 import {createGovernedTools,READ_TOOLS} from '../server/planner/governedTools';
+import {sourceIncident,enqueueSourceIncident} from '../server/engineering/repairIncidents';
+import {readCompletedRepair} from '../server/engineering/repairRecovery';
 
 test('repair validation protects isolation, governance, tests, dependencies and unrelated source',()=>{
  for(const path of ['../a.ts','scripts/engineering-loop.mjs','infrastructure/repair-runner/server.mjs','tests/example.ts','server/engineering/sourceRepair.ts','server/security/rbac.ts','server/planner/governedTools.ts','package.json','server/index.ts','server/tools/toolRegistry.ts'])assert.throws(()=>repairPath(path));
@@ -49,4 +51,26 @@ test('repair uses a separate Render candidate, rejects stale green results, and 
 test('durable repair cannot start for an unapproved or foreign tenant mission',async()=>{
  const tools=createGovernedTools({} as any,'foreign','mission','worker');
  await assert.rejects(()=>tools.executeTool({name:'repair_source_code',arguments:{objective:'repair fixture',paths_json:'["src/example.ts"]'}},{tenant_id:'foreign',mission_id:'mission',subtask_id:'task',tool_permissions:['repair_source_code'],constraints:{tool_approval_mode:'manual'}} as any),/OWNER_ADMIN_REQUIRED/);
+});
+test('automatic incidents use actual eligible source exceptions, normalize Render paths, and exclude operational failures',()=>{
+ for(const error of [new Error('WAITING_APPROVAL'),new TypeError('fetch failed'),new Error('PROVIDERS_EXHAUSTED')])assert.equal(sourceIncident(error),null);
+ const error=new TypeError("Cannot read properties of undefined (reading 'fixture')");error.stack='TypeError: fixture\n at inspect (/opt/render/project/src/server/automotive/example.ts:10:2)';
+ const incident=sourceIncident(error)!;assert.deepEqual(incident.paths,['server/automotive/example.ts']);assert.match(incident.fingerprint,/^[a-f0-9]{64}$/);assert.ok(!incident.objective.includes('reading'));
+ error.stack='at unsafe (/opt/render/project/src/server/security/rbac.ts:1:1)';assert.equal(sourceIncident(error),null);
+});
+test('automatic incidents require enabled owner standing authorization before entering the durable quota function',async()=>{
+ const prior={enabled:process.env.MICROFIXD_AUTOMATIC_SOURCE_REPAIR,url:process.env.MICROFIXD_REPAIR_RUNNER_URL};
+ process.env.MICROFIXD_AUTOMATIC_SOURCE_REPAIR='1';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture.onrender.com';let calls=0;
+ const db:any={rpc:async(name:string,args:any)=>{calls++;assert.equal(name,'enqueue_source_repair');assert.deepEqual(args.p_paths,['server/automotive/example.ts']);return {data:'fixture-mission',error:null};}};
+ const error=new ReferenceError('fixture is not defined');error.stack='at inspect (/opt/render/project/src/server/automotive/example.ts:10:2)';
+ const ctx:any={tenant_id:'default',constraints:{tool_approval_mode:'preauthorized',approval_actor:'owner'}};
+ try{await enqueueSourceIncident(db,{...ctx,tenant_id:'foreign'},error);await enqueueSourceIncident(db,{...ctx,constraints:{tool_approval_mode:'manual'}},error);assert.equal(calls,0);await enqueueSourceIncident(db,ctx,error);assert.equal(calls,1);}
+ finally{if(prior.enabled===undefined)delete process.env.MICROFIXD_AUTOMATIC_SOURCE_REPAIR;else process.env.MICROFIXD_AUTOMATIC_SOURCE_REPAIR=prior.enabled;if(prior.url===undefined)delete process.env.MICROFIXD_REPAIR_RUNNER_URL;else process.env.MICROFIXD_REPAIR_RUNNER_URL=prior.url;}
+});
+test('deployment recovery performs reads only and requires matching candidate, main, isolated receipt and live commit',async()=>{
+ const prior={token:process.env.GITHUB_TOKEN,url:process.env.MICROFIXD_REPAIR_RUNNER_URL};process.env.GITHUB_TOKEN='fixture';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture.onrender.com';
+ const candidate='a'.repeat(40);let healthy=true;const b:any={select:()=>b,eq:()=>b,contains:(_column:string,value:any)=>{assert.equal(value.session_id,'owner:mission');return b;},limit:async()=>({data:[{content:JSON.stringify({phase:'candidate_created',evidence:{candidate,files:[{path:'server/automotive/example.ts',after:'b'.repeat(64)}]}})}],error:null})};
+ const request:typeof fetch=async(input,options)=>{assert.equal(options?.method,undefined);const url=String(input);return Response.json(url.includes('api.github.com')?{object:{sha:candidate}}:url.endsWith('/verification')?{commit:candidate,status:'verified',network:healthy?'none':'enabled',productionSecrets:false,gate:'production+engineering+adapters'}:{commit:candidate});};
+ try{assert.equal((await readCompletedRepair({from:()=>b} as any,{tenant:'owner',mission:'mission',subtask:'task'},request))?.status,'live_verified');healthy=false;assert.equal(await readCompletedRepair({from:()=>b} as any,{tenant:'owner',mission:'mission',subtask:'task'},request),null);}
+ finally{if(prior.token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=prior.token;if(prior.url===undefined)delete process.env.MICROFIXD_REPAIR_RUNNER_URL;else process.env.MICROFIXD_REPAIR_RUNNER_URL=prior.url;}
 });

@@ -41,11 +41,20 @@ is used by this path. Reconciliation is required after uncertain operations.
 There is no automatic rollback. Full source repair can take up to 35 minutes;
 use a mission deadline that permits verification and deployment.
 
+After a deployment restart, recovery observes the saved candidate, current GitHub
+main, the isolated runner receipt and the live production commit. Only a matching
+completed effect can finish an interrupted tool or reconcile a waiting repair;
+recovery never repeats a GitHub write.
+
 Infrastructure, verification scripts, tests, dependencies, security, governance,
 the repair controller and tool routing are protected. Source paths must be
-specified. Runtime incident detection does not yet create repair missions by
-itself: the repair tool must be assigned a concrete bug. Provider limits, missing
-credentials and approval waits are operational conditions, not source bugs.
+specified. With `MICROFIXD_AUTOMATIC_SOURCE_REPAIR=1`, actual eligible source
+exceptions from preauthorized owner missions can create explicit repair missions.
+The service-only `enqueue_source_repair` function deduplicates incidents and
+enforces an atomic global ceiling of two automatic repairs per hour and six per
+day. The repair tool's own failures cannot recursively trigger repairs. Provider
+limits, missing credentials, timeouts and approval waits are excluded. These
+hooks do not claim to catch every failure or prove that a repair fixes every bug.
 
 ## Vehicle catalog
 

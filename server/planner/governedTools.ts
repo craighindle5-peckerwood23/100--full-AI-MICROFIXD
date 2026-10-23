@@ -18,6 +18,8 @@ import {validateSkill,saveWorkflowSkill,listWorkflowSkills} from './workflowSkil
 import {SPECIALISTS} from './specialists';
 import {repairSource} from '../engineering/sourceRepair';
 import {rememberKnowledge} from '../memory/knowledgeMemory';
+import {enqueueSourceIncident} from '../engineering/repairIncidents';
+import {readCompletedRepair,repairRecoveryResult} from '../engineering/repairRecovery';
 export const ENABLED_TOOLS=TOOL_REGISTRY.map(tool=>tool.name);
 export const BROWSER_TOOLS=new Set(['run_browser_workflow','inspect_browser_page','navigate_browser','scrape_url','take_screenshot','click_element','crawl_website']);
 export const READ_TOOLS=new Set(['search_vehicle_catalog','search_vehicle_references','list_workflow_skills','read_mission_artifact','search_mission_history','recall_knowledge','recall_procedures','obd_connection_setup','list_obd_sessions','read_obd_status','list_automotive_cases','read_automotive_case','list_system_capabilities','probe_system_organ','read_public_page','get_github_repo','scan_for_security_issues']);
@@ -33,7 +35,13 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
   if(!prior)return null;
   if(context.tenant_id!==tenant||context.mission_id!==mission)throw new Error('TENANT_MISMATCH');
   if(prior.request_hash!==requestHash(sub.tool_request))throw new Error('REQUEST_CHANGED');
-  if(prior.status!=='succeeded')throw new ExecutionPause('RECONCILIATION_REQUIRED');
+  if(prior.status!=='succeeded'){
+   if(sub.tool_request?.name==='repair_source_code'&&tenant===(process.env.MICROFIXD_REPAIR_OWNER_TENANT||'default')&&context.constraints.tool_approval_mode==='preauthorized'&&context.constraints.approval_actor){
+    const raw=await readCompletedRepair(client,{tenant,mission,subtask:context.subtask_id});
+    if(raw){const result=repairRecoveryResult(raw,tenant,context.subtask_id,prior.request_hash);const {error}=await client.rpc('spine_finish_tool',{p_tenant:tenant,p_mission:mission,p_subtask:context.subtask_id,p_owner:owner,p_hash:prior.request_hash,p_result:result});if(error)throw new Error('REPAIR_RECOVERY_COMMIT_FAILED');return result;}
+   }
+   throw new ExecutionPause('RECONCILIATION_REQUIRED');
+  }
   return prior.result as ExecutionResult;
  };
  const executeTool=async(request:JSONObject,context:ExecutionContext):Promise<ExecutionResult>=>{
@@ -125,6 +133,7 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
    raw=JSON.parse(JSON.stringify(await getExecutor(tool.organ)(tool.action,payload as Record<string,unknown>))) as JSONValue;
   }
   }catch(error){
+   if(name!=='repair_source_code')try{await enqueueSourceIncident(client,context,error);}catch{console.error('[repair] incident queue unavailable; original failure retained');}
    if(name==='repair_source_code'){
     const message=error instanceof Error?error.message:'';
     const code=/^[A-Z][A-Z0-9_]{2,100}$/.test(message)?message:error instanceof SyntaxError?'REPAIR_INVALID_MODEL_JSON':error instanceof TypeError?'REPAIR_DEPENDENCY_TYPE_ERROR':'REPAIR_EXECUTION_FAILED';
@@ -142,7 +151,7 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
 }
 
 export function systemCapabilities(){
- return {source_repair:{provider:'render-buildkit',configured:Boolean(process.env.GITHUB_TOKEN&&process.env.MICROFIXD_REPAIR_RUNNER_URL),runner_url:process.env.MICROFIXD_REPAIR_RUNNER_URL??null,network_during_tests:'none',automatic_incident_trigger:false},specialists:SPECIALISTS,browser_control:{supported_modes:['dom'],visual_grounding_configured:false,native_desktop_configured:false,workflow_max_actions:8,cross_call_sessions:false},isolated_sandbox:{provider:'e2b',configured:sandboxConfigured(),network_default:false,ttl_ms:120000},tools:TOOL_REGISTRY.map(tool=>({...tool,durable:ENABLED_TOOLS.includes(tool.name),endpoint:'/api/planner/missions',required_credentials:tool.name==='repair_source_code'?['GITHUB_TOKEN','MICROFIXD_REPAIR_RUNNER_URL']:tool.name==='run_isolated_code'?['E2B_API_KEY']:tool.organ==='github_connector'?['GITHUB_TOKEN']:[],credentials_configured:tool.name==='repair_source_code'?Boolean(process.env.GITHUB_TOKEN&&process.env.MICROFIXD_REPAIR_RUNNER_URL):tool.name==='run_isolated_code'?sandboxConfigured():tool.organ==='github_connector'?Boolean(process.env.GITHUB_TOKEN?.trim()):null})),organs:organRegistry.all().map(organ=>({id:organ.id,name:organ.name,layer:organ.layer,isolated:organ.isolated,native_executor:Object.hasOwn(EXECUTORS,organ.id),status_endpoint:`/api/organs/${organ.id}/status`,execution_endpoint:`/api/organs/${organ.id}/execute`,durable_tools:TOOL_REGISTRY.filter(tool=>tool.organ===organ.id&&ENABLED_TOOLS.includes(tool.name)).map(tool=>tool.name),note:Object.hasOwn(EXECUTORS,organ.id)?'Concrete executor; supported actions and credentials still required.':'Routing probe available; arbitrary task execution is not verified.'}))};
+ return {source_repair:{provider:'render-buildkit',configured:Boolean(process.env.GITHUB_TOKEN&&process.env.MICROFIXD_REPAIR_RUNNER_URL),runner_url:process.env.MICROFIXD_REPAIR_RUNNER_URL??null,network_during_tests:'none',automatic_incident_trigger:process.env.MICROFIXD_AUTOMATIC_SOURCE_REPAIR==='1',automatic_limit_per_hour:2,automatic_limit_per_day:6},specialists:SPECIALISTS,browser_control:{supported_modes:['dom'],visual_grounding_configured:false,native_desktop_configured:false,workflow_max_actions:8,cross_call_sessions:false},isolated_sandbox:{provider:'e2b',configured:sandboxConfigured(),network_default:false,ttl_ms:120000},tools:TOOL_REGISTRY.map(tool=>({...tool,durable:ENABLED_TOOLS.includes(tool.name),endpoint:'/api/planner/missions',required_credentials:tool.name==='repair_source_code'?['GITHUB_TOKEN','MICROFIXD_REPAIR_RUNNER_URL']:tool.name==='run_isolated_code'?['E2B_API_KEY']:tool.organ==='github_connector'?['GITHUB_TOKEN']:[],credentials_configured:tool.name==='repair_source_code'?Boolean(process.env.GITHUB_TOKEN&&process.env.MICROFIXD_REPAIR_RUNNER_URL):tool.name==='run_isolated_code'?sandboxConfigured():tool.organ==='github_connector'?Boolean(process.env.GITHUB_TOKEN?.trim()):null})),organs:organRegistry.all().map(organ=>({id:organ.id,name:organ.name,layer:organ.layer,isolated:organ.isolated,native_executor:Object.hasOwn(EXECUTORS,organ.id),status_endpoint:`/api/organs/${organ.id}/status`,execution_endpoint:`/api/organs/${organ.id}/execute`,durable_tools:TOOL_REGISTRY.filter(tool=>tool.organ===organ.id&&ENABLED_TOOLS.includes(tool.name)).map(tool=>tool.name),note:Object.hasOwn(EXECUTORS,organ.id)?'Concrete executor; supported actions and credentials still required.':'Routing probe available; arbitrary task execution is not verified.'}))};
 }
 
 export function organInvocationPayload(args:JSONObject,tenant:string,mission:string):Record<string,unknown>{
