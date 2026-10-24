@@ -225,3 +225,19 @@ test('mission audit rejects a completion claim detached from the current evidenc
  const final=artifacts.find(a=>a.type==='mission_result')!;delete final.evidence.completion_review;
  assert.ok(auditMission(m,tasks,subs,artifacts).issues.some(i=>i.code==='OBJECTIVE_REVIEW_MISSING_OR_INVALID'));
 });
+
+test('evaluation gate persists failed evidence and prevents success after artifact tampering',async()=>{
+ const f=fixture();const original=f.repository.getArtifacts.bind(f.repository);
+ f.repository.getArtifacts=async id=>(await original(id)).map(a=>a.subtask_id?{...a,evidence:{...a.evidence,objective_hash:'tampered'}}:a);
+ const result=await new PlannerService(f.deps).planAndExecuteMission(f.mission);
+ assert.equal(result.status,'waiting');assert.equal(result.result_artifact_id,null);
+ const reports=await f.repository.getMessagesForAgent('56742fe9-fb8c-4385-b54c-d9e2241e5118',f.mission.mission_id);
+ assert.ok(reports.some(m=>(m.content as any).kind==='mission_evaluation'&&(m.content as any).verdict==='failed'));
+ assert.equal(f.calls(),1);
+});
+test('evaluation gate persists a proposed-completion report without extra model calls',async()=>{
+ const f=fixture();assert.equal((await new PlannerService(f.deps).planAndExecuteMission(f.mission)).status,'succeeded');
+ const reports=await f.repository.getMessagesForAgent('56742fe9-fb8c-4385-b54c-d9e2241e5118',f.mission.mission_id);
+ assert.ok(reports.some(m=>(m.content as any).kind==='mission_evaluation'));
+ assert.equal(f.calls(),1);
+});

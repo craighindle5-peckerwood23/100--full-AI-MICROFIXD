@@ -1,3 +1,4 @@
+import {evaluateMission} from '../server/planner/evaluationEngine';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {routePermission} from '../server/security/routePermission';
@@ -117,4 +118,19 @@ test('emergency tool engages the actual local oversight flag and reports its sco
  const {executeWorldModelOrgan}=await import('../server/organs/organs/worldModelOrgan');const {orchestrationOversight}=await import('../server/orchestration/orchestrationOversight');
  try{const result:any=await executeWorldModelOrgan('emergency_kill',{reason:'regression'});assert.equal(result.engaged,true);assert.equal(result.scope,'local_oversight_registry');assert.equal(orchestrationOversight.verifyDelegation('test','work').allowed,false);}
  finally{orchestrationOversight.resetEmergencyKill();}
+});
+
+test('evaluation is versioned, deterministic and never treats an unreviewed mission as verified',()=>{
+ const f=fixture();const first=evaluateMission(mission,f.tasks,f.subs,f.artifacts);
+ assert.equal(first.verdict,'incomplete');assert.equal(first.version,'mission-evaluation-v1');
+ assert.deepEqual(first,evaluateMission(mission,f.tasks,f.subs,f.artifacts));
+ f.artifacts[0].content={tampered:true};
+ const invalid=evaluateMission(mission,f.tasks,f.subs,f.artifacts);
+ assert.equal(invalid.verdict,'failed');assert.notEqual(invalid.snapshot,first.snapshot);
+});
+test('evaluation distinguishes missing execution from integrity and rejects cross-tenant evidence',()=>{
+ const f=fixture();
+ assert.equal(evaluateMission({...mission,status:'running'},[],[],[]).verdict,'incomplete');
+ f.artifacts[0].tenant_id='another';
+ assert.equal(evaluateMission(mission,f.tasks,f.subs,f.artifacts).verdict,'failed');
 });

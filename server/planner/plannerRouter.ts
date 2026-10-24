@@ -6,6 +6,7 @@ import { getTool } from '../tools/toolRegistry';
 import { ENABLED_TOOLS, systemCapabilities } from './governedTools';
 import {canonicalJSON} from './executionSpine';
 import type { Mission } from './executionSpine';
+import {evaluateMission} from './evaluationEngine';
 import {auditMission} from './missionAudit';
 import {readMissionArtifact, loadMissionNotes} from './taskContinuity';
 import {readWorkflowSkill,compileSkill,listWorkflowSkills} from './workflowSkills';
@@ -58,13 +59,13 @@ plannerRouter.get('/missions/:id/notes',async(req,res)=>{
 plannerRouter.get('/missions',async(req,res)=>{
  try{const {data,error}=await plannerClient().from('spine_rows').select('data').eq('tenant_id',(req as any).microfixdTenantId).eq('kind','missions').order('sequence',{ascending:false}).limit(50);if(error)throw error;res.json({missions:data.map(r=>r.data)});}catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
 });
-plannerRouter.get('/missions/:id/audit',async(req,res)=>{
+plannerRouter.get(['/missions/:id/audit','/missions/:id/evaluation'],async(req,res)=>{
  try{const tenant=(req as any).microfixdTenantId;if(!tenant)return res.status(403).json({code:'AUTH_REQUIRED'});
  const {repository}=createPlannerRuntime(plannerClient(),tenant,req.params.id);
  const mission=await repository.getMission(req.params.id),tasks=await repository.getTasks(req.params.id);
  const subtasks=(await Promise.all(tasks.map(t=>repository.getSubtasks(t.task_id)))).flat();
  const artifacts=await repository.getArtifacts(req.params.id);
- res.json(auditMission(mission,tasks,subtasks,artifacts));
+ res.json(req.path.endsWith('/evaluation')?evaluateMission(mission,tasks,subtasks,artifacts):auditMission(mission,tasks,subtasks,artifacts));
  }catch{res.status(503).json({code:'AUDIT_UNAVAILABLE'});}
 });
 plannerRouter.get('/missions/:id',async(req,res)=>{

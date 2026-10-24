@@ -1,3 +1,4 @@
+import {evaluateMission} from './evaluationEngine';
 import { createHash, randomUUID } from 'node:crypto';
 
 export function canonicalJSON(value: unknown): string {
@@ -346,6 +347,21 @@ export class PlannerService {
       // Assembly retains verified outputs and the separately persisted completion assessment.
       const final = makeArtifact(current, null, null, { outputs: artifacts.filter(a => a.subtask_id !== null).map(a => ({ artifact_id: a.artifact_id, content: a.content })),
         canonical_artifacts: canonical.map(a => a.artifact_id) }, { ...(completion?{completion_review:completion}:{}), artifact_ids: artifacts.filter(a => a.subtask_id !== null).map(a => a.artifact_id), provenance: artifacts.filter(a => a.subtask_id !== null).map(a => ({artifact_id:a.artifact_id, task_id:a.task_id, subtask_id:a.subtask_id, content_hash:a.hash, evidence_hash:contentHash(a.evidence)})) });
+      const evaluatedMission:Mission={...current,status:'succeeded',result_artifact_id:final.artifact_id};
+      const evaluatedTasks=await r.getTasks(current.mission_id);
+      const evaluatedSubtasks=(await Promise.all(evaluatedTasks.map(t=>r.getSubtasks(t.task_id)))).flat();
+      const evaluation=evaluateMission(evaluatedMission,evaluatedTasks,evaluatedSubtasks,[...artifacts,final]);
+      // Legacy missions without objective review still require intact evidence and complete execution.
+      const rejected=evaluation.checks.some(c=>c.status==='failed'||(c.id==='execution_complete'&&c.status!=='passed'))
+        ||Boolean(current.constraints.completion_policy&&evaluation.verdict!=='passed');
+      await this.d.transaction(async tx=>{
+        await tx.createMessage({message_id:artifactId(current.mission_id,'evaluation:'+evaluation.snapshot),
+          tenant_id:current.tenant_id,mission_id:current.mission_id,from_agent:'56742fe9-fb8c-4385-b54c-d9e2241e5118',
+          to_agent:null,artifacts:[...artifacts.map(a=>a.artifact_id)],confidence:0,created_at:new Date().toISOString(),
+          content:JSON.parse(JSON.stringify({kind:'mission_evaluation',phase:'proposed_completion',proposed_final_artifact_id:final.artifact_id,...evaluation}))});
+        if(rejected)await tx.updateMissionStatus(current.mission_id,'waiting');
+      });
+      if(rejected)return r.getMission(current.mission_id);
       if (this.d.rememberCompletion) await this.d.rememberCompletion(current, await r.getTasks(current.mission_id), artifacts, final);
       await this.d.transaction(async tx => { await tx.createArtifact(final); await tx.attachResultArtifact(current.mission_id, final.artifact_id);
         await tx.updateMissionStatus(current.mission_id, 'succeeded'); });
