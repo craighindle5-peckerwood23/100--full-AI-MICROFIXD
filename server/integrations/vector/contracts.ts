@@ -26,7 +26,25 @@ export const intelligenceRequestSchema = z.object({
     unsupportedSpecificationsProhibited: z.literal(true), humanApprovalRequired: z.literal(true),
     directVehicleControlProhibited: z.literal(true),
   }).strict(),
-}).strict()
+}).strict().superRefine((request,ctx)=>{
+  // Optional nested context identifiers must agree with the authenticated envelope.
+  // Legacy minimal contexts remain valid; the Vector builder supplies scoped metadata.
+  const expected:Record<string,string>={organizationId:request.organizationId,vehicleId:request.vehicleId,studyId:request.workflowId,workflowId:request.workflowId}
+  const walk=(value:unknown,path:(string|number)[],depth:number)=>{
+    if(depth>20){ctx.addIssue({code:'custom',path,message:'Context nesting exceeds budget'});return}
+    if(Array.isArray(value)){value.forEach((item,index)=>walk(item,[...path,index],depth+1));return}
+    if(!value||typeof value!=='object')return
+    for(const [key,item] of Object.entries(value)){
+      if(expected[key]!==undefined&&item!==expected[key])ctx.addIssue({code:'custom',path:[...path,key],message:'Context scope mismatch'})
+      walk(item,[...path,key],depth+1)
+    }
+  }
+  walk(request.context,['context'],0)
+  for(const [key,expectedId] of [['vehicleIdentity',request.vehicleId],['study',request.workflowId]] as const){
+    const value=request.context[key]
+    if(value&&typeof value==='object'&&!Array.isArray(value)&&'id' in value&&value.id!==expectedId)ctx.addIssue({code:'custom',path:['context',key,'id'],message:'Context resource mismatch'})
+  }
+})
 export const intelligenceResponseSchema = reasoningSchema.extend({
   schemaVersion: z.literal('vector.intelligence.v1'), requestId: z.string().uuid(), microfixdRunId: z.string().uuid(),
   provenance: z.object({ model: z.string().min(1).max(200), provider: z.string().min(1).max(100), tokensUsed: z.number().int().min(0), latencyMs: z.number().min(0) }).strict(),
