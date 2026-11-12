@@ -9,7 +9,7 @@ In Microfixd, open `/automotive` → **Set up your adapter** → **Download loca
 On Windows, run `START-WINDOWS.cmd`. On other systems, open a terminal in the extracted folder and run:
 
 ```bash
-python bridge.py --setup
+python bridge.py --setup 
 ```
 
 The guided flow lists installed compatible J2534 drivers first, then detected serial ports, plus manual serial and Wi-Fi/TCP options. It checks driver architecture without loading a DLL. Enter your Microfixd server HTTPS origin and existing operator/access token at the prompts; the token is not saved to disk. Install the manufacturer's driver locally for J2534, or `python -m pip install -r requirements.txt` for serial/paired Bluetooth SPP if needed.
