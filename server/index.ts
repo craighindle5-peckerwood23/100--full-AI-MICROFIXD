@@ -241,6 +241,11 @@ app.get("/api/mcp/manifest", (_, res) => {
 });
 
 // ── Authentication and rate limiting for operational APIs ─────────────────
+// A separate, stateless service credential authorizes only this cognitive endpoint.
+app.use('/api/vector', lazyRouter(async () => {
+  const { createVectorIntelligenceRouter } = await import('./integrations/vector/intelligence');
+  return createVectorIntelligenceRouter();
+}));
 app.use((req, res, next) => {
   if (!(req.path === "/api" || req.path.startsWith("/api/"))) {
     next();
