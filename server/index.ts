@@ -300,9 +300,20 @@ app.get("/api/health/operational", async (req, res) => {
     ready: Boolean(checks.spine_approvals?.ready),
     detail: checks.spine_approvals?.ready ? "Approval table query succeeded; decision flow unverified" : "Approval store unavailable",
   };
+  try {
+    const { getPlannerWorkerStatus } = await import("./planner/plannerRouter");
+    const worker = getPlannerWorkerStatus();
+    checks.plannerWorker = {
+      ready: worker.healthy && worker.phase !== "not_started",
+      detail: `phase=${worker.phase}; stale=${worker.stale}; ticks=${worker.ticks}; missions=${worker.missionsProcessed}; consecutiveErrors=${worker.consecutiveErrors}`,
+    };
+  } catch {
+    checks.plannerWorker = { ready: false, detail: "Planner worker status unavailable" };
+  }
   const storageReady = ["spine_rows", "spine_approvals", "spine_tool_runs", "spine_errors"].every(k => checks[k]?.ready);
-  res.status(storageReady ? 200 : 503).json({
-    status: storageReady ? "storage-reachable" : "degraded",
+  const runtimeReady = storageReady && Boolean(checks.plannerWorker?.ready);
+  res.status(runtimeReady ? 200 : 503).json({
+    status: runtimeReady ? "runtime-operational" : "degraded",
     fullyVerified: false,
     checks,
     ts: new Date().toISOString(),
