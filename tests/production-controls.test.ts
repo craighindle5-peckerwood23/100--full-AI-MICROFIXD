@@ -134,3 +134,47 @@ test('evaluation distinguishes missing execution from integrity and rejects cros
  f.artifacts[0].tenant_id='another';
  assert.equal(evaluateMission(mission,f.tasks,f.subs,f.artifacts).verdict,'failed');
 });
+
+test('tenant admins can use legacy mission routes but cannot reach platform-wide autonomy', async () => {
+ const {default:express}=await import('express');
+ const {autonomyRouter}=await import('../server/autonomy-adapter/autonomyRouter');
+ const app=express();
+ app.use((req,_res,next)=>{
+  Object.assign(req,{
+   microfixdRole:req.header('x-fixture-role')??'admin',
+   microfixdTenantId:req.header('x-fixture-tenant'),
+   microfixdUserId:req.header('x-fixture-user'),
+  });
+  next();
+ });
+ app.use('/api/autonomy',autonomyRouter);
+ const server=app.listen(0,'127.0.0.1');
+ try{
+  await new Promise<void>((resolve,reject)=>{
+   server.once('listening',resolve);
+   server.once('error',reject);
+  });
+  const address=server.address();
+  assert.ok(address&&typeof address==='object');
+  const base=`http://127.0.0.1:${address.port}/api/autonomy`;
+  for(const tenant of ['default','tenant-a','tenant-b']){
+   const headers={'x-fixture-tenant':tenant,'x-fixture-user':'account','x-microfixd-tenant':'default'};
+   for(const path of ['/usage-report','/approvals','/preview/status']){
+    const blocked=await fetch(base+path,{headers});
+    assert.equal(blocked.status,403);
+    assert.equal((await blocked.json()).code,'PLATFORM_ADMIN_REQUIRED');
+   }
+   const mission=await fetch(base+'/runs/fixture/stream',{headers});
+   assert.equal(mission.status,410);
+   assert.equal((await mission.json()).code,'USE_DURABLE_MISSION_POLLING');
+  }
+  const platform=await fetch(base+'/preview/status',{headers:{'x-fixture-tenant':'default'}});
+  assert.equal(platform.status,200);
+  await platform.json();
+  const operator=await fetch(base+'/preview/status',{headers:{'x-fixture-tenant':'default','x-fixture-role':'operator'}});
+  assert.equal(operator.status,403);
+  assert.equal((await operator.json()).code,'PERMISSION_DENIED');
+ }finally{
+  await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+ }
+});
