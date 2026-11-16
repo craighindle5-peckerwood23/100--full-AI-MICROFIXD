@@ -11,7 +11,12 @@ import {auditMission} from './missionAudit';
 import {readMissionArtifact, loadMissionNotes} from './taskContinuity';
 import {readWorkflowSkill,compileSkill,listWorkflowSkills} from './workflowSkills';
 import {recoverWaitingRepairs} from '../engineering/repairRecovery';
+import {
+ getPlannerWorkerStatus,plannerWorkerStarted,plannerWorkerTickStarted,plannerWorkerMissionStarted,
+ plannerWorkerMissionCompleted,plannerWorkerTickCompleted,plannerWorkerError,plannerWorkerStopped
+} from './workerRuntime';
 export const plannerRouter=Router();
+export {getPlannerWorkerStatus} from './workerRuntime';
 const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex').slice(0,32);return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;};
 plannerRouter.get('/capabilities',(_req,res)=>res.json(systemCapabilities()));
 plannerRouter.get('/skills',async(req,res)=>{try{res.json(await listWorkflowSkills(plannerClient(),(req as any).microfixdTenantId));}catch{res.status(503).json({code:'SKILL_STORAGE_UNAVAILABLE'});}});
@@ -114,14 +119,34 @@ plannerRouter.get('/agents',async(req,res)=>{
 });
 export function startPlannerWorker():()=>void {
  let busy=false,stopped=false,cursor=0;
+ plannerWorkerStarted();
  const tick=async()=>{
-  if(busy||stopped)return;busy=true;
-  try{const client=plannerClient();try{await recoverWaitingRepairs(client);}catch{console.error('[repair] completion recovery deferred');}const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
+  if(busy||stopped)return;busy=true;plannerWorkerTickStarted();
+  try{
+   const client=plannerClient();
+   try{await recoverWaitingRepairs(client);}catch(error){plannerWorkerError(error);console.error('[repair] completion recovery deferred');}
+   const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
    if(error)throw error;
    if(!data.length)cursor=0;
-   for(const row of data){if(stopped)break;cursor=Number(row.sequence);const m=row.data as Mission;try{await createPlannerRuntime(client,m.tenant_id,m.mission_id).planner.planAndExecuteMission(m);}catch(error){console.error('[planner] work deferred',error instanceof Error?error.message:'storage error');}}
-  }catch{console.error('[planner] durable storage unavailable');}finally{busy=false;}
+   for(const row of data){
+    if(stopped)break;
+    cursor=Number(row.sequence);
+    const m=row.data as Mission;
+    plannerWorkerMissionStarted(m.mission_id);
+    try{
+      await createPlannerRuntime(client,m.tenant_id,m.mission_id).planner.planAndExecuteMission(m);
+      plannerWorkerMissionCompleted();
+    }catch(error){
+      plannerWorkerError(error);
+      console.error('[planner] work deferred',error instanceof Error?error.message:'storage error');
+    }
+   }
+   plannerWorkerTickCompleted();
+  }catch(error){
+   plannerWorkerError(error);
+   console.error('[planner] durable storage unavailable');
+  }finally{busy=false;}
  };
  const timer=setInterval(()=>{void tick();},5000);void tick();
- return ()=>{stopped=true;clearInterval(timer);};
+ return ()=>{stopped=true;clearInterval(timer);plannerWorkerStopped();};
 }
