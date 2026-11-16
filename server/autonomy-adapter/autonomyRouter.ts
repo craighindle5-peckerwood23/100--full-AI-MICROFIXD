@@ -30,9 +30,9 @@
  * in this server. Where the outlet has no equivalent capability (e.g. TTS),
  * the adapter says so instead of pretending.
  *
- * Auth: the TV sends `x-microfixd-admin-key` (its operator contract). The
- * outlet's native RBAC uses Bearer tokens; this adapter bridges the two by
- * validating the header against ADMIN_TOKEN before any route runs.
+ * Auth: global RBAC validates credentials and resolves the tenant. Tenant
+ * admins can use tenant-scoped legacy mission routes. Process-wide routes
+ * require the platform administrator credential.
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
@@ -73,6 +73,35 @@ function tenantOf(req: Request): string {
   if(!tenant)throw new Error('AUTH_REQUIRED');
   return tenant;
 }
+
+// ── Chat: the real command pipeline (Groq-backed when configured) ──────────
+
+const submitLegacy=(field:string):import('express').RequestHandler=>(req,res,next)=>{
+ req.body={...req.body,objective:req.body?.[field]};res.locals.legacyMission=true;
+ return submitMission(req,res,next);
+};
+autonomyRouter.post('/chat',submitLegacy('message'));
+autonomyRouter.post('/goals',submitLegacy('goal'));
+// No RAM-only runs, guessed plans, or tenant-free bearer tokens.
+autonomyRouter.post('/runs/:id/stream-token',(_req,res)=>res.status(410).json({code:'USE_DURABLE_MISSION_POLLING'}));
+autonomyRouter.get('/runs/:id/stream',(_req,res)=>res.status(410).json({code:'USE_DURABLE_MISSION_POLLING'}));
+autonomyRouter.get('/runs/:id',async(req,res)=>{
+ try{
+  const {repository}=createPlannerRuntime(plannerClient(),tenantOf(req),req.params.id);
+  const mission=await repository.getMission(req.params.id),tasks=await repository.getTasks(req.params.id),artifacts=await repository.getArtifacts(req.params.id);
+  res.json({run:projectMission(mission,tasks,artifacts),steps:tasks.map((task,i)=>({id:task.task_id,runId:mission.mission_id,sequence:i+1,status:task.status,action:{title:String(task.input_context.objective??mission.objective)}}))});
+ }catch{res.status(404).json({code:'MISSION_NOT_FOUND'});}
+});
+
+// These routes serve process-wide state and are reserved for the platform
+// admin credential. Supabase account roles are scoped to their own tenant.
+function requirePlatformAdmin(req: Request, res: Response, next: NextFunction): void {
+  const caller = req as Request & { microfixdUserId?: string; microfixdTenantId?: string };
+  if (caller.microfixdUserId === undefined && caller.microfixdTenantId === "default") return next();
+  res.status(403).json({ code: "PLATFORM_ADMIN_REQUIRED", error: "Platform administrator access required." });
+}
+
+autonomyRouter.use(requirePlatformAdmin);
 
 // ── Organs: real registry records ──────────────────────────────────────────
 
@@ -456,25 +485,6 @@ autonomyRouter.post("/github/import", async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: `Import failed: ${String(err)}` });
   }
-});
-
-// ── Chat: the real command pipeline (Groq-backed when configured) ──────────
-
-const submitLegacy=(field:string):import('express').RequestHandler=>(req,res,next)=>{
- req.body={...req.body,objective:req.body?.[field]};res.locals.legacyMission=true;
- return submitMission(req,res,next);
-};
-autonomyRouter.post('/chat',submitLegacy('message'));
-autonomyRouter.post('/goals',submitLegacy('goal'));
-// No RAM-only runs, guessed plans, or tenant-free bearer tokens.
-autonomyRouter.post('/runs/:id/stream-token',(_req,res)=>res.status(410).json({code:'USE_DURABLE_MISSION_POLLING'}));
-autonomyRouter.get('/runs/:id/stream',(_req,res)=>res.status(410).json({code:'USE_DURABLE_MISSION_POLLING'}));
-autonomyRouter.get('/runs/:id',async(req,res)=>{
- try{
-  const {repository}=createPlannerRuntime(plannerClient(),tenantOf(req),req.params.id);
-  const mission=await repository.getMission(req.params.id),tasks=await repository.getTasks(req.params.id),artifacts=await repository.getArtifacts(req.params.id);
-  res.json({run:projectMission(mission,tasks,artifacts),steps:tasks.map((task,i)=>({id:task.task_id,runId:mission.mission_id,sequence:i+1,status:task.status,action:{title:String(task.input_context.objective??mission.objective)}}))});
- }catch{res.status(404).json({code:'MISSION_NOT_FOUND'});}
 });
 
 // ── Agents: the organ registry as the real agent network ──────────────────
