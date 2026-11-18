@@ -33,7 +33,9 @@ export async function readAuthorizedSource(input:{source_id:string;path:string},
   const source=sources.find(s=>s?.id===input.source_id);
   if(!source||!Array.isArray(source.tenants)||!source.tenants.includes(tenant)||!Array.isArray(source.paths)||!source.paths.includes(input.path))throw new Error('AUTHORIZED_SOURCE_DENIED');
   const base=new URL(source.origin),url=new URL(input.path,base);
-  if(base.origin!==source.origin||base.protocol!=='https:'||base.port||base.username||base.password||url.origin!==base.origin||!/^\/[a-zA-Z0-9/_-]*$/.test(input.path))throw new Error('INVALID_AUTHORIZED_SOURCE_URL');
+  const hasCredentials=base.username.length>0||base.password.length>0;
+  const validPath=/^\/[a-zA-Z0-9/_-]*$/.test(input.path);
+  if(base.origin!==source.origin||base.protocol!=='https:'||base.port||hasCredentials||url.origin!==base.origin||!validPath)throw new Error('INVALID_AUTHORIZED_SOURCE_URL');
   if(typeof source.token_env!=='string'||!/^MICROFIXD_SOURCE_[A-Z0-9_]+_TOKEN$/.test(source.token_env))throw new Error('INVALID_SOURCE_CREDENTIAL_REFERENCE');
   const token=process.env[source.token_env];if(!token||/[\r\n]/.test(token))throw new Error('AUTHORIZED_SOURCE_CREDENTIALS_MISSING');
   const addresses=await dependencies.resolve(url.hostname);
