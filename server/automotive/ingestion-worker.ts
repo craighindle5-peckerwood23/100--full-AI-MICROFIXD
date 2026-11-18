@@ -2,6 +2,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildNhtsaUrl, fetchNhtsa, type NhtsaKind, type VehicleQuery } from "./nhtsa-ingestion";
 import {saveNhtsaRecord} from './sourceReferences';
 import {CATALOG_SOURCE,importModels} from './vehicleCatalog';
+import {createSupervisor} from '../metacognition/store';
+import {metacognitiveContext} from '../metacognition/context';
 
 type Job = { id: string; source_id: string; source_key: string; request_url: string; lease_token: string };
 function clientFromEnv(): SupabaseClient {
@@ -62,7 +64,11 @@ export async function runWorkerBatch(db: SupabaseClient, limit = 10, fetcher: ty
   }
   return stats;
 }
-export async function runConfiguredWorker(limit = 10) { return runWorkerBatch(clientFromEnv(), limit); }
+export async function runConfiguredWorker(limit = 10) {
+  const db=clientFromEnv(),supervisor=createSupervisor(db,'system-catalog');
+  const subject={tenant_id:'system-catalog',agent_id:'automotive-ingestion-worker',action:'ingest_public_references',input:{limit}};
+  return supervisor.run(subject,()=>metacognitiveContext.run({supervisor,subject},()=>runWorkerBatch(db,limit)));
+}
 
 /** One fenced job at a time. Durable queue resumes after restart; free hosts can sleep. */
 export function startIngestionWorker() {

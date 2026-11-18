@@ -1,3 +1,4 @@
+import {supervisedOperation} from '../metacognition/context';
 import { GoogleGenAI } from '@google/genai';
 import type Groq from 'groq-sdk';
 import { getGroqClient, groqConfiguration } from './groqRuntime';
@@ -16,7 +17,7 @@ export function textProvidersConfigured(): boolean {
     || (process.env.CLOUDFLARE_API_TOKEN?.trim() && process.env.CLOUDFLARE_ACCOUNT_ID?.trim()));
 }
 
-export async function completeTextWithFallback(
+async function completeTextWithFallbackUnchecked(
   messages: Groq.Chat.ChatCompletionMessageParam[],
   maxTokens: number,
   temperature = 0.3,
@@ -103,3 +104,8 @@ export async function completeTextWithFallback(
   if (failures.length) throw Object.assign(new Error('All configured providers failed. ' + failures.join('; ') + (groqError ? '; Groq: ' + String((groqError as any)?.message || groqError).slice(0,500) : '')),{code:'PROVIDERS_EXHAUSTED',status:(groqError as any)?.status});
   throw groqError || new Error('No server-side LLM provider configured');
 }
+
+/** All authenticated model paths inherit the system supervisor, including fallback calls. */
+export const completeTextWithFallback: typeof completeTextWithFallbackUnchecked = (messages,maxTokens,temperature=0.3,preferredProvider,options)=>
+  supervisedOperation('model', 'complete_text', {messages,max_tokens:maxTokens,temperature,provider:preferredProvider??null},
+    ()=>completeTextWithFallbackUnchecked(messages,maxTokens,temperature,preferredProvider,options));

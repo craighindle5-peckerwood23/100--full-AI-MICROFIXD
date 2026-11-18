@@ -175,7 +175,7 @@ export class PlannerService {
         let plan: PlannedTask[];
         try { plan = await this.d.plan(current); this.d.validateTaskBudget?.(plan); } catch (error) {
           await this.d.recordPlanningError?.(current,error);
-          await r.updateMissionStatus(current.mission_id, ['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) ? 'waiting' : 'failed');
+          await r.updateMissionStatus(current.mission_id, ['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED','METACOGNITIVE_HALT','METACOGNITIVE_ESCALATE','METACOGNITIVE_QUARANTINE'].includes((error as {code?:string})?.code) ? 'waiting' : 'failed');
           return r.getMission(current.mission_id);
         }
         const count = plan.reduce((n, t) => n + t.subtasks.length, 0);
@@ -247,7 +247,7 @@ export class PlannerService {
                 throw new Error('INVALID_OUTPUT_OR_MISSING_EVIDENCE');
             } catch (error) {
               await this.d.recordError(context, error, attempt);
-              if (['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) || (error as {code?:string})?.code === 'WAITING_APPROVAL' || (error as {code?:string})?.code === 'RECONCILIATION_REQUIRED') {
+              if (['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED','METACOGNITIVE_HALT','METACOGNITIVE_ESCALATE','METACOGNITIVE_QUARANTINE'].includes((error as {code?:string})?.code) || (error as {code?:string})?.code === 'WAITING_APPROVAL' || (error as {code?:string})?.code === 'RECONCILIATION_REQUIRED') {
                 await this.d.transaction(async tx => {if((error as {code?:string})?.code!=='RECONCILIATION_REQUIRED')await tx.setSubtaskAttempts(sub.subtask_id,attempt-1);await tx.updateSubtaskStatus(sub.subtask_id,'waiting_input');await tx.updateTaskStatus(task.task_id,'blocked');await tx.updateMissionStatus(current.mission_id,'waiting');});
                 return r.getMission(current.mission_id);
               }

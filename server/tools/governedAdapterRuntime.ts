@@ -1,4 +1,5 @@
 import {createHash, timingSafeEqual} from 'node:crypto';
+import {supervisedOperation} from '../metacognition/context';
 
 export type ToolEnvelope = Readonly<{
   missionId: string;
@@ -106,7 +107,7 @@ export class GovernedAdapterRuntime {
     if (!(await this.authorized(envelope))) throw new ToolExecutionError('NOT_AUTHORIZED', envelope.tool);
     let outcome: ToolOutcome;
     try {
-      const result = await adapter.execute(envelope.arguments, signal);
+      const result = await supervisedOperation('adapter',envelope.tool,envelope,()=>adapter.execute(envelope.arguments,signal));
       outcome = {status: 'succeeded', result, evidenceHash: createHash('sha256').update(JSON.stringify(result)).digest('hex')};
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
