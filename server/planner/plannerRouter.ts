@@ -46,7 +46,7 @@ export const submitMission:import('express').RequestHandler=async(req,res)=>{
   if(claimed){try{const {error}=await client.rpc('spine_commit',{p_tenant:tenant,p_mission:mission.mission_id,p_owner:owner,p_operations:[{op:'insert',kind:'missions',id:mission.mission_id,data:mission}]});if(error)throw error;}finally{await client.rpc('spine_lease',{p_tenant:tenant,p_mission:mission.mission_id,p_owner:owner,p_release:true});}}
   const {data,error:readError}=await client.from('spine_rows').select('data').eq('tenant_id',tenant).eq('kind','missions').eq('id',mission.mission_id).single();
   if(readError)throw readError;
-  if(data.data.objective!==mission.objective||canonicalJSON(data.data.constraints)!==canonicalJSON(mission.constraints))return res.status(409).json({code:'IDEMPOTENCY_CONFLICT'});
+  if(data.data.objective!==mission.objective||canonicalJSON({peer_review_mode:'standard',...data.data.constraints})!==canonicalJSON(mission.constraints))return res.status(409).json({code:'IDEMPOTENCY_CONFLICT'});
   res.status(202).json({...data.data,status_url:`/api/planner/missions/${mission.mission_id}`,...(res.locals.legacyMission?{run:projectMission(data.data),reply:'Mission queued; follow status_url for execution evidence.'}:{})});
  }catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
 };

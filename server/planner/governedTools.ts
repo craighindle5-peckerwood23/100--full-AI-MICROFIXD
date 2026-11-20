@@ -1,4 +1,4 @@
-import {readAuthorizedSource} from '../metacognition/authorizedSources';
+import {prepareAuthorizedSource} from '../metacognition/authorizedSources';
 import {createSupervisor} from '../metacognition/store';
 import {metacognitiveContext} from '../metacognition/context';
 import type {MetacognitiveSupervisor,Subject} from '../metacognition/supervisor';
@@ -40,16 +40,28 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
   if(!prior)return null;
   if(context.tenant_id!==tenant||context.mission_id!==mission)throw new Error('TENANT_MISMATCH');
   if(prior.request_hash!==requestHash(sub.tool_request))throw new Error('REQUEST_CHANGED');
-  if(prior.status!=='succeeded'){
-   if(sub.tool_request?.name==='repair_source_code'&&tenant===(process.env.MICROFIXD_REPAIR_OWNER_TENANT||'default')&&context.constraints.tool_approval_mode==='preauthorized'&&context.constraints.approval_actor){
-    const raw=await readCompletedRepair(client,{tenant,mission,subtask:context.subtask_id});
-    if(raw){const result=repairRecoveryResult(raw,tenant,context.subtask_id,prior.request_hash);const {error}=await client.rpc('spine_finish_tool',{p_tenant:tenant,p_mission:mission,p_subtask:context.subtask_id,p_owner:owner,p_hash:prior.request_hash,p_result:result});if(error)throw new Error('REPAIR_RECOVERY_COMMIT_FAILED');return result;}
-   }
-   throw new ExecutionPause('RECONCILIATION_REQUIRED');
+  const operation = subject(sub.tool_request!, context);
+  const trace = await supervisor.before(operation);
+  if (prior.status === 'succeeded') {
+   const result = prior.result as ExecutionResult;
+   await gateRecovered(operation, trace, result);
+   return result;
   }
-  return prior.result as ExecutionResult;
+  if (sub.tool_request?.name === 'repair_source_code' && tenant === (process.env.MICROFIXD_REPAIR_OWNER_TENANT || 'default') && context.constraints.tool_approval_mode === 'preauthorized' && context.constraints.approval_actor) {
+   const raw = await readCompletedRepair(client,{tenant,mission,subtask:context.subtask_id});
+   if (raw) {
+    const result = repairRecoveryResult(raw,tenant,context.subtask_id,prior.request_hash);
+    await gateRecovered(operation, trace, result);
+    const {error} = await client.rpc('spine_finish_tool',{p_tenant:tenant,p_mission:mission,p_subtask:context.subtask_id,p_owner:owner,p_hash:prior.request_hash,p_result:result});
+    if (error) throw new ExecutionPause('RECONCILIATION_REQUIRED');
+    return result;
+   }
+  }
+  throw new ExecutionPause('RECONCILIATION_REQUIRED');
  };
- const executeToolUnchecked=async(request:JSONObject,context:ExecutionContext):Promise<ExecutionResult>=>{
+ const gateRecovered = (operation:Subject, trace:string, result:ExecutionResult) =>
+  supervisor.candidate(operation,trace,result.normalized,{valid:Boolean(result.evidence && Object.keys(result.evidence).length),confidence:result.evidence?.confidence,recovered:true});
+ const executeToolUnchecked=async(request:JSONObject,context:ExecutionContext,entryTrace:string):Promise<ExecutionResult>=>{
   if(context.tenant_id!==tenant||context.mission_id!==mission)throw new Error('TENANT_MISMATCH');
   const name=String(request.name),tool=getTool(name),hash=requestHash(request);
   if(!tool||!ENABLED_TOOLS.includes(name)||!context.tool_permissions.includes(name))throw new Error('TOOL_NOT_PERMITTED');
@@ -69,7 +81,13 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
   }
   if(name==='push_file_to_github'&&!process.env.GITHUB_TOKEN?.trim())throw new Error('MISSING_GITHUB_CREDENTIALS');
   const prior=await run(context.subtask_id);
-  if(prior){if(prior.request_hash!==hash)throw new Error('REQUEST_CHANGED');if(prior.status==='succeeded')return prior.result as ExecutionResult;throw new ExecutionPause('RECONCILIATION_REQUIRED');}
+  if(prior){if(prior.request_hash!==hash)throw new Error('REQUEST_CHANGED');if(prior.status==='succeeded'){
+   const result=prior.result as ExecutionResult;
+   await gateRecovered(subject(request,context), entryTrace, result);
+   return result;
+  }throw new ExecutionPause('RECONCILIATION_REQUIRED');}
+  const readSource = name === 'read_authorized_source'
+   ? prepareAuthorizedSource({source_id: String(args.source_id), path: String(args.path)}, tenant) : null;
   // The database's immutable allowlist contains only these three read tools.
   // Other read tools still need an automatically recorded exact-action receipt.
   const protectedAction=!['read_public_page','get_github_repo','scan_for_security_issues'].includes(name);
@@ -109,7 +127,7 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
     else if(name==='scrape_url')raw={text:(await browser.getText(String((args as JSONObject).selector??'body'))).slice(0,16000),url:navigation!.url,title:navigation!.title};
     else raw=navigation!;
    }finally{await browser.stop();}
-  }else if(name==='read_authorized_source'){raw=JSON.parse(JSON.stringify(await readAuthorizedSource(args as any,tenant)));
+  }else if(readSource){raw=JSON.parse(JSON.stringify(await readSource()));
   }else if(name==='repair_source_code'){
    const input=args as JSONObject;
    const authorize=async()=>{
@@ -147,9 +165,14 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
   }
   if(raw&&typeof raw==='object'&&!Array.isArray(raw)&&('error' in raw||raw.success===false))throw new Error('TOOL_EXECUTION_FAILED');
   const result:ExecutionResult={raw,normalized:{result:raw},evidence:{tool:name,request_hash:hash,idempotency_key:context.idempotency_key,completed_at:new Date().toISOString()}};
-  await supervisor.candidate(subject(request,context),trace,result.normalized,{valid:Boolean(result.evidence.request_hash),confidence:result.evidence.confidence});
-  const {error:finishError}=await client.rpc('spine_finish_tool',{p_tenant:tenant,p_mission:mission,p_subtask:context.subtask_id,p_owner:owner,p_hash:hash,p_result:result});
-  if(finishError)throw new Error(finishError.code);
+  try {
+   await supervisor.candidate(subject(request,context),trace,result.normalized,{valid:Boolean(result.evidence.request_hash),confidence:result.evidence.confidence});
+   const {error}=await client.rpc('spine_finish_tool',{p_tenant:tenant,p_mission:mission,p_subtask:context.subtask_id,p_owner:owner,p_hash:hash,p_result:result});
+   if(error)throw new ExecutionPause('RECONCILIATION_REQUIRED');
+  } catch {
+   // The durable start receipt identifies the effect for reconciliation. Never dispatch it again.
+   throw new ExecutionPause('RECONCILIATION_REQUIRED');
+  }
   return result;
  };
  const executeTool=async(request:JSONObject,context:ExecutionContext):Promise<ExecutionResult>=>{
@@ -160,14 +183,9 @@ export function createGovernedTools(client:SupabaseClient,tenant:string,mission:
    if(!repairModel||!process.env.MICROFIXD_REPAIR_RUNNER_URL||!process.env.GITHUB_TOKEN)throw new Error('REPAIR_RUNNER_UNCONFIGURED');
   }
   const operation=subject(request,context);
-  return supervisor.run(operation,()=>metacognitiveContext.run({supervisor,subject:operation},()=>executeToolUnchecked(request,context)));
+  return supervisor.withTrace(operation,trace=>metacognitiveContext.run({supervisor,subject:operation},()=>executeToolUnchecked(request,context,trace)));
  };
- const recoverSupervised=async(sub:Subtask,context:ExecutionContext):Promise<ExecutionResult|null>=>{
-  const result=await recoverTool(sub,context);
-  if(result){const operation=subject(sub.tool_request!,context),trace=await supervisor.before(operation);await supervisor.candidate(operation,trace,result.normalized,{valid:Boolean(result.evidence&&Object.keys(result.evidence).length),confidence:result.evidence?.confidence,recovered:true});}
-  return result;
- };
- return {executeTool,recoverTool:recoverSupervised};
+ return {executeTool,recoverTool};
 }
 
 export function systemCapabilities(){

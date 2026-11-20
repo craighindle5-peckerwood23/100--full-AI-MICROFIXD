@@ -18,6 +18,6 @@ export async function watchedAgent<T>(timeoutMs:number,parent:AbortSignal|undefi
   try{
     signal.throwIfAborted();
     const interrupted=new Promise<never>((_,reject)=>{abortListener=()=>reject(signal.reason);signal.addEventListener('abort',abortListener,{once:true});});
-    return await Promise.race([Promise.resolve().then(()=>work(signal)),interrupted]);
+    return await Promise.race([Promise.resolve().then(()=>{signal.throwIfAborted();return work(signal);}),interrupted]);
   }finally{clearTimeout(timer);active.delete(id);if(abortListener!)signal.removeEventListener('abort',abortListener);}
 }

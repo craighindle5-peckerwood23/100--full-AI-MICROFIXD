@@ -241,3 +241,15 @@ test('evaluation gate persists a proposed-completion report without extra model 
  assert.ok(reports.some(m=>(m.content as any).kind==='mission_evaluation'));
  assert.equal(f.calls(),1);
 });
+
+test('a supervisor intervention on recovery parks the mission without replay',async()=>{
+ for (const code of ['METACOGNITIVE_HALT','METACOGNITIVE_ESCALATE','METACOGNITIVE_QUARANTINE']) {
+  const f=fixture();
+  const service=new PlannerService({...f.deps,recoverTool:async()=>{throw Object.assign(new Error(code),{code});}});
+  assert.equal((await service.planAndExecuteMission(f.mission)).status,'waiting');
+  const [task]=await f.repository.getTasks(f.mission.mission_id);
+  assert.equal(task.status,'blocked');
+  assert.equal((await f.repository.getSubtasks(task.task_id))[0].status,'waiting_input');
+  assert.equal(f.calls(),0);
+ }
+});

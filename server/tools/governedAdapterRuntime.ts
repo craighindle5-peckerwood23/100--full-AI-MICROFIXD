@@ -10,7 +10,7 @@ export type ToolEnvelope = Readonly<{
 }>;
 
 export type ToolOutcome = Readonly<{
-  status: 'succeeded' | 'failed';
+  status: 'succeeded' | 'failed' | 'reconciliation_required';
   result?: unknown;
   error?: string;
   evidenceHash: string;
@@ -106,12 +106,17 @@ export class GovernedAdapterRuntime {
     if (!adapter) throw new ToolExecutionError('UNKNOWN_TOOL', envelope.tool);
     if (!(await this.authorized(envelope))) throw new ToolExecutionError('NOT_AUTHORIZED', envelope.tool);
     let outcome: ToolOutcome;
+    let completed = false;
     try {
-      const result = await supervisedOperation('adapter',envelope.tool,envelope,()=>adapter.execute(envelope.arguments,signal));
+      const result = await supervisedOperation('adapter',envelope.tool,envelope,async()=>{
+        const value = await adapter.execute(envelope.arguments,signal);
+        completed = true;
+        return value;
+      });
       outcome = {status: 'succeeded', result, evidenceHash: createHash('sha256').update(JSON.stringify(result)).digest('hex')};
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      outcome = {status: 'failed', error: message, evidenceHash: createHash('sha256').update(message).digest('hex')};
+      outcome = {status: completed ? 'reconciliation_required' : 'failed', error: message, evidenceHash: createHash('sha256').update(message).digest('hex')};
     }
     await this.persist(envelope, outcome);
     return outcome;

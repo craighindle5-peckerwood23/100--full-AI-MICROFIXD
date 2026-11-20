@@ -220,7 +220,8 @@ export class PlannerService {
           if (recover) {
             let recovered: ExecutionResult | null;
             try { recovered = await recover(sub, context); } catch (error) {
-              if ((error as {code?:string})?.code !== 'RECONCILIATION_REQUIRED') throw error;
+              const code = (error as {code?:string})?.code;
+              if (!['RECONCILIATION_REQUIRED','METACOGNITIVE_HALT','METACOGNITIVE_ESCALATE','METACOGNITIVE_QUARANTINE'].includes(code ?? '')) throw error;
               await this.d.transaction(async tx => {await tx.updateSubtaskStatus(sub.subtask_id,'waiting_input');await tx.updateTaskStatus(task.task_id,'blocked');await tx.updateMissionStatus(current.mission_id,'waiting');});
               return r.getMission(current.mission_id);
             }

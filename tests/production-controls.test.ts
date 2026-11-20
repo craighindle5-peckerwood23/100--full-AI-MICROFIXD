@@ -91,6 +91,10 @@ test('standing owner authorization records exact receipts, preserves rejection, 
  const request={name:'store_memory',arguments:{content:'test memory',tags:'one, two'}};
  const runner=createGovernedTools(client,'tenant-a','mission-a','worker');
  try{
+  const deniedSource={name:'read_authorized_source',arguments:{source_id:'unprovisioned-test',path:'/manual'}};
+  await assert.rejects(()=>runner.executeTool(deniedSource,{...context,subtask_id:'source',tool_permissions:['read_authorized_source']}),/AUTHORIZED_SOURCE_DENIED/);
+  assert.equal(runs.has('source'),false);
+  assert.equal(receipts.has('source'),false);
   await runner.executeTool(request,context);assert.equal(receipts.get('store').status,'approved');assert.equal(receipts.get('store').decided_by,'owner-id');assert.equal(receipts.get('store').request_hash,requestHash(request));
   assert.equal(payload.session_id,'tenant-a:tools');assert.equal(payload.tenant_id,'tenant-a');assert.deepEqual(payload.tags,['one','two']);
   await runner.executeTool(request,context);assert.equal(calls,1);

@@ -70,6 +70,8 @@ export function createPlannerRuntime(client: SupabaseClient, tenant: string, mis
     let reservation:string|undefined;
     const result=await completeTextWithFallback(messages,maxTokens,temperature,provider,{signal:options?.signal,beforeAttempt:async selected=>{
       options?.signal?.throwIfAborted();
+      const activeMission = await repository.getMission(mission);
+      if (!['queued','running'].includes(activeMission.status)) throw new Error('MISSION_STOPPED');
       reservation=randomUUID();
       const {data,error}=await client.rpc('spine_reserve_call',{p_tenant:tenant,p_mission:mission,p_owner:owner,p_run:reservation,p_provider:selected,p_tokens:tokens});
       if(error)throw new Error(error.code);

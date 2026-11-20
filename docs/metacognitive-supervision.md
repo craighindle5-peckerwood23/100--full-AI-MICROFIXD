@@ -51,7 +51,7 @@ Existing public readers and bounded browser tools remain available. New `read_au
 [{"id":"manuals","origin":"https://manuals.example.com","paths":["/document"],"tenants":["tenant-id"],"token_env":"MICROFIXD_SOURCE_MANUALS_TOKEN"}]
 ```
 
-Store this configuration as `MICROFIXD_AUTHORIZED_SOURCES_JSON`; keep the named token in the server environment. Only exact GET paths are accepted. DNS addresses are validated and pinned for the connection, redirects are rejected, and content is limited to 256 KB/15 seconds. Results include source URL, retrieval time and a content hash, labeled as untrusted reference data.
+Store this configuration as `MICROFIXD_AUTHORIZED_SOURCES_JSON`; keep the named token in the server environment. Provision endpoints that omit credentials, including encoded credentials, from their response bodies. The reader rejects responses containing the configured bearer token. Only exact GET paths are accepted. DNS addresses are validated and pinned for the connection, redirects are rejected, and content is limited to 256 KB/15 seconds. Results include source URL, retrieval time and a content hash, labeled as untrusted reference data.
 
 This connector does not bypass site permissions, CAPTCHAs, MFA, subscriptions or account restrictions. It does not create a cross-call authenticated browser session. Existing explicit browser login and isolated workflow limitations still apply. No private sources are configured by this code change.
 

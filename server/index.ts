@@ -242,7 +242,8 @@ app.get("/api/mcp/manifest", (_, res) => {
 
 // ── Authentication and rate limiting for operational APIs ─────────────────
 app.use((req, res, next) => {
-  if (!(req.path === "/api" || req.path.startsWith("/api/"))) {
+  const path = req.path.toLowerCase();
+  if (!(path === "/api" || path.startsWith("/api/"))) {
     next();
     return;
   }

@@ -6,12 +6,13 @@ import {MetacognitiveIntervention, type MetacognitiveSupervisor, type Subject} f
 /** Mount after authentication, before every protected API router. No body/header can disable it. */
 export function metacognitiveMiddleware(factory:(tenant:string)=>MetacognitiveSupervisor=tenant=>createSupervisor(metacognitiveClient(),tenant)):RequestHandler {
   return (req,res,next)=>{
-    if(!req.path.startsWith('/api/')||req.path.startsWith('/api/health')||req.path.startsWith('/api/metacognition/'))return next();
+    const path = req.path.toLowerCase().replace(/\/$/, '');
+    if(!path.startsWith('/api/') || path === '/api/health' || path.startsWith('/api/health/') || path.startsWith('/api/metacognition/'))return next();
     const tenant=(req as any).microfixdTenantId;
     if(!tenant)return void res.status(403).json({code:'AUTH_REQUIRED'});
     // Emergency recovery and observation must remain accessible while execution is stopped.
-    if(['GET','HEAD','OPTIONS'].includes(req.method)&&!['/api/playwright/links','/api/automotive/vin/','/api/automotive/oem/'].some(p=>req.path.startsWith(p)))return next();
-    if(req.path==='/api/command/oversight/kill-switch'||req.path==='/api/playwright/stop')return next();
+    if(['GET','HEAD','OPTIONS'].includes(req.method)&&!['/api/playwright/links','/api/automotive/vin/','/api/automotive/oem/'].some(p=>path.startsWith(p)))return next();
+    if(path==='/api/command/oversight/kill-switch'||path==='/api/playwright/stop')return next();
     let supervisor:MetacognitiveSupervisor;
     try{supervisor=factory(tenant);}catch{return void res.status(503).json({code:'METACOGNITIVE_STORAGE_UNAVAILABLE'});}
     const subject:Subject={tenant_id:tenant,agent_id:'api:'+String((req as any).microfixdRole),action:req.method+' '+req.path,

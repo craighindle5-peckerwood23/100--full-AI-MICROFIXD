@@ -10,5 +10,5 @@ export function parsePlanPortfolio(content:string):{steps:unknown[];alternatives
     ||!p.options.some((o:any)=>o.id===p.selected))throw new Error('INVALID_PLAN_PORTFOLIO');
   const choice=p.options.find((o:any)=>o.id===p.selected);
   if(!choice.steps.length)throw new MetacognitiveIntervention({verdict:'escalate',reasons:['PLANNING_EVIDENCE_INSUFFICIENT'],correction:'Gather missing evidence or an operator decision before generating an executable plan.'});
-  return {steps:choice.steps,selected:p.selected,alternatives:p.options.map((o:any)=>({id:o.id,kind:o.id==='defer'?'defer':'proceed',outcome:o.outcome,failure:o.failure,evidence:[],uncertainty:'unknown',human_view:o.human_view,analytical_view:o.analytical_view,missing_evidence:o.missing_evidence,authority:'model_report'}))};
+  return {steps:choice.steps,selected:p.selected,alternatives:p.options.map((o:any)=>({id:o.id,kind:o.steps.length===0?'defer':'proceed',outcome:o.outcome,failure:o.failure,evidence:[],uncertainty:'unknown',human_view:o.human_view,analytical_view:o.analytical_view,missing_evidence:o.missing_evidence,authority:'model_report'}))};
 }

@@ -1,4 +1,5 @@
 import {Router} from 'express';
+import {orchestrationOversight} from '../orchestration/orchestrationOversight';
 import {METACOGNITIVE_POLICY} from './supervisor';
 import {metacognitiveClient} from './store';
 export const metacognitiveRouter=Router();
@@ -11,7 +12,9 @@ metacognitiveRouter.get('/status',async(req,res)=>{
       client.from('metacognitive_events').select('event_id,timestamp,agent_id,action,phase,assessment,confidence').eq('tenant_id',tenant).order('sequence',{ascending:false}).limit(30),
     ]);
     if(control.error||events.error)throw new Error('STORAGE_UNAVAILABLE');
-    res.json({policy:METACOGNITIVE_POLICY,halted:control.data?.halted??false,recent:events.data,
+    const durable = control.data?.halted === true;
+    const local = orchestrationOversight.getInvariants().emergencyKillEngaged;
+    res.json({policy:METACOGNITIVE_POLICY,halted:durable || local,stop_sources:{durable,local},recent:events.data,
       limits:['Alternative analysis is bounded, not exhaustive.','Confidence is uncalibrated unless separately validated.','A stop prevents subsequent dispatch; it does not reverse external effects.']});
   }catch{res.status(503).json({code:'METACOGNITIVE_STORAGE_UNAVAILABLE'});}
 });

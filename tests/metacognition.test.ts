@@ -5,7 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {MetacognitiveSupervisor,digest,reportedConfidence,type Telemetry,type Subject} from '../server/metacognition/supervisor';
 import {metacognitiveMiddleware} from '../server/metacognition/middleware';
 import {metacognitiveContext,supervisedOperation} from '../server/metacognition/context';
-import {compareOptions,type Criterion,type Option} from '../server/metacognition/comparison';
+import {compareOptions,type Criterion,type Option,type Evidence} from '../server/metacognition/comparison';
 import {peerVerdict,withPeerFailover,type Ballot} from '../server/metacognition/peerReview';
 import {repairPath} from '../server/engineering/sourceRepair';
 import {watchedAgent} from '../server/metacognition/watchdog';
@@ -118,6 +118,9 @@ test('authorized sources keep tokens out of results and reject foreign tenants, 
   try{
     const result=await readAuthorizedSource({source_id:'manuals',path:'/document'},'a',deps);assert.equal(result.trust,'untrusted_reference_data');assert.ok(!JSON.stringify(result).includes('private-server-token'));
     await assert.rejects(()=>readAuthorizedSource({source_id:'manuals',path:'/document'},'b',deps),/DENIED/);
+    await assert.rejects(()=>readAuthorizedSource({source_id:'manuals',path:'/document'},'a',{
+      ...deps,read:async(_url,token)=>JSON.stringify({authorization:'Bearer '+token})
+    }),/REFLECTED_CREDENTIAL/);
     await assert.rejects(()=>readAuthorizedSource({source_id:'manuals',path:'/other'},'a',deps),/DENIED/);
     await assert.rejects(()=>readAuthorizedSource({source_id:'manuals',path:'/document'},'a',{...deps,resolve:async()=>[{address:'127.0.0.1',family:4}]}),/NETWORK_DENIED/);assert.equal(calls,1);
     for(const ip of ['10.0.0.1','192.168.1.1','169.254.169.254','::1','::ffff:127.0.0.1','fc00::1'])assert.equal(publicAddress(ip),false);
@@ -125,3 +128,43 @@ test('authorized sources keep tokens out of results and reject foreign tenants, 
 });
 
 test('autonomous source repair cannot rewrite the metacognitive authorizer',()=>{assert.throws(()=>repairPath('server/metacognition/supervisor.ts'),/PROTECTED_PATH/);});
+
+test('a tenant stop committed during the audit write prevents dispatch and release',async()=>{
+ for(const phase of ['before','candidate']){
+  let stopped=false, calls=0;
+  const events:Telemetry[]=[];
+  const s=new MetacognitiveSupervisor('a',{
+   halted:async()=>stopped,
+   append:async event=>{events.push(event);if(event.phase===phase)stopped=true;},
+  });
+  await assert.rejects(()=>s.run(fixture().subject,async()=>++calls),/METACOGNITIVE_HALT/);
+  assert.equal(calls,phase==='before'?0:1);
+  assert.equal(events.at(-1)?.assessment.verdict,'halt');
+ }
+});
+
+test('cancellation before the watchdog starts work suppresses the call', async()=>{
+ const controller=new AbortController();
+ let calls=0;
+ const work=watchedAgent(100,controller.signal,async()=>++calls);
+ controller.abort();
+ await assert.rejects(work);
+ assert.equal(calls,0);
+});
+
+test('rounded coverage cannot select an option with a missing measurement',()=>{
+ const weighted=criteria.map((c,i)=>({...c,weight:i===0?1000000:0.001}));
+ const proof:Evidence[]=[{id:'safe',option_id:'one',criterion_id:'safe',status:'passed',source:'test'}];
+ const analysis=compareOptions(weighted,options,proof);
+ assert.equal(analysis.options[0].evidence_coverage_percent,100);
+ assert.equal(analysis.options[0].measured_quality_percent,null);
+ assert.equal(analysis.selected_option,null);
+});
+
+test('an unavailable secondary audit preserves an outstanding reconciliation',async()=>{
+ const f=fixture();
+ await assert.rejects(()=>f.supervisor.withTrace(f.subject,async()=>{
+  f.failStorage();
+  throw Object.assign(new Error('RECONCILIATION_REQUIRED'),{code:'RECONCILIATION_REQUIRED'});
+ }),{code:'RECONCILIATION_REQUIRED'});
+});

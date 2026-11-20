@@ -68,7 +68,7 @@ export class MetacognitiveSupervisor {
 
   private async checks(subject: Subject): Promise<Assessment> {
     if (!this.tenant || subject.tenant_id !== this.tenant) return {verdict:'halt',reasons:['TENANT_MISMATCH'],correction:'Restore authenticated tenant scope.'};
-    if (this.localHalted() || await this.store.halted(this.tenant)) return {verdict:'halt',reasons:['EMERGENCY_STOP'],correction:'An administrator must review and reset the stop.'};
+    if (await this.store.halted(this.tenant) || this.localHalted()) return {verdict:'halt',reasons:['EMERGENCY_STOP'],correction:'An administrator must review and reset the stop.'};
     if (subject.deadline_at !== undefined && (typeof subject.deadline_at !== 'string' || !Number.isFinite(Date.parse(subject.deadline_at)) || Date.now() >= Date.parse(subject.deadline_at))) return {verdict:'halt',reasons:['DEADLINE_EXCEEDED'],correction:'Review the deadline before resuming.'};
     if (subject.permitted === false) return {verdict:'halt',reasons:['ACTION_NOT_PERMITTED'],correction:'Use an explicitly permitted action.'};
     return allow();
@@ -96,12 +96,22 @@ export class MetacognitiveSupervisor {
     };
     try {await this.store.append(event);} catch {throw new Error('METACOGNITIVE_TELEMETRY_UNAVAILABLE');}
   }
+  private async confirmAllowed(subject: Subject, trace: string, phase: Telemetry['phase'], decision: Assessment, started: number) {
+    if (decision.verdict !== 'allow') throw new MetacognitiveIntervention(decision);
+    let latest: Assessment;
+    try { latest = await this.checks(subject); }
+    catch { throw new Error('METACOGNITIVE_CONTROL_UNAVAILABLE'); }
+    if (latest.verdict !== 'allow') {
+      await this.record(subject, trace, phase, latest, started);
+      throw new MetacognitiveIntervention(latest);
+    }
+  }
   async before(subject: Subject): Promise<string> {
     const trace=randomUUID(),started=performance.now();
     let decision:Assessment;
     try {decision=await this.checks(subject);} catch {throw new Error('METACOGNITIVE_CONTROL_UNAVAILABLE');}
     await this.record(subject,trace,'before',decision,started);
-    if(decision.verdict!=='allow')throw new MetacognitiveIntervention(decision);
+    await this.confirmAllowed(subject, trace, 'before', decision, started);
     return trace;
   }
   async candidate(subject: Subject, trace: string, output: unknown, options: {valid?: boolean; confidence?: unknown; recovered?: boolean;started?:number} = {}): Promise<void> {
@@ -112,19 +122,28 @@ export class MetacognitiveSupervisor {
       else if(decision.verdict==='allow'&&confidence.score!==null&&confidence.score<METACOGNITIVE_POLICY.minReportedConfidence)decision={verdict:'escalate',reasons:['LOW_REPORTED_CONFIDENCE'],correction:'Gather independent evidence or request operator review before proceeding.'};
     }
     await this.record(subject,trace,options.recovered?'recovered':'candidate',decision,started,output,confidence);
-    if(decision.verdict!=='allow')throw new MetacognitiveIntervention(decision);
+    await this.confirmAllowed(subject, trace, options.recovered ? 'recovered' : 'candidate', decision, started);
   }
   async run<T>(subject: Subject, work: () => Promise<T>, validate: (output:T)=>boolean = () => true): Promise<T> {
-    const trace=await this.before(subject),started=performance.now();
-    try {
+    return this.withTrace(subject, async (trace, started) => {
       const result=await work();
       await this.candidate(subject,trace,result,{valid:validate(result),started});
       return result;
-    } catch(error) {
+    });
+  }
+  async withTrace<T>(subject: Subject, work: (trace: string, started: number) => Promise<T>): Promise<T> {
+    const trace=await this.before(subject),started=performance.now();
+    try { return await work(trace, started); }
+    catch(error) {
       if(!(error instanceof MetacognitiveIntervention)) {
         const raw=(error as {code?:unknown})?.code??(error instanceof Error?error.message:'');
         const code=typeof raw==='string'&&/^[A-Z][A-Z0-9_]{2,80}$/.test(raw)?raw:'EXECUTION_FAILED';
-        await this.record(subject,trace,'failed',{verdict:'escalate',reasons:[code],correction:'Inspect failure evidence; retry only under the existing bounded retry and idempotency policy.'},started,undefined,reportedConfidence(null),code);
+        try {
+          await this.record(subject,trace,'failed',{verdict:'escalate',reasons:[code],correction:'Inspect failure evidence; retry only under the existing bounded retry and idempotency policy.'},started,undefined,reportedConfidence(null),code);
+        } catch (auditError) {
+          // A lost audit store must not turn an uncertain effect into a retry.
+          if (code !== 'RECONCILIATION_REQUIRED') throw auditError;
+        }
       }
       throw error;
     }
