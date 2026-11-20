@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { retrieve } from './driveiq/retriever';
 import { generateHypotheses } from './torquelogic/hypothesisGenerator';
 import { safetyAlerts } from './redline/safetyEngine';
-import { knowledgeSchema } from './schemas';
+import { knowledgeSchema, type Knowledge } from './schemas';
 
 const id = z.string().uuid();
 const evidence = z.object({
@@ -31,14 +31,20 @@ export function analyzeVectorCase(input: unknown) {
   const applicable = vehicle.year && vehicle.make && vehicle.model && vehicle.engine
     ? retrieve(records,{id:s.case_id,year:vehicle.year,make:vehicle.make,model:vehicle.model,engine:vehicle.engine},codes,s.complaint) : [];
   // Return references to reviewed source procedures. Vector displays the original procedure.
-  const proposals = generateHypotheses(applicable).flatMap(h => {
-    const refs = s.evidence.filter(e => e.dtc && h.evidence.dtcs.includes(e.dtc)).map(e=>e.id);
-    if (!refs.length || h.evidence.test.risk !== 'routine' || s.completed_test_refs.includes(h.evidence.id)) return [];
-    return [{ reference_id:h.evidence.id, supporting_evidence:refs, grade:'plausible' as const }];
-  }).sort((a,b) => {
-    const minutes = (id:string) => applicable.find(k=>k.id===id)!.test.minutes;
-    return b.supporting_evidence.length/minutes(b.reference_id)-a.supporting_evidence.length/minutes(a.reference_id) || a.reference_id.localeCompare(b.reference_id);
+  const support = new Map<string,string[]>();
+  const completed = new Set(s.completed_test_refs);
+  const eligible = applicable.filter(record => {
+    if (record.test.risk !== 'routine' || completed.has(record.id)) return false;
+    const refs = s.evidence.filter(item => item.dtc && record.dtcs.includes(item.dtc)).map(item => item.id);
+    if (!refs.length) return false;
+    support.set(record.id, refs);
+    return true;
   });
+  const score = (record: Knowledge) => support.get(record.id)!.length / record.test.minutes;
+  eligible.sort((a,b) => score(b) - score(a) || a.id.localeCompare(b.id));
+  const proposals = generateHypotheses(eligible).map(({evidence}) => ({
+    reference_id: evidence.id, supporting_evidence: support.get(evidence.id)!, grade: 'plausible' as const,
+  }));
   const reason = flags.length ? 'Safety review required' : s.open_contradictions.length ? 'Resolve open contradictions'
     : !proposals.length ? 'No uncompleted, applicable routine test with matching observed evidence' : null;
   return {schema_version:s.schema_version,pipeline_version:s.pipeline_version,engine_version:'microfixd-automotive-1',
@@ -59,9 +65,22 @@ export function vectorCaseGateway(secret = process.env.VECTOR_CASE_GATEWAY_TOKEN
       if(capability==='policy'){res.json({run_id:output.run_id,flags:output.safety_flags});return;}
       if(capability==='challenge'){
         const input=snapshot.parse(req.body);
-        const competing=new Set(output.proposals.map(p=>input.evidence.find(e=>e.id===p.reference_id)?.knowledge?.cause));
+        const evidenceById = new Map(input.evidence.map(item => [item.id,item]));
+        const causeByCode = new Map<string,string>();
+        const competing = output.proposals.some(proposal => {
+          const cause = evidenceById.get(proposal.reference_id)?.knowledge?.cause.toLowerCase();
+          if (!cause) return false;
+          return proposal.supporting_evidence.some(id => {
+            const code = evidenceById.get(id)?.dtc;
+            if (!code) return false;
+            const previous = causeByCode.get(code);
+            if (previous && previous !== cause) return true;
+            causeByCode.set(code,cause);
+            return false;
+          });
+        });
         const reasons=input.open_contradictions.map(id=>'Open contradiction '+id);
-        if(competing.size>1) reasons.push('Several applicable source procedures explain the same observed codes. Compare competing causes before selecting a test.');
+        if(competing) reasons.push('Several applicable source procedures explain the same observed codes. Compare competing causes before selecting a test.');
         res.json({run_id:output.run_id,reasons});return;
       }
       if(capability!=='diagnostic'){res.status(422).json({code:'UNKNOWN_CAPABILITY'});return;}
