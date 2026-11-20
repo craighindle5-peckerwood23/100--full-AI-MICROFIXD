@@ -10,3 +10,5 @@ coverage/
 server/hitl/data/
 server/sandbox/workspace/
 server/sandbox/session_log.jsonl
+
+supabase/.temp/

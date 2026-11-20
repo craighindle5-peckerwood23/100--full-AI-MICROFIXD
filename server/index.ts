@@ -242,7 +242,8 @@ app.get("/api/mcp/manifest", (_, res) => {
 
 // ── Authentication and rate limiting for operational APIs ─────────────────
 app.use((req, res, next) => {
-  if (!(req.path === "/api" || req.path.startsWith("/api/"))) {
+  const path = req.path.toLowerCase();
+  if (!(path === "/api" || path.startsWith("/api/"))) {
     next();
     return;
   }
@@ -262,6 +263,12 @@ app.use((req, res, next) => {
     })
     .catch(next);
 });
+
+// Mandatory supervisor after RBAC; all protected routers below inherit this boundary.
+app.use(async (req,res,next)=>{
+  try{const {metacognitiveMiddleware}=await import('./metacognition/middleware');metacognitiveMiddleware()(req,res,next);}catch(error){next(error);}
+});
+app.use('/api/metacognition',lazyRouter(async()=>{const {metacognitiveRouter}=await import('./metacognition/router');return metacognitiveRouter;}));
 
 // Authenticated, read-only runtime diagnostics. Bootstrap /api/health is liveness only.
 // These checks deliberately do not create or mutate missions/approvals.

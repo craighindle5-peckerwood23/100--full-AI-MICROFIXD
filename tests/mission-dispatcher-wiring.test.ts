@@ -50,3 +50,19 @@ test('external write without retry safety never repeats failed action', async ()
   assert.equal(result.status,'FAILED');
   assert.equal(attempts,1);
 });
+
+test('a completed adapter call rejected by the release gate waits for reconciliation',async()=>{
+  const {metacognitiveContext} = await import('../server/metacognition/context');
+  const {MetacognitiveSupervisor} = await import('../server/metacognition/supervisor');
+  let stopped=false, calls=0;
+  const supervisor = new MetacognitiveSupervisor('tenant',{halted:async()=>stopped,append:async()=>{}});
+  const subject = {tenant_id:'tenant',agent_id:'worker',action:'execute',input:{}};
+  const saved:string[]=[];
+  const runtime=new GovernedAdapterRuntime(async()=>true,async(_e,outcome)=>{saved.push(outcome.status);});
+  runtime.register({name:'safe_action',async execute(){calls++;stopped=true;return {ok:true};}});
+  const [result]=await metacognitiveContext.run({supervisor,subject},()=>new MissionDispatcher(runtime)
+    .dispatchMissionBatch([{...task('write'),retrySafety:'idempotent'}]));
+  assert.equal(calls,1);
+  assert.deepEqual(saved,['reconciliation_required']);
+  assert.equal(result.error,'RECONCILIATION_REQUIRED');
+});

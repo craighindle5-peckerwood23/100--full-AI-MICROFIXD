@@ -1,4 +1,5 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
+import {createSupervisor} from '../metacognition/store';
 import {repairPath,repairURL} from './sourceRepair';
 
 /** Observe an already-promoted repair after a process restart. Never replay an external write. */
@@ -31,13 +32,17 @@ export async function recoverWaitingRepairs(db:SupabaseClient){
  const {data,error}=await db.from('spine_rows').select('data').eq('tenant_id',tenant).eq('kind','missions').eq('data->>status','waiting')
   .contains('data',{constraints:{tool_approval_mode:'preauthorized',tool_permissions:['repair_source_code']}}).limit(4);
  if(error)throw new Error('REPAIR_RECOVERY_STORAGE_FAILED');
+ const supervisor = createSupervisor(db, tenant);
  for(const row of data??[]){
   const mission=row.data;if(!mission.constraints?.approval_actor)continue;
   const {data:runs,error:runError}=await db.from('spine_tool_runs').select('subtask_id,request_hash').eq('tenant_id',tenant).eq('mission_id',mission.mission_id).eq('request->>name','repair_source_code').in('status',['running','uncertain']).limit(1);
   if(runError)continue;
   for(const run of runs??[])try{
+   const subject = {tenant_id:tenant, mission_id:mission.mission_id, subtask_id:run.subtask_id, agent_id:'repair-recovery', action:'repair_source_code', input:{request_hash:run.request_hash}, deadline_at:mission.constraints.deadline_at};
+   const trace = await supervisor.before(subject);
    const raw=await readCompletedRepair(db,{tenant,mission:mission.mission_id,subtask:run.subtask_id});if(!raw)continue;
    const result=repairRecoveryResult(raw,tenant,run.subtask_id,run.request_hash);
+   await supervisor.candidate(subject,trace,result.normalized,{recovered:true});
    const {error:failure}=await db.rpc('spine_reconcile',{p_tenant:tenant,p_mission:mission.mission_id,p_subtask:run.subtask_id,p_hash:run.request_hash,p_result:result,p_actor:'verified-render-recovery'});
    if(failure)console.error('[repair] verified completion deferred; mission lease or state changed');
   }catch{console.error('[repair] completion observation unavailable; no external action repeated');}
