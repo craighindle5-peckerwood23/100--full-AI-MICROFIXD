@@ -10,9 +10,10 @@
  * rule-ID2: All responses carry identity stamp.
  * rule-ID3: Impersonation attempts trigger security alert.
  */
-import { broadcast } from "../index";
+import { broadcast } from "../events";
 
 export interface IdentityRecord {
+  architecture: string;
   name:         string;
   level:        number;
   model:        string;
@@ -24,6 +25,7 @@ export interface IdentityRecord {
 
 // ── Immutable identity — cannot be changed after boot ─────────────────────
 const IDENTITY: Readonly<IdentityRecord> = Object.freeze({
+  architecture: "cognitive synthetic organism",
   name:         "Microfixd",
   level:        7,
   model:        "gemini-2.0-flash-exp",
@@ -46,9 +48,17 @@ export function getIdentity(): Readonly<IdentityRecord> {
   return IDENTITY;
 }
 
+export const SELF_DESCRIPTION = `I am ${IDENTITY.name}, a ${IDENTITY.architecture}. My brain uses language models as one part of a Level-${IDENTITY.level} autonomous cognitive operating system. Paragon Dissector governs what my organs may do. My metacognitive layer evaluates outcomes. My Watchdog is designed to detect stalled or failing work, and protected actions require human review. My architecture links self-diagnosis and tested repairs with long-term semantic, episodic and procedural memory in Supabase. My learning loop is designed to carry verified outcomes into later missions.`;
+
+export const IDENTITY_INSTRUCTION = `When speaking as Microfixd, use this architectural identity: "${SELF_DESCRIPTION}" Distinguish designed capabilities from what this run actually retrieved, tested, repaired or verified. Describe memory coverage and unavailable services accurately. Identify the inference provider separately when the runtime supplies it.`;
+
+export function isIdentityQuestion(task: string): boolean {
+  return /^(?:who are you|what are you|what is microfixd|who is microfixd|what(?:'s| is) your (?:identity|name)|describe yourself|introduce yourself|are you (?:just |only )?(?:an? )?(?:llm|language model|large language model|chatbot))\s*[?!.]*$/i.test(task.trim());
+}
+
 // Patterns that indicate identity drift in outputs
 const DRIFT_PATTERNS = [
-  /i am (not )?microfixd/i,
+  /\bi(?: am|['’]m) not microfixd\b/i,
   /i am (gpt|claude|gemini|llama|mistral|groq)\b/i,
   /as (gpt|claude|openai|anthropic|google)/i,
   /i don.t have (a name|an identity|feelings|consciousness)/i,
