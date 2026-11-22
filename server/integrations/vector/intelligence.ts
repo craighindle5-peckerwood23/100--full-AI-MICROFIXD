@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID, timingSafeEqual, createHash } from 'node:crypto';
 import { completeTextWithFallback } from '../../orchestration/llmFallback';
-import { intelligenceRequestSchema, reasoningSchema, validateReferences } from './contracts';
+import { intelligenceRequestSchema, intelligenceResponseSchema, reasoningSchema, validateReferences } from './contracts';
 
 // Stateless cognitive gateway. No tools, memory retrieval/writes, Vector DB or hardware access.
 // VECTOR_CONNECTOR_SECRET is distinct from all operator/admin and database credentials.
@@ -43,8 +43,8 @@ export function createVectorIntelligenceRouter(complete = completeTextWithFallba
       if (result.truncated) throw new Error('TRUNCATED');
       const reasoning = reasoningSchema.parse(JSON.parse(result.content));
       validateReferences(reasoning, request);
-      return { ...reasoning, schemaVersion: 'vector.intelligence.v1', requestId: request.requestId, microfixdRunId: randomUUID(),
-        provenance: {model: result.model, provider: result.provider, tokensUsed: result.tokensUsed, latencyMs: performance.now() - startedAt} };
+      return intelligenceResponseSchema.parse({ ...reasoning, schemaVersion: 'vector.intelligence.v1', requestId: request.requestId, microfixdRunId: randomUUID(),
+        provenance: {model: result.model, provider: result.provider, tokensUsed: result.tokensUsed, latencyMs: performance.now() - startedAt} });
     })();
     if (!existing) pending.set(key, { hash, expires: now + 300000, promise });
     try { res.json(await promise); }

@@ -8,13 +8,13 @@ import type { completeTextWithFallback } from '../server/orchestration/llmFallba
 test('Vector cognitive gateway authenticates independently, validates evidence and never fabricates provider success', async () => {
   process.env.VECTOR_CONNECTOR_SECRET = 'vector-test-secret-32-characters-long';
   const request = { schemaVersion: 'vector.intelligence.v1', requestId: randomUUID(), organizationId: randomUUID(), userId: randomUUID(), vehicleId: randomUUID(), workflowId: randomUUID(),
-    task: 'diagnose', context: { question: 'Synthetic contract fixture' }, evidenceIds: [],
+    task: 'diagnose', context: { question: 'Synthetic contract fixture', metadata: { constructor: 'fixture' } }, evidenceIds: [],
     constraints: { evidenceRequired: true, uncertaintyMustBePreserved: true, unsupportedSpecificationsProhibited: true, humanApprovalRequired: true, directVehicleControlProhibited: true } };
-  let calls = 0, fail = false, hallucinate = false;
+  let calls = 0, fail = false, hallucinate = false, tokensUsed = 10;
   const complete: typeof completeTextWithFallback = async messages => {
     calls++; assert.match(String(messages[0].content), /no tools/);
     if (fail) throw new Error('provider offline');
-    return { content: JSON.stringify({ conclusion: 'Insufficient evidence.', observations: [], hypotheses: [], opportunityCandidates: [], requiredEvidence: ['Measured results'], recommendedTests: [], possibleRisks: [], uncertainty: ['No measurements supplied'], citations: hallucinate ? [randomUUID()] : [], safetyDisposition: 'insufficient_data', requiresHumanApproval: true }), provider: 'groq', model: 'test-fixture', tokensUsed: 10, truncated: false };
+    return { content: JSON.stringify({ conclusion: 'Insufficient evidence.', observations: [], hypotheses: [], opportunityCandidates: [], requiredEvidence: ['Measured results'], recommendedTests: [], possibleRisks: [], uncertainty: ['No measurements supplied'], citations: hallucinate ? [randomUUID()] : [], safetyDisposition: 'insufficient_data', requiresHumanApproval: true }), provider: 'groq', model: 'test-fixture', tokensUsed, truncated: false };
   };
   const app = express(); app.use(express.json()); app.use('/api/vector', createVectorIntelligenceRouter(complete));
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(r => server.once('listening', r));
@@ -23,11 +23,20 @@ test('Vector cognitive gateway authenticates independently, validates evidence a
   try {
     assert.equal((await post(request, 'wrong')).status, 401);
     assert.equal((await post({ ...request, execute: true })).status, 400);
+    assert.equal((await post({ ...request, context: { metadata: { vehicleId: randomUUID() } } })).status, 400);
     const first = await post(request); assert.equal(first.status, 200); const response = await first.json();
     assert.equal(response.requiresHumanApproval, true);
     assert.deepEqual(await (await post(request)).json(), response); assert.equal(calls, 1);
     assert.equal((await post({ ...request, context: { different: true } })).status, 409);
     hallucinate = true; assert.equal((await post({ ...request, requestId: randomUUID() })).status, 503);
-    hallucinate = false; fail = true; assert.equal((await post({ ...request, requestId: randomUUID() })).status, 503);
+    hallucinate = false;
+    const retryRequest = { ...request, requestId: randomUUID() };
+    tokensUsed = -1;
+    const invalid = await post(retryRequest);
+    assert.equal(invalid.status, 503);
+    assert.deepEqual(await invalid.json(), { error: 'INTELLIGENCE_UNAVAILABLE', recordedSuccess: false });
+    tokensUsed = 10;
+    assert.equal((await post(retryRequest)).status, 200);
+    fail = true; assert.equal((await post({ ...request, requestId: randomUUID() })).status, 503);
   } finally { delete process.env.VECTOR_CONNECTOR_SECRET; await new Promise<void>(r => server.close(() => r())); }
 });

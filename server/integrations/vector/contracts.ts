@@ -35,7 +35,7 @@ export const intelligenceRequestSchema = z.object({
     if(Array.isArray(value)){value.forEach((item,index)=>walk(item,[...path,index],depth+1));return}
     if(!value||typeof value!=='object')return
     for(const [key,item] of Object.entries(value)){
-      if(expected[key]!==undefined&&item!==expected[key])ctx.addIssue({code:'custom',path:[...path,key],message:'Context scope mismatch'})
+      if(Object.hasOwn(expected,key)&&item!==expected[key])ctx.addIssue({code:'custom',path:[...path,key],message:'Context scope mismatch'})
       walk(item,[...path,key],depth+1)
     }
   }
