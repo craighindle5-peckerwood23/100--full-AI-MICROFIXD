@@ -54,6 +54,9 @@ export class MissionDispatcher {
       try {
         const response = await this.runtime.execute(envelope, AbortSignal.timeout(task.timeoutMs));
         if (response.status === 'succeeded') return {taskId: task.taskId, missionId: task.missionId, status: 'SUCCESS', adapterResponse: response, timestamp: stamp()};
+        if (response.status === 'reconciliation_required') {
+          return {taskId:task.taskId, missionId:task.missionId, status:'FAILED', adapterResponse:response, error:'RECONCILIATION_REQUIRED', timestamp:stamp()};
+        }
         lastError = response.error ?? 'Adapter execution failed';
         // Only explicitly idempotent or read-only operations may be retried.
         if (task.retrySafety && attempt < task.maxRetries) {
