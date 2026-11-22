@@ -62,6 +62,9 @@ test('brain recalls before inference and persists the completed response', async
     assert.equal(body.max_tokens,10000);
     assert.equal(body.messages[0].role,'system');
     assert.match(body.messages[0].content,/Microfixd, a cognitive synthetic organism/);
+    const { TOOL_REGISTRY } = await import('../server/tools/toolRegistry');
+    assert.deepEqual(body.messages[0].content.split('\n').at(-1).split(', '), TOOL_REGISTRY.map(tool => tool.name));
+    assert.match(body.messages[0].content, /mission-specific tool permissions/);
     sawContext=body.messages.some((m:any)=>m.content.includes('repair fact'));
     return new Response(JSON.stringify({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:'remembered repair'},finish_reason:'stop'}],usage:{total_tokens:10}}),{headers:{'Content-Type':'application/json'}});
   };

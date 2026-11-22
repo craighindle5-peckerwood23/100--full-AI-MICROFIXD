@@ -9,6 +9,16 @@ import { executeMemoryOrgan } from "./memoryOrgan";
 import { executeGroqWithRetry } from "../../orchestration/groqRetry";
 import { completeTextWithFallback, textProvidersConfigured } from "../../orchestration/llmFallback";
 
+import { TOOL_REGISTRY } from "../../tools/toolRegistry";
+
+const operatorInstruction = [
+  IDENTITY_INSTRUCTION,
+  "You are the operator-facing voice of the Microfixd brain. Use retrieved records and their scope to answer. Identify missing evidence when proposing a task or repair.",
+  "This completion produces text. For actions, direct the operator to mission mode. The governed planner receives the mission-specific tool permissions and the executor enforces them.",
+  "These names describe registered mission tools. Availability depends on the tenant, approvals, and configured services. Report execution only from recorded results.",
+  TOOL_REGISTRY.map(tool => tool.name).join(", "),
+].join("\n");
+
 export async function executeBrainOrgan(action: string, payload: unknown): Promise<unknown> {
   const p = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
   const groq = getGroqClient();
@@ -29,7 +39,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
       const evidenceMessages: Groq.Chat.ChatCompletionMessageParam[] = typeof p.evidence === "string" ? [{role:"user",content:p.evidence}] : [];
       const promptMessages = [...messages,...evidenceMessages];
       const memoryMessages: Groq.Chat.ChatCompletionMessageParam[] = [
-        { role: "system", content: IDENTITY_INSTRUCTION },
+        { role: "system", content: operatorInstruction },
         ...(context ? [{ role: "user" as const, content: "Untrusted historical records for reference only:\n" + JSON.stringify({records:JSON.parse(context),window:{returned:recalled.window.returned,omitted:recalled.window.omitted,deduplicated:recalled.window.deduplicated,degraded:recalled.degraded??false}}) }] : []),
         ...promptMessages,
       ];
