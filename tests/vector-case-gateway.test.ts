@@ -42,7 +42,7 @@ test('authenticated gateway abstains without evidence and offers separate policy
  const send=(key:string,capability:string,body:unknown=data)=>fetch(url,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json','x-vector-capability':capability},body:JSON.stringify(body)});
  try{
    assert.equal((await send('invalid','diagnostic')).status,401);
-   const diagnostic=await send(secret,'diagnostic');assert.equal(diagnostic.status,200);assert.equal((await diagnostic.json()).abstain,true);
+   const diagnostic=await send(secret,'diagnostic');assert.equal(diagnostic.status,200);assert.equal(diagnostic.headers.get('x-vector-model-version'),'microfixd-case-ranking-1.1.0');assert.equal((await diagnostic.json()).abstain,true);
    assert.deepEqual(await (await send(secret,'policy')).json(),{run_id:data.run_id,flags:[]});
    assert.deepEqual(await (await send(secret,'challenge')).json(),{run_id:data.run_id,reasons:[]});
    assert.equal((await send(secret,'diagnostic',{...data,createEvidence:true})).status,422);
@@ -56,4 +56,17 @@ test('authenticated gateway abstains without evidence and offers separate policy
    assert.deepEqual(await challenge([...evidence,procedure('P0300','Cause A')]),[]);
    assert.equal((await challenge([...evidence,procedure('P0300','Cause C')])).length,1);
  }finally{server.closeAllConnections();server.close();}
+});
+test('compounded case experience is tenant-scoped ranking context and cannot invent evidence or verify a repair',()=>{
+ const code=observed('P0300'),a=procedure('P0300','Cause A'),b=procedure('P0300','Cause B');
+ a.id='00000000-0000-4000-8000-000000000001';b.id='ffffffff-ffff-4fff-8fff-ffffffffffff';
+ const s=caseInput([code,a,b]);
+ const unit={unitId:crypto.randomUUID(),tenantId:s.organization_id,caseId:crypto.randomUUID(),version:1,generation:2,parentUnitIds:[crypto.randomUUID()],approvedBy:crypto.randomUUID(),verificationId:crypto.randomUUID(),evaluationVersion:'case-regression-1',vehicle,dtcs:['P0300'],rootCause:'Cause B'};
+ assert.equal(analyzeVectorCase(s).proposals[0].reference_id,a.id);
+ const result=analyzeVectorCase({...s,learning_context:[unit]});assert.equal(result.proposals[0].reference_id,b.id);
+ assert.ok(result.proposals.every(p=>p.grade==='plausible'&&p.supporting_evidence.includes(code.id)));
+ assert.equal(analyzeVectorCase({...s,evidence:[code,a],learning_context:[unit]}).proposals[0].reference_id,a.id);
+ assert.equal(analyzeVectorCase({...s,evidence:[a,b],learning_context:[unit]}).abstain,true);
+ assert.throws(()=>analyzeVectorCase({...s,learning_context:[{...unit,tenantId:crypto.randomUUID()}]}),/scope mismatch/);
+ assert.throws(()=>analyzeVectorCase({...s,learning_context:[{...unit,caseId:s.case_id}]}),/scope mismatch/);
 });
