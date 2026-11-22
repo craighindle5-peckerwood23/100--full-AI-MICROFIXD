@@ -65,7 +65,8 @@ function resolveRoleFromRequest(req: Request): ResolvedRole | Promise<ResolvedRo
   const auth = req.headers.authorization ?? "";
   const token = /^Bearer /i.test(auth) ? auth.slice(7).trim() : "";
   // Preserve the standalone adapter's scoped credential path.
-  if (!token && (req.path === "/api/autonomy" || req.path.startsWith("/api/autonomy/"))) {
+  const path = req.path.toLowerCase();
+  if (!token && (path === "/api/autonomy" || path.startsWith("/api/autonomy/"))) {
     const key = req.header("x-microfixd-admin-key")?.trim();
     if (key && roleForToken(key) === "admin") return { role: "admin", tenantId: "default" };
   }
@@ -97,8 +98,9 @@ export function rbacMiddleware(req: Request, res: Response, next: NextFunction):
 
 function enforceRole(req: Request, res: Response, next: NextFunction, resolved: ResolvedRole): void {
   const role       = resolved.role;
-  const routeBase  = Object.keys(ROUTE_PERMISSIONS).find(r => req.path.startsWith(r)) ?? req.path;
-  const required = routePermission(req.path, req.method, ROUTE_PERMISSIONS[routeBase] ?? (req.method === "GET" ? "read" : "execute"));
+  const path = req.path.toLowerCase();
+  const routeBase = Object.keys(ROUTE_PERMISSIONS).find(r => path.startsWith(r)) ?? path;
+  const required = routePermission(path, req.method, ROUTE_PERMISSIONS[routeBase] ?? (req.method === "GET" ? "read" : "execute"));
   const perms      = ROLE_PERMISSIONS[role];
   const allowed = role !== "anonymous" && (perms.has("*") || perms.has(required));
 

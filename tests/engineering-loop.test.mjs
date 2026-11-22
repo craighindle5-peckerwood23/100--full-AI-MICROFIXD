@@ -7,7 +7,7 @@ import {safePath,stagePatch,applyPatch,diagnoseLog,normalizeModelPatch,LIMITS} f
 
 test('isolated patch validation rejects path traversal and protected source',()=>{
  const root='/tmp/isolated-microfixd';
- for(const name of ['../etc/passwd','server/security/rbac.ts','server/planner/plannerRouter.ts','supabase/schema.sql','.env','src/../server/index.ts']){
+ for(const name of ['microfixd/topology.json','microfixd/wiring.json','microfixd/langgraph/organs.ts','microfixd/core/governance/paragonDissector.ts','src/agents/watchdog.ts','server/organs/organs/brainOrgan.ts','../etc/passwd','server/security/rbac.ts','server/planner/plannerRouter.ts','supabase/schema.sql','.env','src/../server/index.ts']){
   assert.throws(()=>safePath(root,name));
  }
  assert.equal(safePath(root,'src/components/App.tsx'),path.join(root,'src/components/App.tsx'));

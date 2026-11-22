@@ -315,6 +315,12 @@
       "target": "vector_automotive",
       "relation": "resolves",
       "node": "server/organs/index.ts"
+    },
+    {
+      "source": "classifier",
+      "target": "watchdog_timer",
+      "relation": "resolves",
+      "node": "server/organs/index.ts"
     }
   ],
   "classificationRoutes": {
@@ -328,7 +334,7 @@
     "self_repair": "server/organs/organRegistry.ts",
     "reflex": "server/organs/organs/reflexOrgan.ts",
     "scheduler": "server/organs/organs/schedulerOrgan.ts",
-    "overwatch": "server/organs/organRegistry.ts",
+    "overwatch": "server/metacognition/metacognitionOrgan.ts",
     "paragon": "server/organs/organRegistry.ts",
     "federation": "server/organs/organRegistry.ts",
     "emotion_engine": "server/organs/organRegistry.ts",
@@ -363,7 +369,8 @@
     "core.voiceGrammar": "microfixd/core/voice/voiceCommandGrammarEngine.ts",
     "core.wiring": "microfixd/core/wiring/unifiedWiring.ts",
     "hio": "cognitive-shell/src/hio/HIO.ts",
-    "vector_automotive": "server/organs/organs/automotiveOrgan.ts"
+    "vector_automotive": "server/organs/organs/automotiveOrgan.ts",
+    "watchdog_timer": "server/metacognition/watchdog.ts"
   },
   "executionSpine": {
     "submission": "/api/planner/missions",

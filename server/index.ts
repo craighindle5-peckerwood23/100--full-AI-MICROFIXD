@@ -247,7 +247,8 @@ app.use('/api/vector', lazyRouter(async () => {
   return createVectorIntelligenceRouter();
 }));
 app.use((req, res, next) => {
-  if (!(req.path === "/api" || req.path.startsWith("/api/"))) {
+  const path = req.path.toLowerCase();
+  if (!(path === "/api" || path.startsWith("/api/"))) {
     next();
     return;
   }
@@ -267,6 +268,12 @@ app.use((req, res, next) => {
     })
     .catch(next);
 });
+
+// Mandatory supervisor after RBAC; all protected routers below inherit this boundary.
+app.use(async (req,res,next)=>{
+  try{const {metacognitiveMiddleware}=await import('./metacognition/middleware');metacognitiveMiddleware()(req,res,next);}catch(error){next(error);}
+});
+app.use('/api/metacognition',lazyRouter(async()=>{const {metacognitiveRouter}=await import('./metacognition/router');return metacognitiveRouter;}));
 
 // Authenticated, read-only runtime diagnostics. Bootstrap /api/health is liveness only.
 // These checks deliberately do not create or mutate missions/approvals.
@@ -305,9 +312,20 @@ app.get("/api/health/operational", async (req, res) => {
     ready: Boolean(checks.spine_approvals?.ready),
     detail: checks.spine_approvals?.ready ? "Approval table query succeeded; decision flow unverified" : "Approval store unavailable",
   };
+  try {
+    const { getPlannerWorkerStatus } = await import("./planner/plannerRouter");
+    const worker = getPlannerWorkerStatus();
+    checks.plannerWorker = {
+      ready: worker.healthy && worker.phase !== "not_started",
+      detail: `phase=${worker.phase}; stale=${worker.stale}; ticks=${worker.ticks}; missions=${worker.missionsProcessed}; consecutiveErrors=${worker.consecutiveErrors}`,
+    };
+  } catch {
+    checks.plannerWorker = { ready: false, detail: "Planner worker status unavailable" };
+  }
   const storageReady = ["spine_rows", "spine_approvals", "spine_tool_runs", "spine_errors"].every(k => checks[k]?.ready);
-  res.status(storageReady ? 200 : 503).json({
-    status: storageReady ? "storage-reachable" : "degraded",
+  const runtimeReady = storageReady && Boolean(checks.plannerWorker?.ready);
+  res.status(runtimeReady ? 200 : 503).json({
+    status: runtimeReady ? "runtime-operational" : "degraded",
     fullyVerified: false,
     checks,
     ts: new Date().toISOString(),
@@ -350,6 +368,10 @@ app.post("/api/classification/resolve", async (req, res, next) => {
   }
 });
 
+app.use("/vector", lazyRouter(async () => {
+  const { vectorCaseGateway } = await import("./automotive/vectorCaseGateway");
+  return vectorCaseGateway();
+}));
 app.use("/api/automotive", lazyRouter(async () => {
   const { automotiveRouter } = await import("./automotive/automotiveRouter");
   return automotiveRouter;

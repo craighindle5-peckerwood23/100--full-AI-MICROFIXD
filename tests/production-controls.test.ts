@@ -82,7 +82,7 @@ test('standing owner authorization records exact receipts, preserves rejection, 
  const {createGovernedTools,requestHash}=await import('../server/planner/governedTools');
  const {EXECUTORS}=await import('../server/organs/executors');
  const receipts=new Map<string,any>(),runs=new Map<string,any>();let payload:any,calls=0;
- const client:any={from(table:string){const filters:any={};const q:any={select(){return q;},eq(k:string,v:string){filters[k]=v;return q;},async maybeSingle(){return {data:runs.get(filters.subtask_id)??null,error:null};},async upsert(row:any){if(!receipts.has(row.subtask_id))receipts.set(row.subtask_id,row);return {error:null};}};return q;},async rpc(name:string,p:any){
+ const client:any={from(table:string){const filters:any={};const q:any={select(){return q;},eq(k:string,v:string){filters[k]=v;return q;},async insert(){return {error:null};},async maybeSingle(){return {data:table==='metacognitive_controls'?null:runs.get(filters.subtask_id)??null,error:null};},async upsert(row:any){if(!receipts.has(row.subtask_id))receipts.set(row.subtask_id,row);return {error:null};}};return q;},async rpc(name:string,p:any){
   if(name==='spine_start_tool'){const receipt=receipts.get(p.p_subtask);if(p.p_protected&&receipt?.status!=='approved')return {data:false};runs.set(p.p_subtask,{request_hash:p.p_hash,status:'running'});return {data:true};}
   if(name==='spine_finish_tool'){runs.set(p.p_subtask,{request_hash:p.p_hash,status:'succeeded',result:p.p_result});return {data:true};}throw new Error(name);
  }};
@@ -91,6 +91,10 @@ test('standing owner authorization records exact receipts, preserves rejection, 
  const request={name:'store_memory',arguments:{content:'test memory',tags:'one, two'}};
  const runner=createGovernedTools(client,'tenant-a','mission-a','worker');
  try{
+  const deniedSource={name:'read_authorized_source',arguments:{source_id:'unprovisioned-test',path:'/manual'}};
+  await assert.rejects(()=>runner.executeTool(deniedSource,{...context,subtask_id:'source',tool_permissions:['read_authorized_source']}),/AUTHORIZED_SOURCE_DENIED/);
+  assert.equal(runs.has('source'),false);
+  assert.equal(receipts.has('source'),false);
   await runner.executeTool(request,context);assert.equal(receipts.get('store').status,'approved');assert.equal(receipts.get('store').decided_by,'owner-id');assert.equal(receipts.get('store').request_hash,requestHash(request));
   assert.equal(payload.session_id,'tenant-a:tools');assert.equal(payload.tenant_id,'tenant-a');assert.deepEqual(payload.tags,['one','two']);
   await runner.executeTool(request,context);assert.equal(calls,1);
@@ -133,4 +137,48 @@ test('evaluation distinguishes missing execution from integrity and rejects cros
  assert.equal(evaluateMission({...mission,status:'running'},[],[],[]).verdict,'incomplete');
  f.artifacts[0].tenant_id='another';
  assert.equal(evaluateMission(mission,f.tasks,f.subs,f.artifacts).verdict,'failed');
+});
+
+test('tenant admins can use legacy mission routes but cannot reach platform-wide autonomy', async () => {
+ const {default:express}=await import('express');
+ const {autonomyRouter}=await import('../server/autonomy-adapter/autonomyRouter');
+ const app=express();
+ app.use((req,_res,next)=>{
+  Object.assign(req,{
+   microfixdRole:req.header('x-fixture-role')??'admin',
+   microfixdTenantId:req.header('x-fixture-tenant'),
+   microfixdUserId:req.header('x-fixture-user'),
+  });
+  next();
+ });
+ app.use('/api/autonomy',autonomyRouter);
+ const server=app.listen(0,'127.0.0.1');
+ try{
+  await new Promise<void>((resolve,reject)=>{
+   server.once('listening',resolve);
+   server.once('error',reject);
+  });
+  const address=server.address();
+  assert.ok(address&&typeof address==='object');
+  const base=`http://127.0.0.1:${address.port}/api/autonomy`;
+  for(const tenant of ['default','tenant-a','tenant-b']){
+   const headers={'x-fixture-tenant':tenant,'x-fixture-user':'account','x-microfixd-tenant':'default'};
+   for(const path of ['/usage-report','/approvals','/preview/status']){
+    const blocked=await fetch(base+path,{headers});
+    assert.equal(blocked.status,403);
+    assert.equal((await blocked.json()).code,'PLATFORM_ADMIN_REQUIRED');
+   }
+   const mission=await fetch(base+'/runs/fixture/stream',{headers});
+   assert.equal(mission.status,410);
+   assert.equal((await mission.json()).code,'USE_DURABLE_MISSION_POLLING');
+  }
+  const platform=await fetch(base+'/preview/status',{headers:{'x-fixture-tenant':'default'}});
+  assert.equal(platform.status,200);
+  await platform.json();
+  const operator=await fetch(base+'/preview/status',{headers:{'x-fixture-tenant':'default','x-fixture-role':'operator'}});
+  assert.equal(operator.status,403);
+  assert.equal((await operator.json()).code,'PERMISSION_DENIED');
+ }finally{
+  await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+ }
 });
