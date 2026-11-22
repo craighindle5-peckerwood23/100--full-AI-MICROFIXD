@@ -107,7 +107,10 @@ test('portfolio compares human and analytical branches and refuses an empty sele
 test('quantum bridge produces correct Bell probabilities and equivalent executable classical Python',()=>{
   const result=simulateQuantumCircuit({qubits:2,operations:[{gate:'h',targets:[0]},{gate:'cx',targets:[0,1]}]});
   assert.deepEqual(result.probabilities.map(p=>p.basis),['00','11']);assert.ok(result.probabilities.every(p=>Math.abs(p.probability-.5)<1e-12));
-  const translated=JSON.parse(execFileSync('python3',['-c',result.classical_python],{encoding:'utf8'}));assert.ok(Math.abs(translated['11']-.5)<1e-12);assert.equal(result.quantum_hardware_verified,false);
+  const stdout = execFileSync('python3', ['-c', result.classical_python], {encoding: 'utf8'});
+  // A managed Python launcher can print setup messages before the generated result.
+  const translated = JSON.parse(stdout.trimEnd().split('\n').pop() ?? '');
+  assert.ok(Math.abs(translated['11']-.5)<1e-12);assert.equal(result.quantum_hardware_verified,false);
   assert.throws(()=>simulateQuantumCircuit({qubits:11,operations:[]}),/QUANTUM_SIMULATION_LIMIT/);
   assert.throws(()=>simulateQuantumCircuit({qubits:2,operations:[{gate:'cx',targets:[1,1]}]}),/UNSUPPORTED_QUANTUM_OPERATION/);
 });
