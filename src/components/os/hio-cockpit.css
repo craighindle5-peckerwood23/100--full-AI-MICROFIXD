@@ -19,3 +19,15 @@
 .hio-detection span{position:absolute;bottom:3px;color:var(--signal);background:#031018db;border-radius:4px;padding:2px 6px;font:10px/1.4 monospace}
 @keyframes hio-detection-scan{to{transform:rotate(1turn)}}
 @media(prefers-reduced-motion:reduce){.hio-detection i{animation:none}}
+
+.hio-command-surface{overflow-y:auto;max-height:65%;background:#04101a;border:1px solid #254655;border-radius:10px;padding:12px}
+.hio-talk-title{font-size:16px;font-weight:600;color:#dcf9ff;margin:0 0 8px}
+.hio-intents{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.hio-intents button,.hio-diagnosis button,.hio-command-surface [role=status] button{border:1px solid #345869;border-radius:5px;padding:5px 8px;color:#b9d6e2;font-size:12px}
+.hio-intents button[aria-pressed=true]{background:#103640;border-color:#5bb4c4;color:#e4feff}
+.hio-diagnosis{font-size:13px;line-height:1.5;color:#bdd7e1}
+.hio-diagnosis select{background:#091822;color:#ecfcff;padding:6px;max-width:100%}
+.hio-diagnosis strong{display:block;margin-top:8px;color:#dcf9ff}
+.hio-diagnosis details{margin:6px 0}
+.hio-diagnosis button:disabled{opacity:.5}
+@media(max-width:640px){.hio-center{height:auto;min-height:0}.hio-avatar{min-height:clamp(170px,30dvh,300px)}.hio-command-surface{max-height:none}}

@@ -1,3 +1,4 @@
+import {diagnoseMission} from './missionDiagnosis';
 import {projectMission} from './missionProjection';
 import { Router } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
@@ -72,6 +73,16 @@ plannerRouter.get(['/missions/:id/audit','/missions/:id/evaluation'],async(req,r
  const artifacts=await repository.getArtifacts(req.params.id);
  res.json(req.path.endsWith('/evaluation')?evaluateMission(mission,tasks,subtasks,artifacts):auditMission(mission,tasks,subtasks,artifacts));
  }catch{res.status(503).json({code:'AUDIT_UNAVAILABLE'});}
+});
+plannerRouter.get('/missions/:id/diagnosis',async(req,res)=>{
+  const tenant=(req as any).microfixdTenantId;
+  if(!tenant)return res.status(403).json({code:'AUTH_REQUIRED'});
+  try{
+    const diagnosis=await diagnoseMission(plannerClient(),tenant,req.params.id);
+    res.set('Cache-Control','no-store');
+    if(!diagnosis)return res.status(404).json({code:'MISSION_NOT_FOUND'});
+    res.json(diagnosis);
+  }catch{res.status(503).json({code:'DIAGNOSIS_STORAGE_UNAVAILABLE'});}
 });
 plannerRouter.get('/missions/:id',async(req,res)=>{
  try{const tenant=(req as any).microfixdTenantId,client=plannerClient();const {repository}=createPlannerRuntime(client,tenant,req.params.id);

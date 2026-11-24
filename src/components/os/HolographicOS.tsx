@@ -9,6 +9,8 @@ import { getCommandPreferences } from '../../lib/commandPreferences';
 import { saveUIState } from '../../lib/supabase';
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
+import {missionStatusSummary} from '../../lib/missionStatusSummary';
+import MissionDiagnosis from './MissionDiagnosis';
 import HIOCockpit from './HIOCockpit';
 import SettingsWindow from './SettingsWindow';
 import type { SettingsSection } from '../rooms/SettingsRoom';
@@ -60,20 +62,30 @@ const ROOM_LABELS: Record<Subsystem, string> = {
 export default function HolographicOS({ onReboot }: Props) {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
   const [activeTool, setActiveTool] = useState<Subsystem | null>(null);
-  const [commandInput, setCommandInput] = useState('');
-  const [commandState, setCommandState] = useState<CommandState>('READY');
-  const [lastOutput, setLastOutput] = useState('System ready.');
+  const [mode, setMode] = useState<'mission' | 'chat'>('chat');
+  const [chatInput,setChatInput]=useState('');
+  const [taskInput,setTaskInput]=useState('');
+  const [commandInput,setCommandInput]=mode==='chat'?[chatInput,setChatInput] as const:[taskInput,setTaskInput] as const;
+  const [chatState,setChatState]=useState<CommandState>('READY');
+  const [taskState,setTaskState]=useState<CommandState>('READY');
+  const [commandState,setCommandState]=mode==='chat'?[chatState,setChatState] as const:[taskState,setTaskState] as const;
+  const [chatOutput,setChatOutput]=useState('What would you like to know?');
+  const [taskOutput,setTaskOutput]=useState('Describe a task to track its progress here.');
+  const [lastOutput,setLastOutput]=mode==='chat'?[chatOutput,setChatOutput] as const:[taskOutput,setTaskOutput] as const;
   const catalogInitialized = useRef(false);
   const submission = useRef<{signature:string;key:string}|null>(null);
   const [missionId, setMissionId] = useState('');
-  const [mode, setMode] = useState<'mission' | 'chat'>('mission');
+  const [diagnosing,setDiagnosing]=useState(false);
+  const [inspectedId,setInspectedId]=useState('');
   const [synthesisMode, setSynthesisMode] = useState('balanced');
   const [answerDetails, setAnswerDetails] = useState<string[]>([]);
   const [tools, setTools] = useState<{name:string;description:string}[]>([]);
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [origins, setOrigins] = useState('');
   const [missionStatus, setMissionStatus] = useState('');
-  const [lastCommand, setLastCommand] = useState('');
+  const [lastChat,setLastChat]=useState('');
+  const [lastTask,setLastTask]=useState('');
+  const [lastCommand,setLastCommand]=mode==='chat'?[lastChat,setLastChat] as const:[lastTask,setLastTask] as const;
 
   useEffect(() => {
     const openAccess = () => setSettingsSection('general');
@@ -101,13 +113,14 @@ export default function HolographicOS({ onReboot }: Props) {
   };
 
   const openTool = (tool: Subsystem) => {
+    setInspectedId('');
     setActiveTool(tool);
     setSettingsSection(null);
   };
 
   const renderTool = () => {
     switch (activeTool) {
-      case 'mission_control': return <MissionControlRoom initialMissionId={missionId} />;
+      case 'mission_control': return <MissionControlRoom initialMissionId={inspectedId||missionId} />;
       case 'ai_core': return <AICoreRoom />;
       case 'agents': return <AgentsRoom />;
       case 'sandbox': return <SandboxRoom />;
@@ -132,7 +145,7 @@ export default function HolographicOS({ onReboot }: Props) {
     let stopped = false;
     const refreshCatalog = () => void api<{tools:{name:string;description:string}[]}>('GET', '/planner/tools').then(result => {
       if (!stopped) { setTools(result.tools); if (!catalogInitialized.current) { setAllowedTools(result.tools.map(t=>t.name)); catalogInitialized.current=true; } }
-    }).catch(error => { if (!stopped) setLastOutput(`Tool catalog unavailable: ${error.message}`); });
+    }).catch(error => { if (!stopped) setTaskOutput(`Tool catalog unavailable: ${error.message}`); });
     refreshCatalog();
     window.addEventListener('microfixd:auth-changed',refreshCatalog);
     return () => { stopped = true; window.removeEventListener('microfixd:auth-changed',refreshCatalog); };
@@ -150,20 +163,17 @@ export default function HolographicOS({ onReboot }: Props) {
         setMissionStatus(status);
         const final = detail.artifacts.find(a => a.artifact_id === detail.mission.result_artifact_id);
         const output = final ? (typeof final.content === 'string' ? final.content : JSON.stringify(final.content))
-          : detail.approvals.some(a => a.status === 'pending') ? 'Waiting for approval. Open this mission to review the exact action.'
-          : status === 'waiting' ? `Mission paused: ${detail.errors.map(e=>e.code).join(', ') || 'see mission details'}. Open this mission for recovery details.`
-          : status === 'failed' ? `Mission failed: ${detail.errors.map(e=>e.code).join(', ') || 'see mission details'}. Open this mission for persisted results and recovery details.`
-          : `${status}: ${detail.tasks.filter(t => t.status === 'succeeded').length}/${detail.tasks.length} tasks completed.`;
-        setLastOutput(output);
+          : missionStatusSummary(status,detail.approvals,detail.errors,detail.tasks);
+        setTaskOutput(output);
         if (status === 'succeeded' || status === 'failed') {
-          setCommandState(status === 'succeeded' ? 'COMPLETE' : 'ERROR');
+          setTaskState(status === 'succeeded' ? 'COMPLETE' : 'ERROR');
           if (voice.isEnabled()) void voice.speak(output).catch(() => {});
           return;
         }
         timer = setTimeout(() => void refresh(), 3000);
       } catch (error) {
         if (!stopped) {
-          setLastOutput(`Mission status unavailable: ${error instanceof Error ? error.message : String(error)}. Open this mission to retry; it has not been resubmitted.`);
+          setTaskOutput(`Mission status unavailable: ${error instanceof Error ? error.message : String(error)}. Open this mission to retry; it has not been resubmitted.`);
           timer = setTimeout(() => void refresh(), 5000);
         }
       }
@@ -177,8 +187,8 @@ export default function HolographicOS({ onReboot }: Props) {
     const task = commandInput.trim();
     if (!task || commandState === 'PROCESSING') return;
 
-    setAnswerDetails([]);
-    setMissionId('');
+    if(mode==='chat')setAnswerDetails([]);
+    else setMissionId('');
     setLastCommand(task);
     setLastOutput('Processing request…');
     setCommandState('PROCESSING');
@@ -187,8 +197,8 @@ export default function HolographicOS({ onReboot }: Props) {
 
     try {
       const signature = JSON.stringify({task,allowedTools,origins});
-      if (submission.current?.signature !== signature) submission.current = {signature,key:crypto.randomUUID()};
-      const key = submission.current.key;
+      if (mode==='mission' && submission.current?.signature !== signature) submission.current = {signature,key:crypto.randomUUID()};
+      const key = submission.current?.key??'';
       const run = () => mode === 'mission'
         ? api<Mission>('POST', '/planner/missions', {objective:task,tool_permissions:allowedTools,browser_origins:origins.split(',').map(v=>v.trim()).filter(Boolean)}, {'Idempotency-Key':key})
         : api<any>('POST', '/command/run', {
@@ -215,6 +225,7 @@ export default function HolographicOS({ onReboot }: Props) {
       if (mode === 'mission') {
         submission.current = null;
         setMissionId(result.mission_id);
+        window.dispatchEvent(new Event('microfixd:mission-created'));
         setMissionStatus(result.status);
         setLastOutput('Mission saved. Waiting for the durable worker.');
         return;
@@ -260,17 +271,26 @@ export default function HolographicOS({ onReboot }: Props) {
   return (
     <>
       <HIOCockpit onOpenTool={openTool} onSettings={()=>openSettings('general')} onReboot={onReboot} commandState={commandState}>
+        {(missions,registry)=><>
+        <h2 className="hio-talk-title">Talk to Microfixd</h2>
+        <div className="hio-intents" role="group" aria-label="Command mode">
+          {(['chat','mission','diagnose'] as const).map(intent=><button type="button" key={intent}
+            aria-pressed={diagnosing?intent==='diagnose':intent===mode}
+            onClick={()=>{setDiagnosing(intent==='diagnose');if(intent!=='diagnose')setMode(intent);}}>
+            {{chat:'Ask Microfixd',mission:'Run a task',diagnose:'Diagnose a mission'}[intent]}</button>)}
+        </div>
+        {diagnosing?<MissionDiagnosis missions={missions} registry={registry} onAccess={()=>openSettings('general')}
+          onOpen={id=>{openTool('mission_control');setInspectedId(id);}}/>:<>
         <section aria-live="polite" className="hio-output">
           <div className="hio-output-header"><span>{commandState}</span><span>{lastCommand||'MICROFIXD // AT YOUR SERVICE'}</span></div>
           <div className="hio-answer">{lastOutput}</div>
-          {answerDetails.length > 0 && <details className="text-xs"><summary>Response details</summary>
+          {mode==='chat' && answerDetails.length > 0 && <details className="text-xs"><summary>Response details</summary>
             <ul>{answerDetails.map(detail => <li key={detail}>{detail}</li>)}</ul>
           </details>}
-          {missionId && <button type="button" onClick={()=>openTool('mission_control')}>Open mission • {missionStatus}</button>}
+          {mode==='mission' && missionId && <button type="button" onClick={()=>openTool('mission_control')}>Open mission • {missionStatus}</button>}
         </section>
         <div className="text-xs">
           <a href="/automotive" className="float-right px-1 text-cyan-200 underline">Vector Automotive</a>
-          <label>Command mode <select aria-label="Command mode" value={mode} disabled={commandState==='PROCESSING'} onChange={e=>setMode(e.target.value as 'mission'|'chat')}><option value="mission">Do a task (durable mission)</option><option value="chat">Ask a question</option></select></label>
           {mode === 'chat' && <label className="ml-2">Answer style <select aria-label="Answer style" value={synthesisMode}
             disabled={commandState === 'PROCESSING'} onChange={event => setSynthesisMode(event.target.value)}>
             <option value="executive">Executive</option><option value="balanced">Balanced</option>
@@ -283,9 +303,10 @@ export default function HolographicOS({ onReboot }: Props) {
           </details>}
         </div>
         <form onSubmit={handleCommandSubmit} className="hio-form">
-          <input value={commandInput} onChange={event=>setCommandInput(event.target.value)} placeholder="What would you like me to accomplish?" aria-label="Microfixd command"/>
+          <input value={commandInput} onChange={event=>setCommandInput(event.target.value)} placeholder={mode==='chat'?"Ask Microfixd a question…":"Describe the outcome you want…"} aria-label="Microfixd command"/>
           <button type="submit" disabled={!commandInput.trim()||commandState==='PROCESSING'} aria-label="Send command">{commandState==='PROCESSING'?<Loader2 size={17} className="animate-spin"/>:<Send size={17}/>}</button>
         </form>
+        </>}</>}
       </HIOCockpit>
 
       {settingsSection && (
