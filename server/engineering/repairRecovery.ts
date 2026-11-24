@@ -26,11 +26,11 @@ export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string
 export function repairRecoveryResult(raw:NonNullable<Awaited<ReturnType<typeof readCompletedRepair>>>,tenant:string,subtask:string,requestHash:string){
  return {raw,normalized:{result:raw},evidence:{tool:'repair_source_code',request_hash:requestHash,idempotency_key:`${tenant}:${subtask}`,read_only_recovery:true,completed_at:new Date().toISOString()}};
 }
-export async function recoverWaitingRepairs(db:SupabaseClient){
- if(!process.env.MICROFIXD_REPAIR_RUNNER_URL||!process.env.GITHUB_TOKEN)return;
+export async function recoverWaitingRepairs(db:SupabaseClient,afterSequence=0){
+ if(!process.env.MICROFIXD_REPAIR_RUNNER_URL||!process.env.GITHUB_TOKEN)return 0;
  const tenant=process.env.MICROFIXD_REPAIR_OWNER_TENANT||'default';
- const {data,error}=await db.from('spine_rows').select('data').eq('tenant_id',tenant).eq('kind','missions').eq('data->>status','waiting')
-  .contains('data',{constraints:{tool_approval_mode:'preauthorized',tool_permissions:['repair_source_code']}}).limit(4);
+ const {data,error}=await db.from('spine_rows').select('data,sequence').eq('tenant_id',tenant).eq('kind','missions').eq('data->>status','waiting')
+  .contains('data',{constraints:{tool_approval_mode:'preauthorized',tool_permissions:['repair_source_code']}}).gt('sequence',afterSequence).order('sequence').limit(4);
  if(error)throw new Error('REPAIR_RECOVERY_STORAGE_FAILED');
  const supervisor = createSupervisor(db, tenant);
  for(const row of data??[]){
@@ -47,4 +47,5 @@ export async function recoverWaitingRepairs(db:SupabaseClient){
    if(failure)console.error('[repair] verified completion deferred; mission lease or state changed');
   }catch{console.error('[repair] completion observation unavailable; no external action repeated');}
  }
+ return data?.length===4?Number(data[3].sequence):0;
 }

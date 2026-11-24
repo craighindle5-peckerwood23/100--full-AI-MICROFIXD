@@ -75,3 +75,26 @@ test('deployment recovery performs reads only and requires matching candidate, m
  try{assert.equal((await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request))?.status,'live_verified');healthy=false;assert.equal(await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request),null);}
  finally{if(prior.token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=prior.token;if(prior.url===undefined)delete process.env.MICROFIXD_REPAIR_RUNNER_URL;else process.env.MICROFIXD_REPAIR_RUNNER_URL=prior.url;}
 });
+
+test('repair proposal uses prior validator feedback, rechecks authorization and stops after three attempts',async()=>{
+ const {proposeRepair}=await import('../server/engineering/sourceRepair');
+ const path='server/automotive/example.ts',sources=new Map([[path,'old']]);
+ let calls=0,checks=0;
+ const result=await proposeRepair('fixture',sources,async messages=>{
+   if(++calls===1)return {content:'{'};
+   assert.match(messages[1].content,/INVALID_JSON/);
+   return {content:JSON.stringify({files:[{path,content:'new'}]})};
+ },async()=>{checks++;});
+ assert.equal(result[0].content,'new');assert.equal(checks,2);
+ calls=0;await assert.rejects(()=>proposeRepair('fixture',sources,async()=>{calls++;return {content:'{'};},async()=>{}));assert.equal(calls,3);
+});
+
+test('recovery advances past the first four waiting missions and wraps',async()=>{
+ const {recoverWaitingRepairs}=await import('../server/engineering/repairRecovery');
+ const saved=[process.env.GITHUB_TOKEN,process.env.MICROFIXD_REPAIR_RUNNER_URL];
+ process.env.GITHUB_TOKEN='fixture';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture.onrender.com';
+ let start=0;
+ const query:any={select:()=>query,eq:()=>query,contains:()=>query,gt:(_:string,n:number)=>{start=n;return query;},order:()=>query,limit:async()=>({data:[1,2,3,4,5].filter(n=>n>start).slice(0,4).map(sequence=>({sequence,data:{constraints:{}}}))})};
+ try{const db:any={from:()=>query};const cursor=await recoverWaitingRepairs(db);assert.equal(cursor,4);assert.equal(await recoverWaitingRepairs(db,cursor),0);assert.equal(start,4);}
+ finally{['GITHUB_TOKEN','MICROFIXD_REPAIR_RUNNER_URL'].forEach((k,i)=>{if(saved[i]===undefined)delete process.env[k];else process.env[k]=saved[i];});}
+});

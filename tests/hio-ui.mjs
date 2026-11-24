@@ -65,6 +65,10 @@ try{
   }
   if(u.pathname.endsWith('/approvals/sub/decide')){assert.equal(route.request().postDataJSON().decision,'approved');approved=true;return route.fulfill({json:{success:true}});}
   if(u.pathname==='/api/planner/missions/browser-fixture')return route.fulfill({json:{mission:{...mission,status:approved?'succeeded':'waiting',result_artifact_id:approved?'result':null},tasks:[],artifacts:approved?[{artifact_id:'result',content:'Verified mission fixture result.'}]:[],approvals:approved?[]:[{status:'pending',subtask_id:'sub',request_hash:'hash',expires_at:new Date(Date.now()+60000).toISOString(),request:{name:'read_public_page',arguments:{url:'https://example.com'}}}],tool_runs:[],messages:[],errors:[],budget:null}});
+  if(u.pathname==='/api/command/run' && route.request().postDataJSON().task==='Tell me about microfixd paused missions'){
+   assert.equal(route.request().postDataJSON().mode,'chat');
+   return route.fulfill({json:{success:true,output:'One paused mission in the browser fixture.',missions:[{id:mission.mission_id,title:mission.objective}]}});
+  }
   if(u.pathname==='/api/command/run'){
    assert.equal(route.request().headers().authorization,'Bearer hio-ui-test-token');assert.equal(route.request().postDataJSON().task,'Inspect HIO integration');assert.equal(route.request().postDataJSON().context.synthesis_mode,'high-bandwidth');assert.ok(route.request().postDataJSON().session_id);attempts++;return route.fulfill({json:{success:true,output:'HIO fixture command completed.',latency_ms:458,diagnostics:{model:'fixture-model',stages:['intake','response']}}});
   }
@@ -83,6 +87,16 @@ try{
  await page.getByRole('textbox',{name:'Microfixd command'}).fill('Inspect HIO integration');await page.getByRole('button',{name:'Send command'}).click();
  await page.getByText('HIO fixture command completed.',{exact:true}).waitFor();assert.equal(attempts,1);
  await page.getByText('Response details',{exact:true}).click();await page.getByText('Command time 0.46 s',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Use as task',exact:true}).click();
+ assert.equal(await page.getByRole('textbox',{name:'Microfixd command'}).inputValue(),'Inspect HIO integration');
+ assert.equal(missionAttempts,0);
+ await page.getByRole('button',{name:'Ask Microfixd',exact:true}).click();
+ await page.getByRole('textbox',{name:'Microfixd command'}).fill('Tell me about microfixd paused missions');
+ await page.getByRole('button',{name:'Send command'}).click();
+ await page.getByRole('button',{name:'Inspect Read authorized public page'}).click();
+ await page.getByRole('button',{name:'Approve action',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Hologram',exact:true}).click();
+ assert.equal(approved,false);assert.equal(missionAttempts,0);
  await page.getByRole('button',{name:'Run a task',exact:true}).click();
  await page.getByText('Authorized tool scope (1 tools)',{exact:true}).click();
  await page.getByRole('checkbox',{name:'read_public_page'}).check();
@@ -90,7 +104,7 @@ try{
  await page.getByRole('button',{name:'Send command'}).click();
  await page.getByText('Waiting for approval. Open this mission to review the exact action.',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Ask Microfixd',exact:true}).click();
- await page.getByText('HIO fixture command completed.',{exact:true}).waitFor();
+ await page.getByText('One paused mission in the browser fixture.',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Diagnose a mission'}).click();
  await page.getByLabel('Select mission to diagnose').selectOption('browser-fixture');
  await page.getByRole('button',{name:'Check mission evidence'}).click();

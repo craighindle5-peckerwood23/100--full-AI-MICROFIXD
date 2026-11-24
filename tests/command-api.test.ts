@@ -43,3 +43,12 @@ test('answer styles select only fixed server instructions and preserve unspecifi
   for (const mode of ['executive', 'balanced', 'high-bandwidth']) assert.ok(synthesisGuidance(mode));
   for (const value of [undefined, null, 'toString', 'custom instruction', {}]) assert.equal(synthesisGuidance(value), '');
 });
+
+test('explicit tool calls use the mission composer while questions stay in chat',async()=>{
+ const {isToolRequest}=await import('../src/lib/toolRequest');
+ const tools=[{name:'list_system_capabilities'}];
+ assert.ok(isToolRequest('Use list_system_capabilities to list the tools',tools));
+ assert.ok(isToolRequest('Repair the failing worker',tools));
+ assert.equal(isToolRequest('How can I repair the failing worker?',tools),false);
+ assert.equal(isToolRequest('Use nonexistent_tool',tools),false);
+});

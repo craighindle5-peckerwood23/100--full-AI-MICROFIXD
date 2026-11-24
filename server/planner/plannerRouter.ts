@@ -129,13 +129,13 @@ plannerRouter.get('/agents',async(req,res)=>{
  if(error)throw error;res.json({agents:data});}catch{res.status(503).json({code:'STORAGE_UNAVAILABLE'});}
 });
 export function startPlannerWorker():()=>void {
- let busy=false,stopped=false,cursor=0;
+ let busy=false,stopped=false,cursor=0,repairCursor=0;
  plannerWorkerStarted();
  const tick=async()=>{
   if(busy||stopped)return;busy=true;plannerWorkerTickStarted();
   try{
    const client=plannerClient();
-   try{await recoverWaitingRepairs(client);}catch(error){plannerWorkerError(error);console.error('[repair] completion recovery deferred');}
+   try{repairCursor=await recoverWaitingRepairs(client,repairCursor);}catch(error){plannerWorkerError(error);console.error('[repair] completion recovery deferred');}
    const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
    if(error)throw error;
    if(!data.length)cursor=0;

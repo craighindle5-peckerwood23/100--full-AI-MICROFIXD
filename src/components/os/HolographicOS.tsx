@@ -9,6 +9,7 @@ import { getCommandPreferences } from '../../lib/commandPreferences';
 import { saveUIState } from '../../lib/supabase';
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
+import {isToolRequest} from '../../lib/toolRequest';
 import {missionStatusSummary} from '../../lib/missionStatusSummary';
 import MissionDiagnosis from './MissionDiagnosis';
 import HIOCockpit from './HIOCockpit';
@@ -70,7 +71,7 @@ export default function HolographicOS({ onReboot }: Props) {
   const [taskState,setTaskState]=useState<CommandState>('READY');
   const [commandState,setCommandState]=mode==='chat'?[chatState,setChatState] as const:[taskState,setTaskState] as const;
   const [chatOutput,setChatOutput]=useState('What would you like to know?');
-  const [taskOutput,setTaskOutput]=useState('Describe a task to track its progress here.');
+  const [taskOutput,setTaskOutput]=useState('Describe the result you want. Microfixd can use the tools selected below when you press Send.');
   const [lastOutput,setLastOutput]=mode==='chat'?[chatOutput,setChatOutput] as const:[taskOutput,setTaskOutput] as const;
   const catalogInitialized = useRef(false);
   const submission = useRef<{signature:string;key:string}|null>(null);
@@ -78,6 +79,7 @@ export default function HolographicOS({ onReboot }: Props) {
   const [diagnosing,setDiagnosing]=useState(false);
   const [inspectedId,setInspectedId]=useState('');
   const [synthesisMode, setSynthesisMode] = useState('balanced');
+  const [reportedMissions,setReportedMissions]=useState<{id:string;title:string}[]|null>(null);
   const [answerDetails, setAnswerDetails] = useState<string[]>([]);
   const [tools, setTools] = useState<{name:string;description:string}[]>([]);
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
@@ -182,24 +184,31 @@ export default function HolographicOS({ onReboot }: Props) {
     return () => { stopped = true; clearTimeout(timer); };
   }, [missionId]);
 
+  const directTask=mode==='chat' && isToolRequest(commandInput,tools);
+  const submitAsMission=mode==='mission'||directTask;
+  const submitBusy=commandState==='PROCESSING'||(directTask&&taskState==='PROCESSING');
+
   const handleCommandSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const task = commandInput.trim();
-    if (!task || commandState === 'PROCESSING') return;
+    if (!task || submitBusy) return;
 
-    if(mode==='chat')setAnswerDetails([]);
+    if(!submitAsMission){setAnswerDetails([]);setReportedMissions(null);}
     else setMissionId('');
-    setLastCommand(task);
-    setLastOutput('Processing request…');
-    setCommandState('PROCESSING');
+    if(directTask)setMode('mission');
+    const setOutput=submitAsMission?setTaskOutput:setChatOutput;
+    const setState=submitAsMission?setTaskState:setChatState;
+    if(submitAsMission)setLastTask(task);else setLastChat(task);
+    setOutput('Processing request…');
+    setState('PROCESSING');
     setCommandInput('');
     sound.playCognitivePulse();
 
     try {
       const signature = JSON.stringify({task,allowedTools,origins});
-      if (mode==='mission' && submission.current?.signature !== signature) submission.current = {signature,key:crypto.randomUUID()};
+      if (submitAsMission && submission.current?.signature !== signature) submission.current = {signature,key:crypto.randomUUID()};
       const key = submission.current?.key??'';
-      const run = () => mode === 'mission'
+      const run = () => submitAsMission
         ? api<Mission>('POST', '/planner/missions', {objective:task,tool_permissions:allowedTools,browser_origins:origins.split(',').map(v=>v.trim()).filter(Boolean)}, {'Idempotency-Key':key})
         : api<any>('POST', '/command/run', {
         mode:'chat',
@@ -222,12 +231,12 @@ export default function HolographicOS({ onReboot }: Props) {
         }
       }
 
-      if (mode === 'mission') {
+      if (submitAsMission) {
         submission.current = null;
         setMissionId(result.mission_id);
         window.dispatchEvent(new Event('microfixd:mission-created'));
         setMissionStatus(result.status);
-        setLastOutput('Mission saved. Waiting for the durable worker.');
+        setOutput('Mission saved. Waiting for the durable worker.');
         return;
       }
       const output = String(
@@ -238,14 +247,15 @@ export default function HolographicOS({ onReboot }: Props) {
       );
 
       if (!output.trim()) throw new Error('No answer was returned. Check the command record before retrying.');
+      setReportedMissions(Array.isArray(result.missions)?result.missions:null);
       setAnswerDetails([
         result.diagnostics?.provider && `Provider ${result.diagnostics.provider}`,
         result.diagnostics?.model && `Model ${result.diagnostics.model}`,
         Number.isFinite(result.latency_ms) && `Command time ${(result.latency_ms / 1000).toFixed(2)} s`,
         result.diagnostics?.stages?.length && `Stages: ${result.diagnostics.stages.join(', ')}`,
       ].filter(Boolean));
-      setLastOutput(output);
-      setCommandState(result?.success === false ? 'ERROR' : 'COMPLETE');
+      setOutput(output);
+      setState(result?.success === false ? 'ERROR' : 'COMPLETE');
 
       if (output && voice.isEnabled()) {
         void voice.speak(output).catch(() => {});
@@ -262,9 +272,9 @@ export default function HolographicOS({ onReboot }: Props) {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setCommandInput(task);
-      setLastOutput(message || 'Command execution failed.');
-      setCommandState('ERROR');
+      if(submitAsMission)setTaskInput(task);else setChatInput(task);
+      setOutput(message || 'Command execution failed.');
+      setState('ERROR');
     }
   };
 
@@ -284,6 +294,10 @@ export default function HolographicOS({ onReboot }: Props) {
         <section aria-live="polite" className="hio-output">
           <div className="hio-output-header"><span>{commandState}</span><span>{lastCommand||'MICROFIXD // AT YOUR SERVICE'}</span></div>
           <div className="hio-answer">{lastOutput}</div>
+          {mode==='chat' && lastChat && chatState==='COMPLETE' && reportedMissions===null && taskState!=='PROCESSING' &&
+            <button type="button" className="hio-text-button" onClick={()=>{setTaskInput(lastChat);setMode('mission');}}>Use as task</button>}
+          {mode==='chat' && reportedMissions?.map(m=><button type="button" key={m.id} className="hio-text-button"
+            onClick={()=>{openTool('mission_control');setInspectedId(m.id);}}>Inspect {m.title}</button>)}
           {mode==='chat' && answerDetails.length > 0 && <details className="text-xs"><summary>Response details</summary>
             <ul>{answerDetails.map(detail => <li key={detail}>{detail}</li>)}</ul>
           </details>}
@@ -296,7 +310,7 @@ export default function HolographicOS({ onReboot }: Props) {
             <option value="executive">Executive</option><option value="balanced">Balanced</option>
             <option value="high-bandwidth">High-bandwidth</option>
           </select></label>}
-          {mode==='mission' && <details><summary>Authorized tool scope ({allowedTools.length} tools)</summary>
+          {submitAsMission && <details><summary>Authorized tool scope ({allowedTools.length} tools)</summary>
             <p>All tools are selected by default. Owner missions use standing authorization; other accounts retain manual approval.</p>
             {tools.map(tool=><label key={tool.name} className="block" title={tool.description}><input type="checkbox" disabled={commandState==='PROCESSING'} checked={allowedTools.includes(tool.name)} onChange={e=>setAllowedTools(prev=>e.target.checked?[...prev,tool.name]:prev.filter(n=>n!==tool.name))}/>{tool.name}</label>)}
             <label>Allowed HTTPS origins<input aria-label="Allowed HTTPS origins" disabled={commandState==='PROCESSING'} value={origins} onChange={e=>setOrigins(e.target.value)} placeholder="https://example.com"/></label>
@@ -304,7 +318,7 @@ export default function HolographicOS({ onReboot }: Props) {
         </div>
         <form onSubmit={handleCommandSubmit} className="hio-form">
           <input value={commandInput} onChange={event=>setCommandInput(event.target.value)} placeholder={mode==='chat'?"Ask Microfixd a question…":"Describe the outcome you want…"} aria-label="Microfixd command"/>
-          <button type="submit" disabled={!commandInput.trim()||commandState==='PROCESSING'} aria-label="Send command">{commandState==='PROCESSING'?<Loader2 size={17} className="animate-spin"/>:<Send size={17}/>}</button>
+          <button type="submit" disabled={!commandInput.trim()||submitBusy} aria-label={directTask?'Run as task':'Send command'}>{directTask?'Run as task':null}{commandState==='PROCESSING'?<Loader2 size={17} className="animate-spin"/>:<Send size={17}/>}</button>
         </form>
         </>}</>}
       </HIOCockpit>

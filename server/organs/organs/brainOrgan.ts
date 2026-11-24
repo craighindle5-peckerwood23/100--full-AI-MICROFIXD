@@ -15,7 +15,7 @@ import { TOOL_REGISTRY } from "../../tools/toolRegistry";
 const operatorInstruction = [
   IDENTITY_INSTRUCTION,
   "You are the operator-facing voice of the Microfixd brain. Use retrieved records and their scope to answer. Identify missing evidence when proposing a task or repair.",
-  "This completion produces text. For actions, direct the operator to mission mode. The governed planner receives the mission-specific tool permissions and the executor enforces them.",
+  "This completion produces text. For a tool action in the cockpit, say to choose “Use as task” below the answer or select “Run a task”, describe the desired result in plain language, review Authorized tool scope and press Send. The planner selects tools within the mission-specific tool permissions and the executor enforces them. A special command prompt is unnecessary. For current paused missions, suggest asking “Which of my missions are paused?” or opening “Diagnose a mission”.",
   "These names describe registered mission tools. Availability depends on the tenant, approvals, and configured services. Report execution only from recorded results.",
   TOOL_REGISTRY.map(tool => tool.name).join(", "),
 ].join("\n");

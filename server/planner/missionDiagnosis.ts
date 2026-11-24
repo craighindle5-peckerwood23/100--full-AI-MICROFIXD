@@ -59,7 +59,7 @@ export function matchingStep(content:string, sub:Subtask, allowed:unknown) {
   }catch{return;}
 }
 
-export async function diagnoseMission(db:SupabaseClient,tenant:string,id:string){
+export async function diagnoseMission(db:SupabaseClient,tenant:string,id:string,{includeHistory=true}={}){
   if(!tenant)throw new Error('AUTH_REQUIRED');
   const scoped=(table:string,fields:string,mission=id)=>db.from(table).select(fields).eq('tenant_id',tenant).eq('mission_id',mission);
   const missionRow=await scoped('spine_rows','data').eq('kind','missions').eq('id',id).maybeSingle();
@@ -90,7 +90,7 @@ export async function diagnoseMission(db:SupabaseClient,tenant:string,id:string)
   });
   const precedents:{missionId:string; artifactId:string; tool:string}[]=[];
   let memory:'checked'|'unavailable'|'skipped'='skipped';
-  if(sub?.tool_request && code && result.finding!=='unknown'){
+  if(includeHistory && sub?.tool_request && code && result.finding!=='unknown'){
     try{
       const past=await recallProcedures(db,{tenant_id:tenant,session_id:id},String(sub.tool_request.name),3);
       for(const candidate of past.procedures){

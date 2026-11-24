@@ -1,6 +1,8 @@
 # Talk to Microfixd
 
-Open the cockpit and select **Ask Microfixd** to ask a question. Use **Run a task** to submit an objective and track its mission. You can ask a question while a task is waiting. Each view keeps its own draft and result while the cockpit is open.
+Open the cockpit and select **Ask Microfixd** to ask a question. Use **Run a task** to submit an objective and track its mission. **Use as task** copies your last chat request into the task composer. Review its tool scope and press **Send** to start it. You can ask a question while a task is waiting. Each view keeps its own draft and result while the cockpit is open.
+
+In **Ask Microfixd**, type **Which of my missions are paused?** Chat reads your workspace’s current waiting missions and shows the count and findings for up to three. Choose **Inspect** beside a result to open its mission. This lookup requires sign-in and leaves approvals and mission state untouched.
 
 Choose **Diagnose a mission**, select the mission by objective, and press **Check mission evidence**. Read the finding and suggested next step. Expand **Evidence and prior cases** to inspect the observations. **Open this mission** takes you to the existing approval, reconciliation and recovery controls.
 
