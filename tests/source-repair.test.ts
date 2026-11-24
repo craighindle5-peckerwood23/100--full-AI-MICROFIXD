@@ -39,7 +39,7 @@ test('repair uses a separate Render candidate, rejects stale green results, and 
   }
   assert.equal(options?.headers,undefined,'no controller secret forwarded to runner or production');
   if(url.includes('fixture-runner')){checks++;return json({commit:checks===1?base:candidate,status:'verified',network:'none',productionSecrets:false,gate:'production+engineering+adapters'});}
-  return json({status:'ok',commit:candidate});
+  return json({status:'ok',storage:{durable:true},commit:candidate});
  };
  try{
   const result=await repairSource(db,{tenant:'fixture',mission:'mission',subtask:'task'},'Fix fixture',['server/automotive/example.ts'],async()=>({content:JSON.stringify({files:[{path:'server/automotive/example.ts',content:'new'}]})}),async()=>{},request,async()=>{});
@@ -70,7 +70,7 @@ test('automatic incidents require enabled owner standing authorization before en
 test('deployment recovery performs reads only and requires matching candidate, main, isolated receipt and live commit',async()=>{
  const prior={token:process.env.GITHUB_TOKEN,url:process.env.MICROFIXD_REPAIR_RUNNER_URL};process.env.GITHUB_TOKEN='fixture';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture.onrender.com';
  const candidate='a'.repeat(40);let healthy=true;const b:any={select:()=>b,eq:()=>b,contains:(column:string,value:any)=>{assert.equal(column,'operation');assert.equal(value.subtask_id,'task');return b;},limit:async()=>({data:[{operation:{phase:'candidate_created',evidence:{candidate,files:[{path:'server/automotive/example.ts',after:'b'.repeat(64)}]}}}],error:null})};
- const request:typeof fetch=async(input,options)=>{assert.equal(options?.method,undefined);const url=String(input);return Response.json(url.includes('api.github.com')?{object:{sha:candidate}}:url.endsWith('/verification')?{commit:candidate,status:'verified',network:healthy?'none':'enabled',productionSecrets:false,gate:'production+engineering+adapters'}:{commit:candidate});};
+ const request:typeof fetch=async(input,options)=>{assert.equal(options?.method,undefined);const url=String(input);return Response.json(url.includes('api.github.com')?{object:{sha:candidate}}:url.endsWith('/verification')?{commit:candidate,status:'verified',network:healthy?'none':'enabled',productionSecrets:false,gate:'production+engineering+adapters'}:{status:'ok',storage:{durable:true},commit:candidate});};
  const store:any={from:(table:string)=>{assert.equal(table,'spine_events','ordinary memory assertions cannot authorize repair recovery');return b;}};
  try{assert.equal((await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request))?.status,'live_verified');healthy=false;assert.equal(await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request),null);}
  finally{if(prior.token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=prior.token;if(prior.url===undefined)delete process.env.MICROFIXD_REPAIR_RUNNER_URL;else process.env.MICROFIXD_REPAIR_RUNNER_URL=prior.url;}
@@ -97,4 +97,9 @@ test('recovery advances past the first four waiting missions and wraps',async()=
  const query:any={select:()=>query,eq:()=>query,contains:()=>query,gt:(_:string,n:number)=>{start=n;return query;},order:()=>query,limit:async()=>({data:[1,2,3,4,5].filter(n=>n>start).slice(0,4).map(sequence=>({sequence,data:{constraints:{}}}))})};
  try{const db:any={from:()=>query};const cursor=await recoverWaitingRepairs(db);assert.equal(cursor,4);assert.equal(await recoverWaitingRepairs(db,cursor),0);assert.equal(start,4);}
  finally{['GITHUB_TOKEN','MICROFIXD_REPAIR_RUNNER_URL'].forEach((k,i)=>{if(saved[i]===undefined)delete process.env[k];else process.env[k]=saved[i];});}
+});
+
+test('repair bring-up requires durable readiness on the exact revision',async()=>{
+ const {repairIsReady}=await import('../server/engineering/sourceRepair');
+ for(const health of [null,{commit:'revision'},{status:'ok',commit:'other',storage:{durable:true}},{status:'degraded',commit:'revision',storage:{durable:true}},{status:'ok',commit:'revision',storage:{durable:false}}])assert.equal(repairIsReady(health,'revision'),false);
 });

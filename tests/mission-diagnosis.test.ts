@@ -89,3 +89,19 @@ test('tenant-scoped storage reads select the current step and match only an arti
   failure='microfixd_memory_records';assert.equal((await diagnoseMission(db,tenant,id))?.memory,'unavailable');
   failure='spine_approvals';await assert.rejects(()=>diagnoseMission(db,tenant,id));
 });
+
+test('historical introspection separates unique affected missions, call reservations and verified repairs',async()=>{
+ const {reviewMissionPerformance}=await import('../server/planner/missionIntrospection');
+ const fetcher:typeof fetch=async input=>{
+   const req=input instanceof Request?input:new Request(input),url=new URL(req.url);
+   assert.equal(url.searchParams.get('tenant_id'),'eq.tenant');
+   if(url.pathname.endsWith('/spine_rows'))return Response.json([{id:'a',status:'waiting'},{id:'b',status:'succeeded'}]);
+   assert.equal(url.searchParams.get('mission_id'),'in.(a,b)');
+   if(url.pathname.endsWith('/spine_model_runs'))return new Response(null,{headers:{'Content-Range':'0-3/4'}});
+   if(url.pathname.endsWith('/spine_errors'))return Response.json([{code:'STOP',mission_id:'a'},{code:'STOP',mission_id:'a'}]);
+   assert.ok(url.searchParams.get('operation')?.includes('live_verified'));return Response.json([{mission_id:'b'}]);
+ };
+ const db=createClient('https://fixture.supabase.co','fixture',{global:{fetch:fetcher}});
+ const {output}=await reviewMissionPerformance(db,'tenant');
+ assert.match(output,/1 waiting, 1 succeeded/);assert.match(output,/STOP \(1 distinct missions\)/);assert.match(output,/reservations: 4/);assert.match(output,/checkpoints\): 1/);
+});

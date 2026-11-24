@@ -1,4 +1,5 @@
 // @ts-nocheck
+import {asksForMissionReview,reviewMissionPerformance} from '../planner/missionIntrospection';
 import {asksAboutPausedMissions,pausedMissionReport} from '../planner/pausedMissionReport';
 import {plannerClient} from '../planner/supabaseRuntime';
 /**
@@ -110,7 +111,8 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     };
     let groqTokens = 0;
 
-    const registryQuery = asksAboutPausedMissions(req.task);
+    const performanceReview = asksForMissionReview(req.task);
+    const registryQuery = performanceReview || asksAboutPausedMissions(req.task);
     if (registryQuery) {
       routing = {intent:"retrieve", complexity:"low", organs:[], priority:req.priority || "normal"};
     } else {
@@ -221,7 +223,8 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     if (registryQuery) {
       stages.push("mission_registry");
       if (!req.tenant_id) throw new Error("Sign in to read the mission registry.");
-      const report = await pausedMissionReport(plannerClient(), req.tenant_id);
+      const readReport = performanceReview ? reviewMissionPerformance : pausedMissionReport;
+      const report = await readReport(plannerClient(), req.tenant_id);
       output = report.output;
       missions = report.missions;
       organResults.mission_registry = {missions};

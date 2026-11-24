@@ -14,6 +14,10 @@ export function repairPath(path:string) {
   if(!/^(server|src|microfixd)\//.test(path)||['server/engineering/','server/tools/','server/sandbox/','server/organs/','server/index.ts'].some(prefix=>path.startsWith(prefix)))throw new Error('REPAIR_PROTECTED_PATH');
   return path;
 }
+export function repairIsReady(report:unknown,candidate:string){
+  const health=report as {status?:string;commit?:string;storage?:{durable?:boolean}}|null;
+  return health?.status==='ok' && health.commit===candidate && health.storage?.durable===true;
+}
 export function repairURL(value:string) {
   const url=new URL(value);
   if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com')||url.port||url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw new Error('INVALID_REPAIR_RUNNER_URL');
@@ -125,7 +129,7 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
   const liveUntil=Date.now()+15*60_000;
   while(Date.now()<liveUntil){
     await authorize();
-    try{const response=await fetcher('https://microfixd-full-ai.onrender.com/api/health',{redirect:'error',signal:AbortSignal.timeout(20000),cache:'no-store'});if(response.ok){const health=await response.json();if(health.commit===candidate.sha){await record('live_verified',{candidate:candidate.sha,health});return {status:'live_verified',commit:candidate.sha,files:files.map(file=>file.path),sandbox:receipt};}}}catch{}
+    try{const response=await fetcher('https://microfixd-full-ai.onrender.com/readyz',{redirect:'error',signal:AbortSignal.timeout(20000),cache:'no-store'});if(response.ok){const health=await response.json();if(repairIsReady(health,candidate.sha)){await record('live_verified',{candidate:candidate.sha,health});return {status:'live_verified',commit:candidate.sha,files:files.map(file=>file.path),sandbox:receipt};}}}catch{}
     await sleep(15000);
   }
   throw new Error('REPAIR_DEPLOYMENT_NOT_PROVEN');

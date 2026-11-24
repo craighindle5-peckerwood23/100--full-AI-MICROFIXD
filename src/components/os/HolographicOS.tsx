@@ -316,6 +316,7 @@ export default function HolographicOS({ onReboot }: Props) {
             <label>Allowed HTTPS origins<input aria-label="Allowed HTTPS origins" disabled={commandState==='PROCESSING'} value={origins} onChange={e=>setOrigins(e.target.value)} placeholder="https://example.com"/></label>
           </details>}
         </div>
+        {mode==='chat' && !commandInput && commandState!=='PROCESSING' && <button type="button" className="hio-text-button" onClick={()=>setChatInput('Review recent mission performance')}>Review recent mission performance</button>}
         <form onSubmit={handleCommandSubmit} className="hio-form">
           <input value={commandInput} onChange={event=>setCommandInput(event.target.value)} placeholder={mode==='chat'?"Ask Microfixd a question…":"Describe the outcome you want…"} aria-label="Microfixd command"/>
           <button type="submit" disabled={!commandInput.trim()||submitBusy} aria-label={directTask?'Run as task':'Send command'}>{directTask?'Run as task':null}{commandState==='PROCESSING'?<Loader2 size={17} className="animate-spin"/>:<Send size={17}/>}</button>

@@ -16,3 +16,9 @@ The account inventory contains 14 earlier repositories under the Microfyxd and M
 | Final audit | Mission audit, release evaluation and deployment identity serve different purposes. A live commit verifies rollout. Resolving the original symptom requires an incident-specific check. |
 
 Source comparisons include Microfyxd-monorepo at 080d73f (watchdog and metaRepair), microfyxd at d1ece5c (selfHeal), MICROFIXD-ALL-ORGANS-CLAUDE at 73b6fd4 (self-healing control plane), and microfixd-clean at 27c4f91 (immutable core). Microfixd-OS documents the original operating model in COMPLETE_SYSTEM_SUMMARY.md. This assessment maps subsystem responsibilities and does not certify every legacy organ or deployment.
+
+## Historical introspection
+
+The monorepo's src/agent/introspection.ts combined recent outcomes and recurring failures into an operator report. In Ask Microfixd choose **Review recent mission performance** and press Send. The current port groups durable tenant records by mission, reports model reservations and identifies missions with live-verified repair checkpoints. Evidence read failures appear separately in the report.
+
+The legacy governed bring-up concept now checks the promoted revision's readiness before recording a live-verified repair. Both normal completion and restart recovery require the matching commit, successful readiness status and reported durable storage. Readiness describes the runtime configuration and health, and a symptom-specific test still establishes whether the original issue is fixed.

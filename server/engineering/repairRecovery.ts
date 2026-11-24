@@ -1,6 +1,6 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {createSupervisor} from '../metacognition/store';
-import {repairPath,repairURL} from './sourceRepair';
+import {repairPath,repairURL,repairIsReady} from './sourceRepair';
 
 /** Observe an already-promoted repair after a process restart. Never replay an external write. */
 export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string;mission:string;subtask:string},fetcher:typeof fetch=fetch){
@@ -19,8 +19,8 @@ export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string
  if(main.object?.sha!==candidate)return null;
  const receipt=await read(`${runner}/verification`);
  if(receipt.commit!==candidate||receipt.status!=='verified'||receipt.network!=='none'||receipt.productionSecrets!==false||receipt.gate!=='production+engineering+adapters')return null;
- const health=await read('https://microfixd-full-ai.onrender.com/api/health');
- if(health.commit!==candidate)return null;
+ const health=await read('https://microfixd-full-ai.onrender.com/readyz');
+ if(!repairIsReady(health,candidate))return null;
  return {status:'live_verified',commit:candidate,files:files.map(file=>file.path),sandbox:receipt,recovery:'read_only_observation'};
 }
 export function repairRecoveryResult(raw:NonNullable<Awaited<ReturnType<typeof readCompletedRepair>>>,tenant:string,subtask:string,requestHash:string){
