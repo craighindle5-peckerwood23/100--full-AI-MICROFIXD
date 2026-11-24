@@ -14,6 +14,10 @@ The six visual boot stages run alongside bounded live `/api/health` and `/readyz
 
 Mission cards read the existing authenticated `/api/planner/missions` endpoint. No parallel mission registry or local persistence is introduced. Displayed counts are mission counts from at most the 50 most recent records, not estimated task counts or an invented on-track score.
 
+In the command surface, select **Ask a question** and choose Executive, Balanced, or High-bandwidth. The selected style changes the brain’s answer instructions. The configured provider, retrieval settings, and tenant-scoped command pipeline still handle each question. Successive questions in the same tab use the existing chat session.
+
+**Response details** displays the provider, model, elapsed command time, and stage names when returned by the command endpoint. Elapsed time includes orchestration. Stages identify pipeline steps and do not certify answer accuracy.
+
 The root Vite build deduplicates React/ReactDOM across the app and standalone shell. The shell library externalizes React entrypoints including JSX runtime and ReactDOM client. The production-browser test specifically verifies that the bundled head mounts, rather than accepting development rendering alone.
 
 Verification for this change: the repository production gate passes 72 tests, typed classification/wiring validation, deterministic release evaluation and both production builds. `node tests/hio-ui.mjs` exercises the actual built bundle with controlled local API fixtures; these browser checks do not establish live backend capability. The fixture command verifies the unchanged authenticated command path. Graphics are rendered in software in the verification environment, so its FPS is not a target-device benchmark.

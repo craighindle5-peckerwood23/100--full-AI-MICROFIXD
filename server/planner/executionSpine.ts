@@ -125,6 +125,7 @@ export interface PlannerDependencies {
   withMissionLock<T>(tenantId: string, missionId: UUID, work: () => Promise<T>): Promise<T>;
   validateTaskBudget?(tasks:(PlannedTask|Task)[]):void;
   plan(mission: Mission): Promise<PlannedTask[]>;
+  verifyResume?(mission:Mission,tasks:Task[],subs:Subtask[],artifacts:Artifact[]):Promise<boolean>;
   recordPlanningError?(mission:Mission,error:unknown):Promise<void>;
   reviewCompletion?(mission: Mission, tasks: Task[], artifacts: Artifact[]): Promise<CompletionReview>;
   // Persist a historical procedure before finalization. It is usable only once
@@ -171,11 +172,19 @@ export class PlannerService {
       if (!current.objective) throw new Error('EMPTY_OBJECTIVE');
       if(deadlineExceeded(current)){await r.updateMissionStatus(current.mission_id,'waiting');return r.getMission(current.mission_id);}
       let tasks = await r.getTasks(current.mission_id);
+        if(this.d.verifyResume){
+          const subs=(await Promise.all(tasks.map(t=>r.getSubtasks(t.task_id)))).flat();
+          if(!await this.d.verifyResume(current,tasks,subs,await r.getArtifacts(current.mission_id))){
+            await this.d.recordPlanningError?.(current,new Error('RESUME_BASELINE_MISMATCH'));
+            await r.updateMissionStatus(current.mission_id,'waiting');
+            return r.getMission(current.mission_id);
+          }
+        }
       if (!tasks.length) {
         let plan: PlannedTask[];
         try { plan = await this.d.plan(current); this.d.validateTaskBudget?.(plan); } catch (error) {
           await this.d.recordPlanningError?.(current,error);
-          await r.updateMissionStatus(current.mission_id, ['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) ? 'waiting' : 'failed');
+          await r.updateMissionStatus(current.mission_id, ['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED','METACOGNITIVE_HALT','METACOGNITIVE_ESCALATE','METACOGNITIVE_QUARANTINE'].includes((error as {code?:string})?.code) ? 'waiting' : 'failed');
           return r.getMission(current.mission_id);
         }
         const count = plan.reduce((n, t) => n + t.subtasks.length, 0);
@@ -195,7 +204,9 @@ export class PlannerService {
           await tx.updateMissionStatus(current.mission_id, 'running');
         });
         tasks = await r.getTasks(current.mission_id);
-      } else await r.updateMissionStatus(current.mission_id, 'running');
+      } else {
+        await r.updateMissionStatus(current.mission_id,'running');
+      }
       // Continuation plans are committed with their review under this mission's lease.
       // Restarts reuse completed outputs; no external effect is replayed to replan.
       for (;;) {
@@ -220,7 +231,8 @@ export class PlannerService {
           if (recover) {
             let recovered: ExecutionResult | null;
             try { recovered = await recover(sub, context); } catch (error) {
-              if ((error as {code?:string})?.code !== 'RECONCILIATION_REQUIRED') throw error;
+              const code = (error as {code?:string})?.code;
+              if (!['RECONCILIATION_REQUIRED','METACOGNITIVE_HALT','METACOGNITIVE_ESCALATE','METACOGNITIVE_QUARANTINE'].includes(code ?? '')) throw error;
               await this.d.transaction(async tx => {await tx.updateSubtaskStatus(sub.subtask_id,'waiting_input');await tx.updateTaskStatus(task.task_id,'blocked');await tx.updateMissionStatus(current.mission_id,'waiting');});
               return r.getMission(current.mission_id);
             }
@@ -247,7 +259,7 @@ export class PlannerService {
                 throw new Error('INVALID_OUTPUT_OR_MISSING_EVIDENCE');
             } catch (error) {
               await this.d.recordError(context, error, attempt);
-              if (['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED'].includes((error as {code?:string})?.code) || (error as {code?:string})?.code === 'WAITING_APPROVAL' || (error as {code?:string})?.code === 'RECONCILIATION_REQUIRED') {
+              if (['TOKEN_BUDGET_EXHAUSTED','PROVIDERS_EXHAUSTED','METACOGNITIVE_HALT','METACOGNITIVE_ESCALATE','METACOGNITIVE_QUARANTINE'].includes((error as {code?:string})?.code) || (error as {code?:string})?.code === 'WAITING_APPROVAL' || (error as {code?:string})?.code === 'RECONCILIATION_REQUIRED') {
                 await this.d.transaction(async tx => {if((error as {code?:string})?.code!=='RECONCILIATION_REQUIRED')await tx.setSubtaskAttempts(sub.subtask_id,attempt-1);await tx.updateSubtaskStatus(sub.subtask_id,'waiting_input');await tx.updateTaskStatus(task.task_id,'blocked');await tx.updateMissionStatus(current.mission_id,'waiting');});
                 return r.getMission(current.mission_id);
               }

@@ -19,7 +19,8 @@
     "overwatch",
     "hitl",
     "sandbox",
-    "wiring"
+    "wiring",
+    "watchdog_timer"
   ],
   "humanApprovalRequiredFor": [
     "self_modification",
@@ -130,9 +131,9 @@
       "name": "Metacognitive Overwatch",
       "kind": "organ",
       "layer": "server",
-      "source": "server/organs/organRegistry.ts",
+      "source": "server/metacognition/metacognitionOrgan.ts",
       "node": "server/organs/index.ts",
-      "executable": false
+      "executable": true
     },
     {
       "id": "paragon",
@@ -448,6 +449,15 @@
       "source": "server/organs/organs/automotiveOrgan.ts",
       "node": "server/organs/index.ts",
       "executable": true
+    },
+    {
+      "id": "watchdog_timer",
+      "name": "Agent Execution Watchdog",
+      "kind": "organ",
+      "layer": "server",
+      "source": "server/metacognition/watchdog.ts",
+      "node": "server/organs/index.ts",
+      "executable": true
     }
   ],
   "objects": [
@@ -559,7 +569,7 @@
     {
       "id": "overwatch",
       "kind": "organ",
-      "source": "server/organs/organRegistry.ts"
+      "source": "server/metacognition/metacognitionOrgan.ts"
     },
     {
       "id": "paragon",
@@ -750,6 +760,16 @@
       "id": "vector_automotive",
       "kind": "organ",
       "source": "server/organs/organs/automotiveOrgan.ts"
+    },
+    {
+      "id": "metacognitive_supervisor",
+      "kind": "runtime",
+      "source": "server/metacognition/supervisor.ts"
+    },
+    {
+      "id": "watchdog_timer",
+      "kind": "organ",
+      "source": "server/metacognition/watchdog.ts"
     }
   ]
 }

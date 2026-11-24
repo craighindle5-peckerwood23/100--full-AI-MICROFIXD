@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "files": {
+    "microfixd/topology.json": "a888edda35ee66c0a8268addf3697239d372921c27bd53d2f9594434c8537ea6",
+    "microfixd/wiring.json": "c2f10b0f6499bc42db0c76d0c6753c031e76d2d8565660b6ed71bf72cd674fbf",
+    "microfixd/core/governance/paragonDissector.ts": "8f86486e1d9d37fdefbe1961246874537c96a17ffd66dff78c482c7884bc08c8",
+    "server/metacognition/supervisor.ts": "23f434b8d3127aab842ee613f7c5d84432c679450580458472f88ce397bd593c",
+    "server/metacognition/watchdog.ts": "fb97ac7f4354707bc26308cadc6f1b29bab77693ba3a421f26bd82c2c924f38e",
+    "server/metacognition/responseBoundary.ts": "75faf14ae2f3d60d035e6b504269f65ba954de2e66b087189904ea8c6c3e38c3",
+    "server/hitl/hitlManager.ts": "b70a758b5d327a1251b9d6c2884f97c0abee82a8ec05c457e8238c4f8a9e3656",
+    "server/security/identityLock.ts": "8f73ea2ec740f6bec0792f83f80aa34b12f66d3b9e88750db0ef6b03ec73b334",
+    "server/security/rbac.ts": "4caeb718c5a8b5c7ee0fc5f8c515ad6557e3f29702507c8ba7835fcf095e9707",
+    "server/planner/missionAudit.ts": "669228a20b119890b0c92f6915e29f4aaec9cc83a5f207540c77663fcfdb08da",
+    "server/planner/governedTools.ts": "0c64043d9fc0401d0643a15d6db352e6b86d6f0c6b5ca524e473183d683be0b2",
+    "public/recovery.html": "0a94940293f39e84d5e6dc76667d9633c378ca7fb9ef5057bf3cdd554d41972c",
+    "public/recovery-worker.js": "c4ff9533fb867b97f1776d813c87059de40157bd053cba34cd1facd6b3e9240b",
+    "server/organs/organs/brainOrgan.ts": "9e429edbaf7ea88fe069619fad82db2a7a96b3fb0d67afd456a26c0c6d44b2c3",
+    "server/orchestration/commandCenter.ts": "209556e5d22e47424d52054303d783238367ad75445cf4284dab392af97dcf08"
+  }
+}

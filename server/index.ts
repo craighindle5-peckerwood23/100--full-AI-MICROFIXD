@@ -135,6 +135,7 @@ app.get("/readyz", async (_, res) => {
 
   res.status(ready ? 200 : 503).json({
     status: ready ? "ok" : "degraded",
+    commit: process.env.RENDER_GIT_COMMIT ?? "local",
     systemHealth,
     storage: {
       durable: configured.supabase,
@@ -241,8 +242,14 @@ app.get("/api/mcp/manifest", (_, res) => {
 });
 
 // ── Authentication and rate limiting for operational APIs ─────────────────
+// A separate, stateless service credential authorizes only this cognitive endpoint.
+app.use('/api/vector', lazyRouter(async () => {
+  const { createVectorIntelligenceRouter } = await import('./integrations/vector/intelligence');
+  return createVectorIntelligenceRouter();
+}));
 app.use((req, res, next) => {
-  if (!(req.path === "/api" || req.path.startsWith("/api/"))) {
+  const path = req.path.toLowerCase();
+  if (!(path === "/api" || path.startsWith("/api/"))) {
     next();
     return;
   }
@@ -262,6 +269,12 @@ app.use((req, res, next) => {
     })
     .catch(next);
 });
+
+// Mandatory supervisor after RBAC; all protected routers below inherit this boundary.
+app.use(async (req,res,next)=>{
+  try{const {metacognitiveMiddleware}=await import('./metacognition/middleware');metacognitiveMiddleware()(req,res,next);}catch(error){next(error);}
+});
+app.use('/api/metacognition',lazyRouter(async()=>{const {metacognitiveRouter}=await import('./metacognition/router');return metacognitiveRouter;}));
 
 // Authenticated, read-only runtime diagnostics. Bootstrap /api/health is liveness only.
 // These checks deliberately do not create or mutate missions/approvals.
@@ -356,6 +369,10 @@ app.post("/api/classification/resolve", async (req, res, next) => {
   }
 });
 
+app.use("/vector", lazyRouter(async () => {
+  const { vectorCaseGateway } = await import("./automotive/vectorCaseGateway");
+  return vectorCaseGateway();
+}));
 app.use("/api/automotive", lazyRouter(async () => {
   const { automotiveRouter } = await import("./automotive/automotiveRouter");
   return automotiveRouter;

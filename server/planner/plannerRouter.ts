@@ -1,3 +1,4 @@
+import {diagnoseMission} from './missionDiagnosis';
 import {projectMission} from './missionProjection';
 import { Router } from 'express';
 import { randomUUID, createHash } from 'node:crypto';
@@ -28,7 +29,7 @@ export const submitMission:import('express').RequestHandler=async(req,res)=>{
   if(!tenant||!key||key.length>200||typeof req.body.objective!=='string'||!req.body.objective.trim()||req.body.objective.length>16000)return res.status(400).json({code:'INVALID_MISSION'});
   if(req.body.deadline_at!==undefined&&(typeof req.body.deadline_at!=='string'||!Number.isFinite(Date.parse(req.body.deadline_at))||Date.parse(req.body.deadline_at)<=Date.now()))return res.status(400).json({code:'INVALID_DEADLINE'});
   const admin=(req as any).microfixdRole==='admin';
-  const mission:Mission={mission_id:uuid(`${tenant}:${key}`),tenant_id:tenant,created_by:(req as any).microfixdUserId??'operator',created_at:new Date().toISOString(),objective:req.body.objective.trim(),constraints:{completion_policy:'objective-v1',tool_approval_mode:admin&&req.body.tool_approval_mode!=='manual'?'preauthorized':'manual',approval_actor:admin?((req as any).microfixdUserId??'admin'):null,...(req.body.deadline_at?{deadline_at:req.body.deadline_at}:{}),max_tokens:Number.isInteger(req.body.max_tokens)?Math.max(1,Math.min(100000,req.body.max_tokens)):32000,browser_origins:Array.isArray(req.body.browser_origins)?req.body.browser_origins.filter((v:unknown)=>{try{return typeof v==='string'&&new URL(v).origin===v&&v.startsWith('https://');}catch{return false;}}):[],tool_permissions:Array.isArray(req.body.tool_permissions)?req.body.tool_permissions.filter((t:unknown)=>typeof t==='string'&&ENABLED_TOOLS.includes(t)):[...ENABLED_TOOLS],...(req.body.plan?{plan:req.body.plan}:{})},status:'queued',result_artifact_id:null};
+  const mission:Mission={mission_id:uuid(`${tenant}:${key}`),tenant_id:tenant,created_by:(req as any).microfixdUserId??'operator',created_at:new Date().toISOString(),objective:req.body.objective.trim(),constraints:{completion_policy:'objective-v1',peer_review_mode:req.body.peer_review_mode==='required'?'required':'standard',tool_approval_mode:admin&&req.body.tool_approval_mode!=='manual'?'preauthorized':'manual',approval_actor:admin?((req as any).microfixdUserId??'admin'):null,...(req.body.deadline_at?{deadline_at:req.body.deadline_at}:{}),max_tokens:Number.isInteger(req.body.max_tokens)?Math.max(1,Math.min(100000,req.body.max_tokens)):32000,browser_origins:Array.isArray(req.body.browser_origins)?req.body.browser_origins.filter((v:unknown)=>{try{return typeof v==='string'&&new URL(v).origin===v&&v.startsWith('https://');}catch{return false;}}):[],tool_permissions:Array.isArray(req.body.tool_permissions)?req.body.tool_permissions.filter((t:unknown)=>typeof t==='string'&&ENABLED_TOOLS.includes(t)):[...ENABLED_TOOLS],...(req.body.plan?{plan:req.body.plan}:{})},status:'queued',result_artifact_id:null};
   if(req.body.skill_id!==undefined){
    if(req.body.plan||typeof req.body.skill_id!=='string'||typeof req.body.skill_revision!=='string'||!req.body.skill_inputs||typeof req.body.skill_inputs!=='object'||Array.isArray(req.body.skill_inputs))return res.status(400).json({code:'INVALID_SKILL_REQUEST'});
    try{const selected=await readWorkflowSkill(plannerClient(),tenant,req.body.skill_id,req.body.skill_revision);mission.constraints.plan=JSON.parse(JSON.stringify(compileSkill(selected.skill,req.body.skill_inputs,mission.constraints.tool_permissions as string[])));mission.constraints.workflow_skill={id:selected.skill.id,revision:selected.revision};}
@@ -46,7 +47,7 @@ export const submitMission:import('express').RequestHandler=async(req,res)=>{
   if(claimed){try{const {error}=await client.rpc('spine_commit',{p_tenant:tenant,p_mission:mission.mission_id,p_owner:owner,p_operations:[{op:'insert',kind:'missions',id:mission.mission_id,data:mission}]});if(error)throw error;}finally{await client.rpc('spine_lease',{p_tenant:tenant,p_mission:mission.mission_id,p_owner:owner,p_release:true});}}
   const {data,error:readError}=await client.from('spine_rows').select('data').eq('tenant_id',tenant).eq('kind','missions').eq('id',mission.mission_id).single();
   if(readError)throw readError;
-  if(data.data.objective!==mission.objective||canonicalJSON(data.data.constraints)!==canonicalJSON(mission.constraints))return res.status(409).json({code:'IDEMPOTENCY_CONFLICT'});
+  if(data.data.objective!==mission.objective||canonicalJSON({peer_review_mode:'standard',...data.data.constraints})!==canonicalJSON(mission.constraints))return res.status(409).json({code:'IDEMPOTENCY_CONFLICT'});
   res.status(202).json({...data.data,status_url:`/api/planner/missions/${mission.mission_id}`,...(res.locals.legacyMission?{run:projectMission(data.data),reply:'Mission queued; follow status_url for execution evidence.'}:{})});
  }catch{res.status(503).json({code:'PLANNER_STORAGE_UNAVAILABLE'});}
 };
@@ -72,6 +73,16 @@ plannerRouter.get(['/missions/:id/audit','/missions/:id/evaluation'],async(req,r
  const artifacts=await repository.getArtifacts(req.params.id);
  res.json(req.path.endsWith('/evaluation')?evaluateMission(mission,tasks,subtasks,artifacts):auditMission(mission,tasks,subtasks,artifacts));
  }catch{res.status(503).json({code:'AUDIT_UNAVAILABLE'});}
+});
+plannerRouter.get('/missions/:id/diagnosis',async(req,res)=>{
+  const tenant=(req as any).microfixdTenantId;
+  if(!tenant)return res.status(403).json({code:'AUTH_REQUIRED'});
+  try{
+    const diagnosis=await diagnoseMission(plannerClient(),tenant,req.params.id);
+    res.set('Cache-Control','no-store');
+    if(!diagnosis)return res.status(404).json({code:'MISSION_NOT_FOUND'});
+    res.json(diagnosis);
+  }catch{res.status(503).json({code:'DIAGNOSIS_STORAGE_UNAVAILABLE'});}
 });
 plannerRouter.get('/missions/:id',async(req,res)=>{
  try{const tenant=(req as any).microfixdTenantId,client=plannerClient();const {repository}=createPlannerRuntime(client,tenant,req.params.id);
@@ -118,13 +129,13 @@ plannerRouter.get('/agents',async(req,res)=>{
  if(error)throw error;res.json({agents:data});}catch{res.status(503).json({code:'STORAGE_UNAVAILABLE'});}
 });
 export function startPlannerWorker():()=>void {
- let busy=false,stopped=false,cursor=0;
+ let busy=false,stopped=false,cursor=0,repairCursor=0;
  plannerWorkerStarted();
  const tick=async()=>{
   if(busy||stopped)return;busy=true;plannerWorkerTickStarted();
   try{
    const client=plannerClient();
-   try{await recoverWaitingRepairs(client);}catch(error){plannerWorkerError(error);console.error('[repair] completion recovery deferred');}
+   try{repairCursor=await recoverWaitingRepairs(client,repairCursor);}catch(error){plannerWorkerError(error);console.error('[repair] completion recovery deferred');}
    const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
    if(error)throw error;
    if(!data.length)cursor=0;

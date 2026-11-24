@@ -37,3 +37,18 @@ test('cancelled access never retries an unauthenticated command',async()=>{
  try{await assert.rejects(runSystemCommand('retain',{},'auth-session'),/not executed/);assert.equal(calls,1);}
  finally{(globalThis as any).window=oldWindow;globalThis.fetch=oldFetch;}
 });
+
+import {synthesisGuidance} from '../server/organs/organs/brainOrgan';
+test('answer styles select only fixed server instructions and preserve unspecified defaults', () => {
+  for (const mode of ['executive', 'balanced', 'high-bandwidth']) assert.ok(synthesisGuidance(mode));
+  for (const value of [undefined, null, 'toString', 'custom instruction', {}]) assert.equal(synthesisGuidance(value), '');
+});
+
+test('explicit tool calls use the mission composer while questions stay in chat',async()=>{
+ const {isToolRequest}=await import('../src/lib/toolRequest');
+ const tools=[{name:'list_system_capabilities'}];
+ assert.ok(isToolRequest('Use list_system_capabilities to list the tools',tools));
+ assert.ok(isToolRequest('Repair the failing worker',tools));
+ assert.equal(isToolRequest('How can I repair the failing worker?',tools),false);
+ assert.equal(isToolRequest('Use nonexistent_tool',tools),false);
+});

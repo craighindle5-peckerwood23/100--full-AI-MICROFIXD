@@ -60,6 +60,11 @@ test('brain recalls before inference and persists the completed response', async
     if (!request.url.includes('api.groq.com')) return memoryFetch(input,init);
     const body=await request.json();
     assert.equal(body.max_tokens,10000);
+    assert.equal(body.messages[0].role,'system');
+    assert.match(body.messages[0].content,/Microfixd, a cognitive synthetic organism/);
+    const { TOOL_REGISTRY } = await import('../server/tools/toolRegistry');
+    assert.deepEqual(body.messages[0].content.split('\n').at(-1).split(', '), TOOL_REGISTRY.map(tool => tool.name));
+    assert.match(body.messages[0].content, /mission-specific tool permissions/);
     sawContext=body.messages.some((m:any)=>m.content.includes('repair fact'));
     return new Response(JSON.stringify({id:'test',object:'chat.completion',created:1,model:'qwen/qwen3.8-27b',choices:[{index:0,message:{role:'assistant',content:'remembered repair'},finish_reason:'stop'}],usage:{total_tokens:10}}),{headers:{'Content-Type':'application/json'}});
   };
@@ -70,6 +75,22 @@ test('brain recalls before inference and persists the completed response', async
     assert.ok(rows.some(r=>r.content.includes('remembered repair')));
   } finally {globalThis.fetch=memoryFetch;}
 });
+test('direct identity questions use the constitutional description and persist through the brain', async () => {
+  const {executeBrainOrgan} = await import('../server/organs/organs/brainOrgan');
+  const {checkIdentityDrift,isIdentityQuestion} = await import('../server/security/identityLock');
+  const result: any = await executeBrainOrgan('complete',{prompt:'Are you just an LLM?',session_id:'identity'});
+  assert.equal(result.provider,'identity_lock');
+  assert.equal(result.model,null);
+  assert.match(result.text,/cognitive synthetic organism/);
+  assert.match(result.text,/Paragon Dissector/);
+  assert.match(result.text,/Watchdog/);
+  assert.match(result.text,/Supabase/);
+  assert.equal(checkIdentityDrift(result.text).clean,true);
+  assert.equal(checkIdentityDrift('I am not Microfixd.').clean,false);
+  assert.equal(isIdentityQuestion('Who are you and what did you repair today?'),false);
+  assert.ok(rows.some(row=>row.metadata.session_id==='identity' && JSON.parse(row.content).response===result.text));
+});
+
 test('core MemoryOrgan uses durable transport and reloads from database',async()=>{
   const {MemoryOrgan,configureMemoryTransport}=await import('../microfixd/core/memory/memory');
   configureMemoryTransport(executeMemoryOrgan);

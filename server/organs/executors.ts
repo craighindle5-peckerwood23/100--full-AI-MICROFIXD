@@ -1,3 +1,6 @@
+import {supervisedOperation} from '../metacognition/context';
+import {executeMetacognitionOrgan} from '../metacognition/metacognitionOrgan';
+import {executeWatchdogOrgan} from '../metacognition/watchdog';
 import { executeAutomotiveOrgan } from "./organs/automotiveOrgan";
 import { executeCrawlOrgan } from "./organs/crawlOrgan";
 import { executeBrainOrgan } from "./organs/brainOrgan";
@@ -33,6 +36,8 @@ function getCognitiveOrgans() {
 }
 
 export const EXECUTORS: Record<string, ExecutorFn> = {
+  overwatch: executeMetacognitionOrgan,
+  watchdog_timer: executeWatchdogOrgan,
   vector_automotive: executeAutomotiveOrgan,
   crawl_engine: executeCrawlOrgan,
   brain: executeBrainOrgan,
@@ -137,7 +142,7 @@ export const EXECUTORS: Record<string, ExecutorFn> = {
  * Returns a live executor for any of the 200+ registered organs in Microfixd OS.
  * Dispatches to domain-specific handlers, agent society, governance, or unified organ execution.
  */
-export function getExecutor(organId: string): ExecutorFn {
+function rawExecutor(organId: string): ExecutorFn {
   if (EXECUTORS[organId]) {
     return EXECUTORS[organId];
   }
@@ -186,4 +191,9 @@ export function getExecutor(organId: string): ExecutorFn {
 
     throw new Error(`NO_NATIVE_EXECUTOR:${organId}`);
   };
+}
+
+export function getExecutor(organId:string):ExecutorFn {
+ const executor=rawExecutor(organId);
+ return (action,payload)=>supervisedOperation(organId,action,payload??null,()=>executor(action,payload));
 }
