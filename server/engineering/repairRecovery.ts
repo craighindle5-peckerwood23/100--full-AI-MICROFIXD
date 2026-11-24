@@ -1,6 +1,6 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {createSupervisor} from '../metacognition/store';
-import {repairPath,repairURL} from './sourceRepair';
+import {repairPath,repairURL,repairIsReady,experimentVerified} from './sourceRepair';
 
 /** Observe an already-promoted repair after a process restart. Never replay an external write. */
 export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string;mission:string;subtask:string},fetcher:typeof fetch=fetch){
@@ -18,19 +18,19 @@ export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string
  const main=await read('https://api.github.com/repos/craighindle5-peckerwood23/100--full-AI-MICROFIXD/git/ref/heads/main',{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`,Accept:'application/vnd.github+json'});
  if(main.object?.sha!==candidate)return null;
  const receipt=await read(`${runner}/verification`);
- if(receipt.commit!==candidate||receipt.status!=='verified'||receipt.network!=='none'||receipt.productionSecrets!==false||receipt.gate!=='production+engineering+adapters')return null;
- const health=await read('https://microfixd-full-ai.onrender.com/api/health');
- if(health.commit!==candidate)return null;
+ if(!experimentVerified(receipt,entry.evidence.base,candidate)||receipt.commit!==candidate||receipt.status!=='verified'||receipt.network!=='none'||receipt.productionSecrets!==false||receipt.gate!=='production+engineering+adapters')return null;
+ const health=await read('https://microfixd-full-ai.onrender.com/readyz');
+ if(!repairIsReady(health,candidate))return null;
  return {status:'live_verified',commit:candidate,files:files.map(file=>file.path),sandbox:receipt,recovery:'read_only_observation'};
 }
 export function repairRecoveryResult(raw:NonNullable<Awaited<ReturnType<typeof readCompletedRepair>>>,tenant:string,subtask:string,requestHash:string){
  return {raw,normalized:{result:raw},evidence:{tool:'repair_source_code',request_hash:requestHash,idempotency_key:`${tenant}:${subtask}`,read_only_recovery:true,completed_at:new Date().toISOString()}};
 }
-export async function recoverWaitingRepairs(db:SupabaseClient){
- if(!process.env.MICROFIXD_REPAIR_RUNNER_URL||!process.env.GITHUB_TOKEN)return;
+export async function recoverWaitingRepairs(db:SupabaseClient,afterSequence=0){
+ if(!process.env.MICROFIXD_REPAIR_RUNNER_URL||!process.env.GITHUB_TOKEN)return 0;
  const tenant=process.env.MICROFIXD_REPAIR_OWNER_TENANT||'default';
- const {data,error}=await db.from('spine_rows').select('data').eq('tenant_id',tenant).eq('kind','missions').eq('data->>status','waiting')
-  .contains('data',{constraints:{tool_approval_mode:'preauthorized',tool_permissions:['repair_source_code']}}).limit(4);
+ const {data,error}=await db.from('spine_rows').select('data,sequence').eq('tenant_id',tenant).eq('kind','missions').eq('data->>status','waiting')
+  .contains('data',{constraints:{tool_approval_mode:'preauthorized',tool_permissions:['repair_source_code']}}).gt('sequence',afterSequence).order('sequence').limit(4);
  if(error)throw new Error('REPAIR_RECOVERY_STORAGE_FAILED');
  const supervisor = createSupervisor(db, tenant);
  for(const row of data??[]){
@@ -47,4 +47,5 @@ export async function recoverWaitingRepairs(db:SupabaseClient){
    if(failure)console.error('[repair] verified completion deferred; mission lease or state changed');
   }catch{console.error('[repair] completion observation unavailable; no external action repeated');}
  }
+ return data?.length===4?Number(data[3].sequence):0;
 }

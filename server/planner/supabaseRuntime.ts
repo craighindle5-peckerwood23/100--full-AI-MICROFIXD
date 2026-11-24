@@ -1,3 +1,4 @@
+import {verifyResume} from './resumeIntegrity';
 import { IDENTITY_INSTRUCTION } from "../security/identityLock";
 import {parsePlanPortfolio} from '../metacognition/planPortfolio';
 import {withPeerFailover,peerVerdict,type Ballot} from '../metacognition/peerReview';
@@ -102,7 +103,7 @@ export function createPlannerRuntime(client: SupabaseClient, tenant: string, mis
     if(!result.accepted)throw new MetacognitiveIntervention({verdict:'escalate',reasons:['PEER_QUORUM_NOT_REACHED'],correction:'Resolve missing evidence or reviewer disagreement; no majority may bypass deterministic policy.'});
   };
   const governed=createGovernedTools(client,tenant,mission,owner,modelCall,supervisor,reviewCandidate);
-  const deps: PlannerDependencies={repository,validate:validateSchema,budget:{max_attempts:3,backoff_ms:500,max_subtasks:16},
+  const deps: PlannerDependencies={repository,verifyResume:(m,t,s,a)=>verifyResume(client,m,t,s,a),validate:validateSchema,budget:{max_attempts:3,backoff_ms:500,max_subtasks:16},
     transaction:async work=>{const operations:Operation[]=[];const result=await work(new DatabaseRepositories(new SupabaseDatabase(client,tenant,mission,owner,operations),tenant));await db.commit(operations);return result;},
     withMissionLock:async(t,id,work)=>{
       if(t!==tenant||id!==mission)throw new Error('TENANT_MISMATCH');

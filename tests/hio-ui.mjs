@@ -7,7 +7,27 @@ import {tmpdir} from 'node:os';
 import {existsSync,readFileSync,writeFileSync,chmodSync,mkdirSync} from 'node:fs';
 import {brotliDecompressSync} from 'node:zlib';
 import {execFileSync} from 'node:child_process';
-const app=express();app.use(express.static(resolve('dist')));app.get('/saas',(_req,res)=>res.sendFile(resolve('dist/index.html')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+import {plannerRouter} from '../server/planner/plannerRouter.ts';
+import {rbacMiddleware} from '../server/security/rbac.ts';
+const app=express();
+app.use('/api',rbacMiddleware);
+app.use('/api/planner',plannerRouter);
+// Only persistence is simulated on the diagnosis path. Exercise the real
+// HTTP client, authorization, Express handler and evidence selection.
+app.get('/rest/v1/:table',(req,res)=>{
+ assert.equal(req.query.tenant_id,'eq.default');
+ const rows={missions:{mission_id:'browser-fixture',status:'waiting',constraints:{tool_permissions:['read_public_page']}},
+  subtasks:{subtask_id:'sub',status:'waiting_input',tool_request:{name:'read_public_page',arguments:{url:'https://example.com'}}}};
+ if(req.params.table==='spine_rows')return res.json([{data:rows[String(req.query.kind).slice(3)]}]);
+ if(req.params.table==='spine_errors')return res.json([{code:'WAITING_APPROVAL'}]);
+ if(req.params.table==='spine_approvals')return res.json([{status:'pending',expires_at:new Date(Date.now()+60000).toISOString()}]);
+ if(req.params.table==='microfixd_memory_records')return res.json([]);
+ res.sendStatus(404);
+});
+app.use(express.static(resolve('dist')));app.get('/saas',(_req,res)=>res.sendFile(resolve('dist/index.html')));const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
+process.env.SUPABASE_URL=`http://127.0.0.1:${server.address().port}`;
+process.env.SUPABASE_SERVICE_ROLE_KEY='browser-fixture-key';
+process.env.OPERATOR_TOKEN='hio-ui-test-token';
 let executablePath=process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 if(!executablePath&&process.platform==='linux'&&process.arch==='x64'){
  const require=createRequire(import.meta.url);let directory=dirname(require.resolve('@sparticuz/chromium'));
@@ -39,10 +59,18 @@ try{
    }
    return route.fulfill({json:{missions:[{...mission,status:approved?'succeeded':'waiting'}]}});
   }
+  if(u.pathname.endsWith('/diagnosis')){
+   assert.equal(route.request().method(),'GET');assert.equal(route.request().headers().authorization,'Bearer hio-ui-test-token');
+   return route.continue();
+  }
   if(u.pathname.endsWith('/approvals/sub/decide')){assert.equal(route.request().postDataJSON().decision,'approved');approved=true;return route.fulfill({json:{success:true}});}
   if(u.pathname==='/api/planner/missions/browser-fixture')return route.fulfill({json:{mission:{...mission,status:approved?'succeeded':'waiting',result_artifact_id:approved?'result':null},tasks:[],artifacts:approved?[{artifact_id:'result',content:'Verified mission fixture result.'}]:[],approvals:approved?[]:[{status:'pending',subtask_id:'sub',request_hash:'hash',expires_at:new Date(Date.now()+60000).toISOString(),request:{name:'read_public_page',arguments:{url:'https://example.com'}}}],tool_runs:[],messages:[],errors:[],budget:null}});
+  if(u.pathname==='/api/command/run' && route.request().postDataJSON().task==='Tell me about microfixd paused missions'){
+   assert.equal(route.request().postDataJSON().mode,'chat');
+   return route.fulfill({json:{success:true,output:'One paused mission in the browser fixture.',missions:[{id:mission.mission_id,title:mission.objective}]}});
+  }
   if(u.pathname==='/api/command/run'){
-   assert.equal(route.request().headers().authorization,'Bearer hio-ui-test-token');assert.equal(route.request().postDataJSON().task,'Inspect HIO integration');attempts++;return route.fulfill({json:{success:true,output:'HIO fixture command completed.'}});
+   assert.equal(route.request().headers().authorization,'Bearer hio-ui-test-token');assert.equal(route.request().postDataJSON().task,'Inspect HIO integration');assert.equal(route.request().postDataJSON().context.synthesis_mode,'high-bandwidth');assert.ok(route.request().postDataJSON().session_id);attempts++;return route.fulfill({json:{success:true,output:'HIO fixture command completed.',latency_ms:458,diagnostics:{model:'fixture-model',stages:['intake','response']}}});
   }
   if(u.pathname.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Backend not connected in this browser test'}});
   return route.continue();
@@ -54,18 +82,39 @@ try{
  await page.getByRole('button',{name:'Pause avatar',exact:true}).click();assert.equal(await page.locator('canvas').count(),0);
  await page.locator('.hio-avatar-off').getByRole('button',{name:'Enable avatar'}).click();await page.waitForFunction(()=>document.querySelectorAll('canvas').length===1);
  await page.evaluate(()=>sessionStorage.setItem('microfixd_operator_token','hio-ui-test-token'));
- await page.getByLabel('Command mode').selectOption('chat');
+ await page.getByRole('button',{name:'Ask Microfixd',exact:true}).click();
+ await page.getByLabel('Answer style').selectOption('high-bandwidth');
  await page.getByRole('textbox',{name:'Microfixd command'}).fill('Inspect HIO integration');await page.getByRole('button',{name:'Send command'}).click();
  await page.getByText('HIO fixture command completed.',{exact:true}).waitFor();assert.equal(attempts,1);
- await page.getByLabel('Command mode').selectOption('mission');
+ await page.getByText('Response details',{exact:true}).click();await page.getByText('Command time 0.46 s',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Use as task',exact:true}).click();
+ assert.equal(await page.getByRole('textbox',{name:'Microfixd command'}).inputValue(),'Inspect HIO integration');
+ assert.equal(missionAttempts,0);
+ await page.getByRole('button',{name:'Ask Microfixd',exact:true}).click();
+ await page.getByRole('textbox',{name:'Microfixd command'}).fill('Tell me about microfixd paused missions');
+ await page.getByRole('button',{name:'Send command'}).click();
+ await page.getByRole('button',{name:'Inspect Read authorized public page'}).click();
+ await page.getByRole('button',{name:'Approve action',exact:true}).waitFor();
+ await page.getByRole('button',{name:'Hologram',exact:true}).click();
+ assert.equal(approved,false);assert.equal(missionAttempts,0);
+ await page.getByRole('button',{name:'Run a task',exact:true}).click();
  await page.getByText('Authorized tool scope (1 tools)',{exact:true}).click();
  await page.getByRole('checkbox',{name:'read_public_page'}).check();
  await page.getByRole('textbox',{name:'Microfixd command'}).fill('Read authorized public page');
  await page.getByRole('button',{name:'Send command'}).click();
  await page.getByText('Waiting for approval. Open this mission to review the exact action.',{exact:true}).waitFor();
- await page.getByRole('button',{name:'Open mission • waiting',exact:true}).click();
+ await page.getByRole('button',{name:'Ask Microfixd',exact:true}).click();
+ await page.getByText('One paused mission in the browser fixture.',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Diagnose a mission'}).click();
+ await page.getByLabel('Select mission to diagnose').selectOption('browser-fixture');
+ await page.getByRole('button',{name:'Check mission evidence'}).click();
+ await page.getByText('Operator approval is pending',{exact:true}).waitFor();
+ await page.getByText('Evidence and prior cases',{exact:true}).click();
+ await page.getByText('Approval for this request: pending.',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Open this mission'}).click();
  await page.getByRole('button',{name:'Approve action',exact:true}).click();
  await page.getByRole('button',{name:'Hologram',exact:true}).click();
+ await page.getByRole('button',{name:'Run a task',exact:true}).click();
  await page.getByText('Verified mission fixture result.',{exact:true}).waitFor();
  await page.getByText('0 active · 1 completed',{exact:true}).waitFor({timeout:25000});
  assert.equal(missionAttempts,1);assert.equal(attempts,1);assert.equal(approved,true);

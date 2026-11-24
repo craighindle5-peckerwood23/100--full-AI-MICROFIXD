@@ -1,0 +1,30 @@
+# Microfyxd architecture assessment
+
+The account inventory contains 14 earlier repositories under the Microfyxd and Microfixd spellings. The strongest primary sources for this transfer were Microfixd-OS, Microfyxd-monorepo, microfyxd, MICROFIXD-ALL-ORGANS-CLAUDE and the immutable-core archive in microfixd-clean.
+
+| Original subsystem | Current implementation and finding |
+|---|---|
+| Paragon, constitutional lock and master wiring | The OS catalog describes 200 organs across 21 families and eight layers. The current build has a separate registry, topology, wiring, RBAC, HITL and digest gate. A catalog entry alone cannot establish a working adapter. |
+| Cognition and reflection | The command center and brain route language tasks. Live mission status now reads the tenant’s planner records. |
+| Mission control and agents | The durable mission spine records tasks, approvals, runs and artifacts. The cockpit now exposes explicit tool requests through the same dispatcher. |
+| Memory and learning | Supabase holds scoped historical knowledge and artifact-backed procedures. Prior cases support diagnosis. Online weight learning remains unverified. |
+| Watchdog and recovery | The monorepo watchdog bounds operations. The current worker now rotates through waiting repair missions so the first four cannot monopolize recovery checks. |
+| Source repair | The old selfHeal node randomly simulated build and test results. We transferred its three-attempt limit and the monorepo’s validator-feedback concept. Only malformed, truncated or ambiguous edit proposals receive another attempt before repository writes. |
+| Sandbox and evolution | Current repair promotion requires a matching isolated verification receipt. Evolution proposals and a successful repair of a real incident are distinct outcomes. |
+| Provider routing, federation and infrastructure | The current provider fallback, MCP and infrastructure surfaces exist. Universal provider coverage and the old exclusive OmniRouter policy have not been established across every call site. |
+| Holographic interface and bring-up | The cockpit, boot sequence and readiness endpoint remain the operator entry points. External phone, form and email actions described by the old site require separate working adapters. |
+| Final audit | Mission audit, release evaluation and deployment identity serve different purposes. A live commit verifies rollout. Resolving the original symptom requires an incident-specific check. |
+
+Source comparisons include Microfyxd-monorepo at 080d73f (watchdog and metaRepair), microfyxd at d1ece5c (selfHeal), MICROFIXD-ALL-ORGANS-CLAUDE at 73b6fd4 (self-healing control plane), and microfixd-clean at 27c4f91 (immutable core). Microfixd-OS documents the original operating model in COMPLETE_SYSTEM_SUMMARY.md. This assessment maps subsystem responsibilities and does not certify every legacy organ or deployment.
+
+## Historical introspection
+
+The monorepo's src/agent/introspection.ts combined recent outcomes and recurring failures into an operator report. In Ask Microfixd choose **Review recent mission performance** and press Send. The current port groups durable tenant records by mission, reports model reservations and identifies missions with live-verified repair checkpoints. Evidence read failures appear separately in the report.
+
+The legacy governed bring-up concept now checks the promoted revision's readiness before recording a live-verified repair. Both normal completion and restart recovery require the matching commit, successful readiness status and reported durable storage. Readiness describes the runtime configuration and health, and a symptom-specific test still establishes whether the original issue is fixed.
+
+## Incident verification and reversible experiments
+
+A source-repair or improvement mission can end its objective with `Regression case: tests/example.test.ts#exact test name`. Use a reviewed fixture that captures the symptom or proposed behavior. The isolated runner checks the first-parent baseline and the candidate with identical fixtures, including execution and diagnostic mission cases. It rejects missing cases, a passing baseline symptom, or any failing candidate case. Observed automatic incidents can instead match their exception type and affected source path in a baseline failure. An incident without reproduction evidence cannot be promoted. Checkpoints identify the baseline revision for rollback review. The runner requires network access to the canonical repository during source acquisition and the Render build argument RENDER_GIT_COMMIT. Test execution remains offline.
+
+When a durable worker resumes existing tasks, it checks recorded mission, task and subtask creation events, authorized budget changes, and completed-step evidence before executing. A mismatch pauses the mission. Missing baseline evidence requires operator investigation.

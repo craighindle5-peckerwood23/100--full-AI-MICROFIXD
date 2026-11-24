@@ -136,6 +136,7 @@ test('the command pipeline recalls knowledge once in the correct tenant and pers
   process.env.SUPABASE_URL='https://knowledge-test.supabase.co';process.env.SUPABASE_SERVICE_ROLE_KEY='server-test-key';process.env.GROQ_API_KEY='brain-test-key';
   for(const key of ['OPENROUTER_API_KEY','GEMINI_API_KEY','CLOUDFLARE_API_TOKEN'])delete process.env[key];
   let recalled=false;
+  let modelAnswer='Remembered the recorded BMW fault.';
   globalThis.fetch=async(input:any,init:any)=>{
     const request=input instanceof Request?input:new Request(input,init);
     if(!request.url.includes('api.groq.com'))return s.fetcher(input,init);
@@ -143,7 +144,7 @@ test('the command pipeline recalls knowledge once in the correct tenant and pers
     if(serialized.includes('Microfixd command router'))return Response.json({choices:[{message:{role:'assistant',content:'{"intent":"query","complexity":"low","organs":["memory","brain"],"priority":"normal"}'},finish_reason:'stop'}],usage:{total_tokens:10}});
     assert.ok(serialized.includes('BMW has fault P0300'));assert.ok(!serialized.includes('other customer private'));recalled=true;
     assert.equal((serialized.match(/UNIQUE_PRIOR_REFERENCE/g)||[]).length,1);
-    return Response.json({id:'brain',object:'chat.completion',created:1,model:'test',choices:[{message:{role:'assistant',content:'Remembered the recorded BMW fault.'},finish_reason:'stop'}],usage:{total_tokens:20}});
+    return Response.json({id:'brain',object:'chat.completion',created:1,model:'test',choices:[{message:{role:'assistant',content:modelAnswer},finish_reason:'stop'}],usage:{total_tokens:20}});
   };
   try{
     const {executeMemoryOrgan}=await import('../server/organs/organs/memoryOrgan');
@@ -152,5 +153,61 @@ test('the command pipeline recalls knowledge once in the correct tenant and pers
     const result=await runCommand({...who,task:'What do you remember about BMW?',source:'api',priority:'normal',context:{responseOnly:true}});
     assert.equal(recalled,true);assert.equal(result.success,true);
     for(const agent of ['brain','command','feedback'])assert.ok([...s.records.values()].some(row=>row.agent_id===agent&&row.tenant_id===who.tenant_id));
+    modelAnswer = 'I successfully deployed the repair.';
+    const rejected = await runCommand({...who,task:'What changed on the BMW?',source:'api',priority:'normal',context:{responseOnly:true}});
+    assert.equal(rejected.success,false);
+    assert.equal(rejected.diagnostics?.failure?.code,'UNSUPPORTED_EXECUTION_CLAIM');
+    assert.ok(!rejected.output.includes(modelAnswer));
+    assert.ok(![...s.records.values()].some(row=>String(row.content).includes(modelAnswer)));
   }finally{globalThis.fetch=oldFetch;envKeys.forEach((key,i)=>{if(oldEnv[i]===undefined)delete process.env[key];else process.env[key]=oldEnv[i];});}
+});
+
+test('Ask Microfixd answers paused missions from live tenant records, independently of conversation history',async()=>{
+  const {asksAboutPausedMissions}=await import('../server/planner/pausedMissionReport');
+  for(const question of ['Tell me about microfixd paused missions','Which of my missions are paused?', 'Show me my waiting missions','Why are my missions on hold?', 'Are there any paused missions?']){
+    assert.ok(asksAboutPausedMissions(question),question);
+  }
+  for(const other of ['Resume all paused missions','What is a paused mission?','List my paused missions from yesterday','Write a story about paused missions']){
+    assert.equal(asksAboutPausedMissions(other),false,other);
+  }
+  const original=globalThis.fetch;
+  const url=process.env.SUPABASE_URL, key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL='https://knowledge-test.supabase.co';process.env.SUPABASE_SERVICE_ROLE_KEY='server-test-key';
+  let scenario:'waiting'|'empty'|'outage'|'detail-outage'='waiting', reads=0;
+  const writes:string[]=[];
+  globalThis.fetch=async(input,init)=>{
+    const request=input instanceof Request?input:new Request(input,init);
+    const target=new URL(request.url),q=target.searchParams;
+    assert.equal(target.hostname,'knowledge-test.supabase.co','registry questions require no model call');
+    if(target.pathname.endsWith('/microfixd_memory_records')){
+      assert.equal(request.method,'POST');const record=await request.json();assert.equal(record.tenant_id,who.tenant_id);writes.push(record.agent_id);
+      return Response.json({id:record.id});
+    }
+    assert.equal(request.method,'GET');assert.equal(q.get('tenant_id'),'eq.'+who.tenant_id);
+    if(q.has('data->>status')&&q.get('kind')==='eq.missions'){
+      reads++;assert.equal(q.get('data->>status'),'eq.waiting');assert.equal(q.get('limit'),'3');assert.match(request.headers.get('prefer')??'',/count=exact/);
+      if(scenario==='outage')return Response.json({message:'offline'},{status:403});
+      const empty=scenario==='empty';return Response.json(empty?[]:[{id:'m-1',objective:'Review sensor log'}],{headers:{'Content-Range':empty?'*/0':'0-0/1'}});
+    }
+    assert.equal(q.get('mission_id'),'eq.m-1');
+    if(scenario==='detail-outage')return Response.json({message:'unavailable'},{status:403});
+    if(q.get('kind')==='eq.missions')return Response.json([{data:{status:'waiting',constraints:{}}}]);
+    if(q.get('kind')==='eq.subtasks')return Response.json([{data:{subtask_id:'step',tool_request:{name:'read_public_page',arguments:{}}}}]);
+    if(target.pathname.endsWith('/spine_errors'))return Response.json([{code:'WAITING_APPROVAL'}]);
+    assert.ok(target.pathname.endsWith('/spine_approvals'));return Response.json([{status:'pending',expires_at:'2099-01-01'}]);
+  };
+  try{
+    const {runCommand}=await import('../server/orchestration/commandCenter');
+    const run=()=>runCommand({...who,task:'Tell me about microfixd paused missions',source:'chat',priority:'normal',context:{responseOnly:true,tenant_id:'other',missions:[{id:'bogus'}]}});
+    const first=await run();assert.equal(first.success,true);assert.match(first.output,/Review sensor log.*Operator approval is pending/);
+    assert.deepEqual(first.missions?.map(m=>m.id),['m-1']);assert.equal(first.groq_tokens,0);assert.deepEqual(writes,['command','feedback']);
+    scenario='empty';const empty=await run();assert.equal(empty.success,true);assert.match(empty.output,/No paused missions/);
+    scenario='detail-outage';assert.match((await run()).output,/cause could not be read/);
+    scenario='outage';const failed=await run();assert.equal(failed.success,false);assert.match(failed.output,/number of paused missions is unknown/);
+    assert.equal(reads,4);
+  }finally{
+    globalThis.fetch=original;
+    if(url===undefined)delete process.env.SUPABASE_URL;else process.env.SUPABASE_URL=url;
+    if(key===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=key;
+  }
 });

@@ -115,7 +115,7 @@ export async function rememberProcedure(db: SupabaseClient, mission: Mission, fi
       || artifact.evidence.tool !== sub.tool_request!.name
       || artifact.evidence.request_hash !== contentHash(sub.tool_request)) throw new Error('INVALID_PROCEDURE_EVIDENCE');
     const args = sub.tool_request!.arguments;
-    return {tool: String(sub.tool_request!.name), argument_names: args && typeof args === 'object' ? Object.keys(args) : [],
+    return {subtask_id: sub.subtask_id, tool: String(sub.tool_request!.name), argument_names: args && typeof args === 'object' ? Object.keys(args) : [],
       artifact_id: artifact.artifact_id, content_hash: artifact.hash};
   });
   if (!steps.length) return;

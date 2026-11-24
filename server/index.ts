@@ -135,6 +135,7 @@ app.get("/readyz", async (_, res) => {
 
   res.status(ready ? 200 : 503).json({
     status: ready ? "ok" : "degraded",
+    commit: process.env.RENDER_GIT_COMMIT ?? "local",
     systemHealth,
     storage: {
       durable: configured.supabase,
