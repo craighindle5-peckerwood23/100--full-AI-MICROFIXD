@@ -268,6 +268,7 @@ export default function HolographicOS({ onReboot }: Props) {
           {missionId && <button type="button" onClick={()=>openTool('mission_control')}>Open mission • {missionStatus}</button>}
         </section>
         <div className="text-xs">
+          <a href="/automotive" className="float-right px-1 text-cyan-200 underline">Vector Automotive</a>
           <label>Command mode <select aria-label="Command mode" value={mode} disabled={commandState==='PROCESSING'} onChange={e=>setMode(e.target.value as 'mission'|'chat')}><option value="mission">Do a task (durable mission)</option><option value="chat">Ask a question</option></select></label>
           {mode === 'chat' && <label className="ml-2">Answer style <select aria-label="Answer style" value={synthesisMode}
             disabled={commandState === 'PROCESSING'} onChange={event => setSynthesisMode(event.target.value)}>
@@ -286,7 +287,6 @@ export default function HolographicOS({ onReboot }: Props) {
         </form>
       </HIOCockpit>
 
-      <a href="/automotive" className="fixed right-4 top-4 z-50 rounded-lg border border-cyan-300/30 bg-black/80 px-3 py-2 text-xs text-cyan-100">Vector Automotive</a>
       {settingsSection && (
         <SettingsWindow
           initialSection={settingsSection}
