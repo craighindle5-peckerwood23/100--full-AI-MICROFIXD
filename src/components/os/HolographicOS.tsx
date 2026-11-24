@@ -223,9 +223,10 @@ export default function HolographicOS({ onReboot }: Props) {
         result?.output ||
         result?.message ||
         result?.result ||
-        'Command completed.',
+        '',
       );
 
+      if (!output.trim()) throw new Error('No answer was returned. Check the command record before retrying.');
       setAnswerDetails([
         result.diagnostics?.provider && `Provider ${result.diagnostics.provider}`,
         result.diagnostics?.model && `Model ${result.diagnostics.model}`,

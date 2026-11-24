@@ -16,6 +16,7 @@ import {getGroqClient,groqConfiguration} from './groqRuntime';
  */
 import Groq from "groq-sdk";
 import { IDENTITY_INSTRUCTION } from "../security/identityLock";
+import {checkTextOnlyAnswer} from '../metacognition/responseBoundary';
 import { recordCommandFailure } from "./commandFailure";
 import { organRegistry } from "../organs/organRegistry";
 import { executeReflexOrgan }    from "../organs/organs/reflexOrgan";
@@ -232,6 +233,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     }
 
     // ── Step 5b: Deterministic post-response assurance ────────────────
+    checkTextOnlyAnswer(output);
     const evaluation = await executeEvaluationOrgan("evaluate", { candidate: output });
     const uncertainty = await executeUncertaintyOrgan("score", { output, evidenceCount: Object.keys(organResults).length });
     const assurance = {
