@@ -4,6 +4,8 @@ import type { Mission, Artifact, Task } from '../../../server/planner/executionS
 import type { Subsystem } from '../../types';
 import { api, AuthenticationRequiredError } from '../../lib/serverApi';
 import { requestOperatorAccess } from '../../lib/operatorAccess';
+import { commandSession } from '../../lib/commandApi';
+import { getCommandPreferences } from '../../lib/commandPreferences';
 import { saveUIState } from '../../lib/supabase';
 import { sound } from '../../utils/audio';
 import { voice } from '../../utils/voice';
@@ -65,6 +67,8 @@ export default function HolographicOS({ onReboot }: Props) {
   const submission = useRef<{signature:string;key:string}|null>(null);
   const [missionId, setMissionId] = useState('');
   const [mode, setMode] = useState<'mission' | 'chat'>('mission');
+  const [synthesisMode, setSynthesisMode] = useState('balanced');
+  const [answerDetails, setAnswerDetails] = useState<string[]>([]);
   const [tools, setTools] = useState<{name:string;description:string}[]>([]);
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [origins, setOrigins] = useState('');
@@ -173,6 +177,8 @@ export default function HolographicOS({ onReboot }: Props) {
     const task = commandInput.trim();
     if (!task || commandState === 'PROCESSING') return;
 
+    setAnswerDetails([]);
+    setMissionId('');
     setLastCommand(task);
     setLastOutput('Processing request…');
     setCommandState('PROCESSING');
@@ -190,7 +196,8 @@ export default function HolographicOS({ onReboot }: Props) {
         task,
         source: 'os-shell',
         priority: 'normal',
-        context: { surface: 'holographic-os' },
+        session_id: commandSession(),
+        context: { ...getCommandPreferences(), surface: 'holographic-os', synthesis_mode: synthesisMode },
       });
 
       let result;
@@ -219,6 +226,12 @@ export default function HolographicOS({ onReboot }: Props) {
         'Command completed.',
       );
 
+      setAnswerDetails([
+        result.diagnostics?.provider && `Provider ${result.diagnostics.provider}`,
+        result.diagnostics?.model && `Model ${result.diagnostics.model}`,
+        Number.isFinite(result.latency_ms) && `Command time ${(result.latency_ms / 1000).toFixed(2)} s`,
+        result.diagnostics?.stages?.length && `Stages: ${result.diagnostics.stages.join(', ')}`,
+      ].filter(Boolean));
       setLastOutput(output);
       setCommandState(result?.success === false ? 'ERROR' : 'COMPLETE');
 
@@ -249,10 +262,18 @@ export default function HolographicOS({ onReboot }: Props) {
         <section aria-live="polite" className="hio-output">
           <div className="hio-output-header"><span>{commandState}</span><span>{lastCommand||'MICROFIXD // AT YOUR SERVICE'}</span></div>
           <div className="hio-answer">{lastOutput}</div>
+          {answerDetails.length > 0 && <details className="text-xs"><summary>Response details</summary>
+            <ul>{answerDetails.map(detail => <li key={detail}>{detail}</li>)}</ul>
+          </details>}
           {missionId && <button type="button" onClick={()=>openTool('mission_control')}>Open mission • {missionStatus}</button>}
         </section>
         <div className="text-xs">
           <label>Command mode <select aria-label="Command mode" value={mode} disabled={commandState==='PROCESSING'} onChange={e=>setMode(e.target.value as 'mission'|'chat')}><option value="mission">Do a task (durable mission)</option><option value="chat">Ask a question</option></select></label>
+          {mode === 'chat' && <label className="ml-2">Answer style <select aria-label="Answer style" value={synthesisMode}
+            disabled={commandState === 'PROCESSING'} onChange={event => setSynthesisMode(event.target.value)}>
+            <option value="executive">Executive</option><option value="balanced">Balanced</option>
+            <option value="high-bandwidth">High-bandwidth</option>
+          </select></label>}
           {mode==='mission' && <details><summary>Authorized tool scope ({allowedTools.length} tools)</summary>
             <p>All tools are selected by default. Owner missions use standing authorization; other accounts retain manual approval.</p>
             {tools.map(tool=><label key={tool.name} className="block" title={tool.description}><input type="checkbox" disabled={commandState==='PROCESSING'} checked={allowedTools.includes(tool.name)} onChange={e=>setAllowedTools(prev=>e.target.checked?[...prev,tool.name]:prev.filter(n=>n!==tool.name))}/>{tool.name}</label>)}

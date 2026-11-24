@@ -42,7 +42,7 @@ try{
   if(u.pathname.endsWith('/approvals/sub/decide')){assert.equal(route.request().postDataJSON().decision,'approved');approved=true;return route.fulfill({json:{success:true}});}
   if(u.pathname==='/api/planner/missions/browser-fixture')return route.fulfill({json:{mission:{...mission,status:approved?'succeeded':'waiting',result_artifact_id:approved?'result':null},tasks:[],artifacts:approved?[{artifact_id:'result',content:'Verified mission fixture result.'}]:[],approvals:approved?[]:[{status:'pending',subtask_id:'sub',request_hash:'hash',expires_at:new Date(Date.now()+60000).toISOString(),request:{name:'read_public_page',arguments:{url:'https://example.com'}}}],tool_runs:[],messages:[],errors:[],budget:null}});
   if(u.pathname==='/api/command/run'){
-   assert.equal(route.request().headers().authorization,'Bearer hio-ui-test-token');assert.equal(route.request().postDataJSON().task,'Inspect HIO integration');attempts++;return route.fulfill({json:{success:true,output:'HIO fixture command completed.'}});
+   assert.equal(route.request().headers().authorization,'Bearer hio-ui-test-token');assert.equal(route.request().postDataJSON().task,'Inspect HIO integration');assert.equal(route.request().postDataJSON().context.synthesis_mode,'high-bandwidth');assert.ok(route.request().postDataJSON().session_id);attempts++;return route.fulfill({json:{success:true,output:'HIO fixture command completed.',latency_ms:458,diagnostics:{model:'fixture-model',stages:['intake','response']}}});
   }
   if(u.pathname.startsWith('/api/'))return route.fulfill({status:503,json:{error:'Backend not connected in this browser test'}});
   return route.continue();
@@ -55,8 +55,10 @@ try{
  await page.locator('.hio-avatar-off').getByRole('button',{name:'Enable avatar'}).click();await page.waitForFunction(()=>document.querySelectorAll('canvas').length===1);
  await page.evaluate(()=>sessionStorage.setItem('microfixd_operator_token','hio-ui-test-token'));
  await page.getByLabel('Command mode').selectOption('chat');
+ await page.getByLabel('Answer style').selectOption('high-bandwidth');
  await page.getByRole('textbox',{name:'Microfixd command'}).fill('Inspect HIO integration');await page.getByRole('button',{name:'Send command'}).click();
  await page.getByText('HIO fixture command completed.',{exact:true}).waitFor();assert.equal(attempts,1);
+ await page.getByText('Response details',{exact:true}).click();await page.getByText('Command time 0.46 s',{exact:true}).waitFor();
  await page.getByLabel('Command mode').selectOption('mission');
  await page.getByText('Authorized tool scope (1 tools)',{exact:true}).click();
  await page.getByRole('checkbox',{name:'read_public_page'}).check();
