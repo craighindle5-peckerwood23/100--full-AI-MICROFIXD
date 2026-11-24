@@ -1,3 +1,4 @@
+import {checkTextOnlyAnswer} from '../../metacognition/responseBoundary';
 import {getGroqClient,groqConfiguration} from '../../orchestration/groqRuntime';
 /**
  * Brain Organ — Groq LLM calls (ultra-low latency orchestration)
@@ -61,6 +62,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
             Math.max(1, Math.min(Number(p.max_tokens ?? process.env.BRAIN_MAX_TOKENS) || 10000, 16384)),
             (p.temperature as number) ?? 0.7);
       if (res.truncated) throw new Error("Brain response reached its output limit; incomplete answer was not stored");
+      checkTextOnlyAnswer(res.content);
       await executeMemoryOrgan("store", {
         tenant_id, session_id, organ: "brain",
         content: JSON.stringify({ messages, response: res.content }),

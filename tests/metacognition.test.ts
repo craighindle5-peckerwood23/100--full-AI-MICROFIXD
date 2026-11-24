@@ -171,3 +171,13 @@ test('an unavailable secondary audit preserves an outstanding reconciliation',as
   throw Object.assign(new Error('RECONCILIATION_REQUIRED'),{code:'RECONCILIATION_REQUIRED'});
  }),{code:'RECONCILIATION_REQUIRED'});
 });
+
+test('text-only output withholds common unsupported action claims before delivery', async () => {
+  const {checkTextOnlyAnswer} = await import('../server/metacognition/responseBoundary');
+  for (const answer of ["I've just deployed it.", 'Microfixd successfully healed the worker.', 'We ran the migration.']) {
+    assert.throws(() => checkTextOnlyAnswer(answer), {code:'UNSUPPORTED_EXECUTION_CLAIM'});
+  }
+  for (const answer of ['I can run it in mission mode.', 'We have a deployment plan.', 'Surface codes use parity measurements.']) {
+    assert.doesNotThrow(() => checkTextOnlyAnswer(answer));
+  }
+});

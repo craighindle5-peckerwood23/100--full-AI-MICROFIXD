@@ -136,6 +136,7 @@ test('the command pipeline recalls knowledge once in the correct tenant and pers
   process.env.SUPABASE_URL='https://knowledge-test.supabase.co';process.env.SUPABASE_SERVICE_ROLE_KEY='server-test-key';process.env.GROQ_API_KEY='brain-test-key';
   for(const key of ['OPENROUTER_API_KEY','GEMINI_API_KEY','CLOUDFLARE_API_TOKEN'])delete process.env[key];
   let recalled=false;
+  let modelAnswer='Remembered the recorded BMW fault.';
   globalThis.fetch=async(input:any,init:any)=>{
     const request=input instanceof Request?input:new Request(input,init);
     if(!request.url.includes('api.groq.com'))return s.fetcher(input,init);
@@ -143,7 +144,7 @@ test('the command pipeline recalls knowledge once in the correct tenant and pers
     if(serialized.includes('Microfixd command router'))return Response.json({choices:[{message:{role:'assistant',content:'{"intent":"query","complexity":"low","organs":["memory","brain"],"priority":"normal"}'},finish_reason:'stop'}],usage:{total_tokens:10}});
     assert.ok(serialized.includes('BMW has fault P0300'));assert.ok(!serialized.includes('other customer private'));recalled=true;
     assert.equal((serialized.match(/UNIQUE_PRIOR_REFERENCE/g)||[]).length,1);
-    return Response.json({id:'brain',object:'chat.completion',created:1,model:'test',choices:[{message:{role:'assistant',content:'Remembered the recorded BMW fault.'},finish_reason:'stop'}],usage:{total_tokens:20}});
+    return Response.json({id:'brain',object:'chat.completion',created:1,model:'test',choices:[{message:{role:'assistant',content:modelAnswer},finish_reason:'stop'}],usage:{total_tokens:20}});
   };
   try{
     const {executeMemoryOrgan}=await import('../server/organs/organs/memoryOrgan');
@@ -152,5 +153,11 @@ test('the command pipeline recalls knowledge once in the correct tenant and pers
     const result=await runCommand({...who,task:'What do you remember about BMW?',source:'api',priority:'normal',context:{responseOnly:true}});
     assert.equal(recalled,true);assert.equal(result.success,true);
     for(const agent of ['brain','command','feedback'])assert.ok([...s.records.values()].some(row=>row.agent_id===agent&&row.tenant_id===who.tenant_id));
+    modelAnswer = 'I successfully deployed the repair.';
+    const rejected = await runCommand({...who,task:'What changed on the BMW?',source:'api',priority:'normal',context:{responseOnly:true}});
+    assert.equal(rejected.success,false);
+    assert.equal(rejected.diagnostics?.failure?.code,'UNSUPPORTED_EXECUTION_CLAIM');
+    assert.ok(!rejected.output.includes(modelAnswer));
+    assert.ok(![...s.records.values()].some(row=>String(row.content).includes(modelAnswer)));
   }finally{globalThis.fetch=oldFetch;envKeys.forEach((key,i)=>{if(oldEnv[i]===undefined)delete process.env[key];else process.env[key]=oldEnv[i];});}
 });
