@@ -253,3 +253,16 @@ test('a supervisor intervention on recovery parks the mission without replay',as
   assert.equal(f.calls(),0);
  }
 });
+
+test('resume rejects changed requests and replay of a step with existing evidence',async()=>{
+ const {verifyResume}=await import('../server/planner/resumeIntegrity');
+ const m:any={mission_id:'m',tenant_id:'a',constraints:{max_tokens:5},objective:'x'};
+ const t:any={task_id:'t',mission_id:'m',tool_permissions:['read']};
+ const s:any={task_id:'t',subtask_id:'s',tool_request:{name:'read'},status:'queued'};
+ const inserts=[['missions','m',m],['tasks','t',t],['subtasks','s',s]].map(([kind,id,data])=>({operation:{kind,id,data}}));
+ const db:any={from(){let resume=false;const q:any={select:()=>q,eq:(k:string,v:string)=>{if(k==='operation->>op')resume=v==='admin_resume';return q;},in:()=>q,order:()=>q,limit:async()=>({data:resume?[]:inserts})};return q;}};
+ assert.ok(await verifyResume(db,m,[t],[s],[]));
+ assert.equal(await verifyResume(db,m,[t],[{...s,tool_request:{name:'write'}}],[]),false);
+ assert.equal(await verifyResume(db,m,[t],[],[]),false);
+ assert.equal(await verifyResume(db,m,[t],[s],[{subtask_id:'s'} as any]),false);
+});

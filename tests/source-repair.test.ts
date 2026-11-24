@@ -38,14 +38,14 @@ test('repair uses a separate Render candidate, rejects stale green results, and 
    throw new Error('Unexpected fixture GitHub URL');
   }
   assert.equal(options?.headers,undefined,'no controller secret forwarded to runner or production');
-  if(url.includes('fixture-runner')){checks++;return json({commit:checks===1?base:candidate,status:'verified',network:'none',productionSecrets:false,gate:'production+engineering+adapters'});}
+  if(url.includes('fixture-runner')){checks++;return json({commit:checks===1?base:candidate,status:'verified',experiment:{baseline:'a'.repeat(40),candidate,cases:2,repaired:['fixture'],regressions:0},network:'none',productionSecrets:false,gate:'production+engineering+adapters'});}
   return json({status:'ok',storage:{durable:true},commit:candidate});
  };
  try{
-  const result=await repairSource(db,{tenant:'fixture',mission:'mission',subtask:'task'},'Fix fixture',['server/automotive/example.ts'],async()=>({content:JSON.stringify({files:[{path:'server/automotive/example.ts',content:'new'}]})}),async()=>{},request,async()=>{});
+  const result=await repairSource(db,{tenant:'fixture',mission:'mission',subtask:'task'},'Fix fixture\nRegression case: tests/source-repair.test.ts#fixture',['server/automotive/example.ts'],async()=>({content:JSON.stringify({files:[{path:'server/automotive/example.ts',content:'new'}]})}),async()=>{},request,async()=>{});
   assert.equal(result.status,'live_verified');assert.equal(result.commit,candidate);
   assert.deepEqual(events.filter(e=>e[0]==='durable').map(e=>e[1]),['candidate_created','sandbox_verified','promoted','live_verified']);
-  await assert.rejects(()=>repairSource(db,{tenant:'fixture',mission:'mission',subtask:'task'},'Fix fixture',['server/automotive/example.ts'],async()=>({content:'{}'}),async()=>{throw new Error('REPAIR_LEASE_LOST');},request),/LEASE_LOST/);
+  await assert.rejects(()=>repairSource(db,{tenant:'fixture',mission:'mission',subtask:'task'},'Fix fixture\nRegression case: tests/source-repair.test.ts#fixture',['server/automotive/example.ts'],async()=>({content:'{}'}),async()=>{throw new Error('REPAIR_LEASE_LOST');},request),/LEASE_LOST/);
  }finally{if(original.token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=original.token;if(original.url===undefined)delete process.env.MICROFIXD_REPAIR_RUNNER_URL;else process.env.MICROFIXD_REPAIR_RUNNER_URL=original.url;}
 });
 test('durable repair cannot start for an unapproved or foreign tenant mission',async()=>{
@@ -69,8 +69,8 @@ test('automatic incidents require enabled owner standing authorization before en
 });
 test('deployment recovery performs reads only and requires matching candidate, main, isolated receipt and live commit',async()=>{
  const prior={token:process.env.GITHUB_TOKEN,url:process.env.MICROFIXD_REPAIR_RUNNER_URL};process.env.GITHUB_TOKEN='fixture';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture.onrender.com';
- const candidate='a'.repeat(40);let healthy=true;const b:any={select:()=>b,eq:()=>b,contains:(column:string,value:any)=>{assert.equal(column,'operation');assert.equal(value.subtask_id,'task');return b;},limit:async()=>({data:[{operation:{phase:'candidate_created',evidence:{candidate,files:[{path:'server/automotive/example.ts',after:'b'.repeat(64)}]}}}],error:null})};
- const request:typeof fetch=async(input,options)=>{assert.equal(options?.method,undefined);const url=String(input);return Response.json(url.includes('api.github.com')?{object:{sha:candidate}}:url.endsWith('/verification')?{commit:candidate,status:'verified',network:healthy?'none':'enabled',productionSecrets:false,gate:'production+engineering+adapters'}:{status:'ok',storage:{durable:true},commit:candidate});};
+ const candidate='a'.repeat(40);let healthy=true;const b:any={select:()=>b,eq:()=>b,contains:(column:string,value:any)=>{assert.equal(column,'operation');assert.equal(value.subtask_id,'task');return b;},limit:async()=>({data:[{operation:{phase:'candidate_created',evidence:{base:'a'.repeat(40),candidate,files:[{path:'server/automotive/example.ts',after:'b'.repeat(64)}]}}}],error:null})};
+ const request:typeof fetch=async(input,options)=>{assert.equal(options?.method,undefined);const url=String(input);return Response.json(url.includes('api.github.com')?{object:{sha:candidate}}:url.endsWith('/verification')?{commit:candidate,status:'verified',experiment:{baseline:'a'.repeat(40),candidate,cases:2,repaired:['fixture'],regressions:0},network:healthy?'none':'enabled',productionSecrets:false,gate:'production+engineering+adapters'}:{status:'ok',storage:{durable:true},commit:candidate});};
  const store:any={from:(table:string)=>{assert.equal(table,'spine_events','ordinary memory assertions cannot authorize repair recovery');return b;}};
  try{assert.equal((await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request))?.status,'live_verified');healthy=false;assert.equal(await readCompletedRepair(store,{tenant:'owner',mission:'mission',subtask:'task'},request),null);}
  finally{if(prior.token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=prior.token;if(prior.url===undefined)delete process.env.MICROFIXD_REPAIR_RUNNER_URL;else process.env.MICROFIXD_REPAIR_RUNNER_URL=prior.url;}
@@ -102,4 +102,14 @@ test('recovery advances past the first four waiting missions and wraps',async()=
 test('repair bring-up requires durable readiness on the exact revision',async()=>{
  const {repairIsReady}=await import('../server/engineering/sourceRepair');
  for(const health of [null,{commit:'revision'},{status:'ok',commit:'other',storage:{durable:true}},{status:'degraded',commit:'revision',storage:{durable:true}},{status:'ok',commit:'revision',storage:{durable:false}}])assert.equal(repairIsReady(health,'revision'),false);
+});
+
+test('paired mission experiment rejects an unreproduced symptom or a worse candidate',async()=>{
+ const {compareRuns}=await import('../infrastructure/repair-runner/comparison.mjs');
+ const baseline=[{id:'incident',status:'fail'},{id:'existing mission',status:'pass'}];
+ const fixed=baseline.map(row=>({...row,status:'pass'}));
+ assert.equal(compareRuns(baseline,fixed,'incident').regressions,0);
+ assert.throws(()=>compareRuns(fixed,fixed,'incident'),/NOT_REPRODUCED/);
+ assert.throws(()=>compareRuns(baseline,[fixed[0],{...fixed[1],status:'fail'}],'incident'),/REGRESSION/);
+ assert.throws(()=>compareRuns(baseline,[fixed[0]],'incident'),/CASES_CHANGED/);
 });

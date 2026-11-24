@@ -14,6 +14,11 @@ export function repairPath(path:string) {
   if(!/^(server|src|microfixd)\//.test(path)||['server/engineering/','server/tools/','server/sandbox/','server/organs/','server/index.ts'].some(prefix=>path.startsWith(prefix)))throw new Error('REPAIR_PROTECTED_PATH');
   return path;
 }
+export function experimentVerified(receipt:any,base:string,candidate:string){
+ const result=receipt?.experiment;
+ return typeof base==='string' && /^[a-f0-9]{40}$/.test(base) && result?.baseline===base && result.candidate===candidate &&
+   Number.isInteger(result.cases)&&result.cases>0 && result.regressions===0 && Array.isArray(result.repaired)&&result.repaired.length>0;
+}
 export function repairIsReady(report:unknown,candidate:string){
   const health=report as {status?:string;commit?:string;storage?:{durable?:boolean}}|null;
   return health?.status==='ok' && health.commit===candidate && health.storage?.durable===true;
@@ -81,6 +86,10 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
   const runner=repairURL(process.env.MICROFIXD_REPAIR_RUNNER_URL);
   if(!objective.trim()||objective.length>4000||!Array.isArray(paths)||!paths.length||paths.length>8||new Set(paths).size!==paths.length)throw new Error('INVALID_REPAIR_REQUEST');
   paths.forEach(repairPath);
+  const named=/Regression case: (tests\/[a-z0-9_-]+\.test\.ts)#([^\n]{1,220})/i.exec(objective);
+  const observed=/^Investigate and minimally repair the observed (TypeError|ReferenceError|SyntaxError) in /.exec(objective);
+  if(!named&&!observed)throw new Error('REGRESSION_CASE_REQUIRED: include Regression case: tests/file.test.ts#exact test name');
+  const experiment=named?{file:named[1],incident:named[1]+'#'+named[2].trim()}:{incident:{kind:observed![1],paths}};
   const api=async(path:string,method='GET',body?:unknown,missing=false)=>{
     const response=await fetcher(`https://api.github.com/repos/${REPO}/${path}`,{method,redirect:'error',headers:{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`,Accept:'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
     if(missing&&response.status===404)return null;
@@ -107,7 +116,7 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
   if((await api('git/ref/heads/main')).object.sha!==base)throw new Error('REPAIR_BASE_CHANGED');
   const previous=await api(`git/ref/heads/${BRANCH}`,'GET',undefined,true);
   const tree=await api('git/trees','POST',{base_tree:parent.tree.sha,tree:files.map(file=>({path:file.path,mode:'100644',type:'blob',content:file.content}))});
-  const candidate=await api('git/commits','POST',{message:`Governed repair: ${objective.slice(0,120)}`,tree:tree.sha,parents:[...new Set([base,...(previous?[previous.object.sha]:[])])]});
+  const candidate=await api('git/commits','POST',{message:`Governed repair: ${objective.slice(0,120)}\n\n${JSON.stringify(experiment)}`,tree:tree.sha,parents:[...new Set([base,...(previous?[previous.object.sha]:[])])]});
   await record('candidate_created',{base,candidate:candidate.sha,files:files.map(file=>({path:file.path,before:hash(sources.get(file.path)!),after:hash(file.content)}))});
   await authorize();
   if(previous)await api(`git/refs/heads/${BRANCH}`,'PATCH',{sha:candidate.sha,force:false});
@@ -119,8 +128,8 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
     try{const response=await fetcher(`${runner}/verification`,{redirect:'error',signal:AbortSignal.timeout(20000),cache:'no-store'});if(response.ok){const result=await response.json();if(result.commit===candidate.sha){receipt=result;break;}}}catch{}
     await sleep(15000);
   }
-  if(!receipt||receipt.status!=='verified'||receipt.network!=='none'||receipt.productionSecrets!==false||receipt.gate!=='production+engineering+adapters')throw new Error('REPAIR_VERIFICATION_NOT_PROVEN');
-  await record('sandbox_verified',{candidate:candidate.sha,receipt});
+  if(!experimentVerified(receipt,base,candidate.sha)||!receipt||receipt.status!=='verified'||receipt.network!=='none'||receipt.productionSecrets!==false||receipt.gate!=='production+engineering+adapters')throw new Error('REPAIR_VERIFICATION_NOT_PROVEN');
+  await record('sandbox_verified',{candidate:candidate.sha,rollback_revision:base,receipt});
   await authorize();
   if((await api('git/ref/heads/main')).object.sha!==base)throw new Error('REPAIR_BASE_CHANGED');
   // Fast-forward only: a competing release makes GitHub reject this update.

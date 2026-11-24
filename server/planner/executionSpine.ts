@@ -125,6 +125,7 @@ export interface PlannerDependencies {
   withMissionLock<T>(tenantId: string, missionId: UUID, work: () => Promise<T>): Promise<T>;
   validateTaskBudget?(tasks:(PlannedTask|Task)[]):void;
   plan(mission: Mission): Promise<PlannedTask[]>;
+  verifyResume?(mission:Mission,tasks:Task[],subs:Subtask[],artifacts:Artifact[]):Promise<boolean>;
   recordPlanningError?(mission:Mission,error:unknown):Promise<void>;
   reviewCompletion?(mission: Mission, tasks: Task[], artifacts: Artifact[]): Promise<CompletionReview>;
   // Persist a historical procedure before finalization. It is usable only once
@@ -171,6 +172,14 @@ export class PlannerService {
       if (!current.objective) throw new Error('EMPTY_OBJECTIVE');
       if(deadlineExceeded(current)){await r.updateMissionStatus(current.mission_id,'waiting');return r.getMission(current.mission_id);}
       let tasks = await r.getTasks(current.mission_id);
+        if(this.d.verifyResume){
+          const subs=(await Promise.all(tasks.map(t=>r.getSubtasks(t.task_id)))).flat();
+          if(!await this.d.verifyResume(current,tasks,subs,await r.getArtifacts(current.mission_id))){
+            await this.d.recordPlanningError?.(current,new Error('RESUME_BASELINE_MISMATCH'));
+            await r.updateMissionStatus(current.mission_id,'waiting');
+            return r.getMission(current.mission_id);
+          }
+        }
       if (!tasks.length) {
         let plan: PlannedTask[];
         try { plan = await this.d.plan(current); this.d.validateTaskBudget?.(plan); } catch (error) {
@@ -195,7 +204,9 @@ export class PlannerService {
           await tx.updateMissionStatus(current.mission_id, 'running');
         });
         tasks = await r.getTasks(current.mission_id);
-      } else await r.updateMissionStatus(current.mission_id, 'running');
+      } else {
+        await r.updateMissionStatus(current.mission_id,'running');
+      }
       // Continuation plans are committed with their review under this mission's lease.
       // Restarts reuse completed outputs; no external effect is replayed to replan.
       for (;;) {

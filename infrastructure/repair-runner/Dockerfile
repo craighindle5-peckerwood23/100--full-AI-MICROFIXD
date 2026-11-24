@@ -9,11 +9,14 @@ COPY cognitive-shell/package.json cognitive-shell/package-lock.json ./cognitive-
 RUN npm ci --prefix cognitive-shell --include=dev --no-audit --no-fund
 
 FROM dependencies AS verification
+ARG RENDER_GIT_COMMIT
+RUN test -n "$RENDER_GIT_COMMIT" && git init -q /experiment && git -C /experiment fetch -q --depth=2 https://github.com/craighindle5-peckerwood23/100--full-AI-MICROFIXD.git "$RENDER_GIT_COMMIT" && git -C /experiment update-ref HEAD FETCH_HEAD && mkdir /baseline && git -C /experiment archive HEAD^1 | tar -x -C /baseline
+RUN ln -s /work/node_modules /baseline/node_modules && ln -s /work/cognitive-shell/node_modules /baseline/cognitive-shell/node_modules
 COPY . .
 # Even npm lifecycle hooks and the browser tests have no external network here.
 # Dependencies were installed separately, before executing candidate source.
 RUN --network=none env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp npm_config_offline=true \
-    timeout 1200 bash -c 'node infrastructure/repair-runner/isolation-probe.mjs && bash scripts/verify-production.sh && npm run test:engineering && npm run test:adapters && node infrastructure/repair-runner/receipt.mjs'
+    timeout 1200 bash -c 'node infrastructure/repair-runner/isolation-probe.mjs && bash scripts/verify-production.sh && npm run test:engineering && npm run test:adapters && node infrastructure/repair-runner/experiment.mjs && node infrastructure/repair-runner/receipt.mjs'
 
 FROM node:22.17.0-bookworm-slim AS receipt
 WORKDIR /runner

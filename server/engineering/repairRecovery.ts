@@ -1,6 +1,6 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {createSupervisor} from '../metacognition/store';
-import {repairPath,repairURL,repairIsReady} from './sourceRepair';
+import {repairPath,repairURL,repairIsReady,experimentVerified} from './sourceRepair';
 
 /** Observe an already-promoted repair after a process restart. Never replay an external write. */
 export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string;mission:string;subtask:string},fetcher:typeof fetch=fetch){
@@ -18,7 +18,7 @@ export async function readCompletedRepair(db:SupabaseClient,scope:{tenant:string
  const main=await read('https://api.github.com/repos/craighindle5-peckerwood23/100--full-AI-MICROFIXD/git/ref/heads/main',{Authorization:`Bearer ${process.env.GITHUB_TOKEN}`,Accept:'application/vnd.github+json'});
  if(main.object?.sha!==candidate)return null;
  const receipt=await read(`${runner}/verification`);
- if(receipt.commit!==candidate||receipt.status!=='verified'||receipt.network!=='none'||receipt.productionSecrets!==false||receipt.gate!=='production+engineering+adapters')return null;
+ if(!experimentVerified(receipt,entry.evidence.base,candidate)||receipt.commit!==candidate||receipt.status!=='verified'||receipt.network!=='none'||receipt.productionSecrets!==false||receipt.gate!=='production+engineering+adapters')return null;
  const health=await read('https://microfixd-full-ai.onrender.com/readyz');
  if(!repairIsReady(health,candidate))return null;
  return {status:'live_verified',commit:candidate,files:files.map(file=>file.path),sandbox:receipt,recovery:'read_only_observation'};
