@@ -1,7 +1,6 @@
 import { runMetacognitiveReasoning } from "./metacognitiveReasoning";
 import { liveCapabilityLedger } from "../runtime/liveCapabilities";
 
-// @ts-nocheck
 import {asksForMissionReview,reviewMissionPerformance} from '../planner/missionIntrospection';
 import {asksAboutPausedMissions,pausedMissionReport} from '../planner/pausedMissionReport';
 import {plannerClient} from '../planner/supabaseRuntime';
@@ -49,6 +48,8 @@ export interface CommandRequest {
 }
 
 export interface CommandResult {
+  response_id?: string;
+  delivery_state?: "awaiting_playback" | "text_ready";
   session_id:   string;
   task:         string;
   output:       string;
@@ -286,6 +287,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       content: JSON.stringify({ task: req.task, output }),
     });
 
+    if (!persisted || typeof persisted !== "object" || !("id" in persisted) || typeof persisted.id !== "string" || !persisted.id) throw new Error("Memory write returned no response ID");
     stages.push("persistence");
 
     // ── Step 6: Feedback collection ───────────────────────────────────
@@ -312,7 +314,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       reflex_hit:  false,
       groq_tokens: groqTokens,
       diagnostics: {warnings, model:modelUsed, provider:providerUsed, assurance, stages:[...stages,"feedback","response"]},
-      feedback,
+      feedback: {...feedback},
       ts:          new Date().toISOString(),
     };
 
@@ -390,7 +392,7 @@ export async function runSystemLoadTest(concurrencyFactor:number=1.0){
     const organ=all[i%all.length];const t=performance.now();
     try{
       const result=await probeOrgan(organ.id,`${requestId}:${i}`,'system-load-test');
-      return{organId:organ.id,success:true,latency:Math.round((performance.now()-t)*10)/10,nativeExecutor:Boolean(result.native_executor)};
+      return{organId:organ.id,success:true,latency:Math.round((performance.now()-t)*10)/10,nativeExecutor:Boolean(result.value.native_executor)};
     }catch(error){
       return{organId:organ.id,success:false,latency:Math.round((performance.now()-t)*10)/10,error:String(error).slice(0,240),nativeExecutor:false};
     }

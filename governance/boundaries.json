@@ -15,6 +15,6 @@
     "public/recovery.html": "0a94940293f39e84d5e6dc76667d9633c378ca7fb9ef5057bf3cdd554d41972c",
     "public/recovery-worker.js": "c4ff9533fb867b97f1776d813c87059de40157bd053cba34cd1facd6b3e9240b",
     "server/organs/organs/brainOrgan.ts": "a885b6473f7d39d0d44dfdc26a18e334528cbb6a2264a7bd8434d1c176341379",
-    "server/orchestration/commandCenter.ts": "f5172d193128d11494153ed4dd747901f0a8e7e7251a82c9391430978fd4e328"
+    "server/orchestration/commandCenter.ts": "9c485d0a84adc585e48513c4ca26adedb297969e56c3dfdb2f030751c31e613a"
   }
 }
