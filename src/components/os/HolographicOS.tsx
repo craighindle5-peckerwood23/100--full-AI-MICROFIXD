@@ -1,3 +1,6 @@
+import LiveCommunicationDock from '../realtime/LiveCommunicationDock';
+import LiveCommunicationDrawer from '../realtime/LiveCommunicationDrawer';
+import DiagnosticPanel from './DiagnosticPanel';
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Loader2, Send, Settings2 } from 'lucide-react';
 import type { Mission, Artifact, Task } from '../../../server/planner/executionSpine';
@@ -280,9 +283,10 @@ export default function HolographicOS({ onReboot }: Props) {
 
   return (
     <>
-      <HIOCockpit onOpenTool={openTool} onSettings={()=>openSettings('general')} onReboot={onReboot} commandState={commandState}>
+      <HIOCockpit onQuickGoal={goal=>{setMode('chat');setDiagnosing(false);setChatInput(goal);}} onOpenTool={openTool} onSettings={()=>openSettings('general')} onReboot={onReboot} commandState={commandState}>
         {(missions,registry)=><>
         <h2 className="hio-talk-title">Talk to Microfixd</h2>
+        <LiveCommunicationDock />
         <div className="hio-intents" role="group" aria-label="Command mode">
           {(['chat','mission','diagnose'] as const).map(intent=><button type="button" key={intent}
             aria-pressed={diagnosing?intent==='diagnose':intent===mode}
@@ -323,6 +327,8 @@ export default function HolographicOS({ onReboot }: Props) {
         </form>
         </>}</>}
       </HIOCockpit>
+      <LiveCommunicationDrawer />
+      <DiagnosticPanel />
 
       {settingsSection && (
         <SettingsWindow

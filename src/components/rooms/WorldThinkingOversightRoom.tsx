@@ -23,7 +23,11 @@ import {
   BarChart3,
   Sliders,
   Flame,
-  Search
+  Search,
+  Scale,
+  Compass,
+  Eye,
+  RefreshCw,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -36,18 +40,58 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  Cell
 } from 'recharts';
-import { WorldThinkingReport, SimulationBranch, OversightAudit, SystemInvariants } from '../../types';
+import {
+  WorldThinkingReport,
+  SimulationBranch,
+  OversightAudit,
+  SystemInvariants,
+  LiveCapabilitySnapshot,
+  MetacognitiveAnalysisResult,
+  InceptionOutcomeRetrospection,
+} from '../../types';
+import { api } from '../../lib/serverApi';
 import { sound } from '../../utils/audio';
 
 export default function WorldThinkingOversightRoom() {
-  const [activeTab, setActiveTab] = useState<'simulation' | 'branches' | 'oversight' | 'organs'>('simulation');
-  const [simulationPrompt, setSimulationPrompt] = useState('Optimize parallel execution pipelines while preserving Chapter 15 invariants');
+  const [activeTab, setActiveTab] = useState<
+    'simulation' | 'branches' | 'metacognition' | 'retrospection' | 'oversight' | 'organs'
+  >('simulation');
+  const [simulationPrompt, setSimulationPrompt] = useState(
+    'Optimize parallel execution pipelines while preserving Chapter 15 invariants',
+  );
   const [simulating, setSimulating] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [latestReport, setLatestReport] = useState<WorldThinkingReport | null>(null);
   const [history, setHistory] = useState<WorldThinkingReport[]>([]);
   const [audits, setAudits] = useState<OversightAudit[]>([]);
+  const [capSnapshot, setCapSnapshot] = useState<LiveCapabilitySnapshot | null>(null);
+  const [probingCaps, setProbingCaps] = useState(false);
+
+  // High-bandwidth metacognition & inception-to-outcome retrospection state
+  const [metaProblem, setMetaProblem] = useState(
+    'Design resilient multi-tenant execution with OBD telemetry, WASM sandboxing, and zero cross-tenant leakage under partial failure.',
+  );
+  const [metaEvidence, setMetaEvidence] = useState(
+    'QuickJS WASM sandbox available; RBAC tenant isolation enforced server-side; HITL gate required for irreversible writes',
+  );
+  const [metaConstraints, setMetaConstraints] = useState(
+    'Preserve durable Supabase state; Keep recursion depth <= 3; Zero synthetic fallback metrics',
+  );
+  const [metaUseLlm, setMetaUseLlm] = useState(false);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [metaAnalysis, setMetaAnalysis] = useState<MetacognitiveAnalysisResult | null>(null);
+
+  const [inceptionPromptInput, setInceptionPromptInput] = useState(
+    'Just bypass checks and deploy immediately—obviously the faster path is better.',
+  );
+  const [intendedOutcomeInput, setIntendedOutcomeInput] = useState(
+    'Deliver verified multi-domain resolution preserving RBAC, HITL safety, and durable persistence.',
+  );
+  const [observedOutcomeInput, setObservedOutcomeInput] = useState('');
+  const [retroLoading, setRetroLoading] = useState(false);
+  const [standaloneRetro, setStandaloneRetro] = useState<InceptionOutcomeRetrospection | null>(null);
+
   const [invariants, setInvariants] = useState<SystemInvariants>({
     recursionDepthMax: 3,
     memoryLeakZero: true,
@@ -63,135 +107,265 @@ export default function WorldThinkingOversightRoom() {
 
   // World thinking & oversight organs definition
   const worldOrgans = [
-    { id: 'world_model', name: 'World Model & State Simulator', layer: 'world_thinking', role: 'Predictive Spatial-Temporal Simulation', status: 'active', latency: '4.2ms' },
-    { id: 'world_thinking_engine', name: 'Counterfactual World Thinking Engine', layer: 'world_thinking', role: 'Multi-Branch Counterfactual Search', status: 'active', latency: '12.8ms' },
-    { id: 'counterfactual_simulator', name: 'Multi-Branch Counterfactual Search', layer: 'world_thinking', role: 'Speculative Branch Evaluator', status: 'active', latency: '8.1ms' },
-    { id: 'epistemic_uncertainty_scorer', name: 'Epistemic Uncertainty Estimator', layer: 'world_thinking', role: 'Bayesian Entropy & Confidence Meter', status: 'active', latency: '2.5ms' },
-    { id: 'future_state_projector', name: 'State Trajectory & Drift Forecaster', layer: 'world_thinking', role: '10-Step Ahead Resource Predictor', status: 'active', latency: '6.4ms' },
-    { id: 'invariance_verifier', name: 'Mathematical Invariant Preserver', layer: 'world_thinking', role: 'Identity & Schema Anchor Guard', status: 'active', latency: '1.9ms' },
-    { id: 'orchestration_oversight', name: 'Hierarchical Oversight Supervisor', layer: 'oversight', role: 'Hub-and-Spoke Spawner Supervisor', status: 'active', latency: '3.1ms' },
-    { id: 'recursion_governor', name: 'Call-Stack Recursion Depth Arbiter', layer: 'oversight', role: 'Recursion Depth Enforcer (Max: 3)', status: 'active', latency: '0.8ms' },
-    { id: 'subagent_mesh_arbiter', name: 'Sub-Agent Mesh Spawner & Barrier', layer: 'oversight', role: 'Threadpool Allocator & Barrier Sync', status: 'active', latency: '5.2ms' },
-    { id: 'emergency_kill_switch', name: 'Zero-State Emergency Circuit Interrupter', layer: 'oversight', role: 'Sub-ms Zero-State Interrupter', status: invariants.emergencyKillEngaged ? 'engaged' : 'nominal', latency: '0.2ms' },
-    { id: 'hallucination_pruner', name: 'Counterfactual Hallucination Pruner', layer: 'world_thinking', role: 'Hypothetical Risk Dissector', status: 'active', latency: '7.3ms' },
-    { id: 'anti_drift_anchor', name: 'Identity & Invariant Anti-Drift Lock', layer: 'oversight', role: 'Constitutional Constraint Anchor', status: 'active', latency: '1.4ms' },
+    { id: 'world_model', name: 'World Model & State Simulator', layer: 'world_thinking', role: 'Predictive Spatial-Temporal & Multi-Domain Simulation', fallbackStatus: 'active', fallbackLatency: '4.2ms' },
+    { id: 'world_thinking_engine', name: 'Counterfactual World Thinking Engine', layer: 'world_thinking', role: 'Multi-Branch Counterfactual & Metacognitive Search', fallbackStatus: 'active', fallbackLatency: '12.8ms' },
+    { id: 'counterfactual_simulator', name: 'Multi-Branch Counterfactual Search', layer: 'world_thinking', role: 'Speculative Branch Evaluator', fallbackStatus: 'active', fallbackLatency: '8.1ms' },
+    { id: 'epistemic_uncertainty_scorer', name: 'Epistemic Uncertainty Estimator', layer: 'world_thinking', role: 'Deterministic Calibrated Entropy & Confidence Meter', fallbackStatus: 'active', fallbackLatency: '2.5ms' },
+    { id: 'future_state_projector', name: 'State Trajectory & Drift Forecaster', layer: 'world_thinking', role: '10-Step Ahead Resource Predictor', fallbackStatus: 'active', fallbackLatency: '6.4ms' },
+    { id: 'invariance_verifier', name: 'Mathematical Invariant Preserver', layer: 'world_thinking', role: 'Identity & Schema Anchor Guard', fallbackStatus: 'active', fallbackLatency: '1.9ms' },
+    { id: 'orchestration_oversight', name: 'Hierarchical Oversight Supervisor', layer: 'oversight', role: 'Hub-and-Spoke Spawner Supervisor', fallbackStatus: 'active', fallbackLatency: '3.1ms' },
+    { id: 'recursion_governor', name: 'Call-Stack Recursion Depth Arbiter', layer: 'oversight', role: 'Recursion Depth Enforcer (Max: 3)', fallbackStatus: 'active', fallbackLatency: '0.8ms' },
+    { id: 'subagent_mesh_arbiter', name: 'Sub-Agent Mesh Spawner & Barrier', layer: 'oversight', role: 'Threadpool Allocator & Barrier Sync', fallbackStatus: 'active', fallbackLatency: '5.2ms' },
+    { id: 'emergency_kill_switch', name: 'Zero-State Emergency Circuit Interrupter', layer: 'oversight', role: 'Sub-ms Zero-State Interrupter', fallbackStatus: invariants.emergencyKillEngaged ? 'engaged' : 'nominal', fallbackLatency: '0.2ms' },
+    { id: 'hallucination_pruner', name: 'Counterfactual Hallucination Pruner', layer: 'world_thinking', role: 'Hypothetical Risk Dissector', fallbackStatus: 'active', fallbackLatency: '7.3ms' },
+    { id: 'anti_drift_anchor', name: 'Identity & Invariant Anti-Drift Lock', layer: 'oversight', role: 'Constitutional Constraint Anchor', fallbackStatus: 'active', fallbackLatency: '1.4ms' },
   ];
 
-  // Fetch initial data
-  useEffect(() => {
-    fetchHistory();
-    fetchOversightData();
-    const interval = setInterval(() => {
-      fetchOversightData();
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+  const fetchLiveCapabilities = async () => {
+    try {
+      const snap = await api<LiveCapabilitySnapshot>('GET', '/organs/capabilities/live?run_if_empty=1');
+      if (snap && Array.isArray(snap.records)) {
+        setCapSnapshot(snap);
+      }
+    } catch {
+      // Handled via apiError or unauthenticated state
+    }
+  };
+
+  const handleQuickProbeCapabilities = async (mode: 'quick' | 'deep' = 'quick') => {
+    setProbingCaps(true);
+    setApiError(null);
+    try {
+      const res = await api<{ success: boolean; snapshot: LiveCapabilitySnapshot }>(
+        'POST',
+        '/organs/capabilities/probe',
+        { mode },
+      );
+      if (res.snapshot) {
+        setCapSnapshot(res.snapshot);
+        window.dispatchEvent(new CustomEvent('microfixd:capabilities-updated', { detail: res.snapshot }));
+      }
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Capability probe failed');
+    } finally {
+      setProbingCaps(false);
+    }
+  };
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch('/api/command/world-thinking/history?limit=10');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.history && data.history.length > 0) {
-          setHistory(data.history);
-          setLatestReport(data.history[0]);
-          setSelectedBranch(data.history[0].optimalBranch);
-        } else {
-          // Trigger initial baseline simulation
-          handleRunSimulation(simulationPrompt);
+      const data = await api<{ history?: WorldThinkingReport[] }>('GET', '/command/world-thinking/history?limit=10');
+      if (data.history && data.history.length > 0) {
+        setHistory(data.history);
+        setLatestReport(data.history[0]);
+        setSelectedBranch(data.history[0].optimalBranch);
+        if (data.history[0].metacognition) {
+          setMetaAnalysis(data.history[0].metacognition);
         }
+      } else {
+        await handleRunSimulation(simulationPrompt);
       }
-    } catch {
-      // Fallback
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to load world thinking history');
     }
   };
 
   const fetchOversightData = async () => {
     try {
-      const [invRes, audRes] = await Promise.all([
-        fetch('/api/command/oversight/invariants'),
-        fetch('/api/command/oversight/audits?limit=25')
+      const [invData, audData] = await Promise.all([
+        api<{ invariants: SystemInvariants }>('GET', '/command/oversight/invariants'),
+        api<{ audits?: OversightAudit[] }>('GET', '/command/oversight/audits?limit=25'),
       ]);
-      if (invRes.ok) {
-        const invData = await invRes.json();
-        setInvariants(invData.invariants);
-      }
-      if (audRes.ok) {
-        const audData = await audRes.json();
-        setAudits(audData.audits || []);
-      }
+      if (invData?.invariants) setInvariants(invData.invariants);
+      if (audData?.audits) setAudits(audData.audits);
     } catch {
-      // Ignored
+      // Keep polling quiet if session not yet active
     }
   };
 
+  const fetchMetacognitiveHistory = async () => {
+    try {
+      const data = await api<{ history?: MetacognitiveAnalysisResult[] }>('GET', '/command/metacognition/history?limit=5');
+      if (data.history && data.history.length > 0 && !metaAnalysis) {
+        setMetaAnalysis(data.history[0]);
+      }
+    } catch {
+      // Ignored on initial load
+    }
+  };
+
+  // Fetch initial data & subscribe to WS capability broadcasts
+  useEffect(() => {
+    void fetchHistory();
+    void fetchOversightData();
+    void fetchLiveCapabilities();
+    void fetchMetacognitiveHistory();
+
+    const interval = setInterval(() => {
+      void fetchOversightData();
+    }, 4000);
+
+    const onWsCaps = (event: Event) => {
+      const detail = (event as CustomEvent<LiveCapabilitySnapshot>).detail;
+      if (detail && Array.isArray(detail.records)) setCapSnapshot(detail);
+    };
+    const onAuthChanged = () => {
+      setApiError(null);
+      void fetchHistory();
+      void fetchOversightData();
+      void fetchLiveCapabilities();
+      void fetchMetacognitiveHistory();
+    };
+
+    window.addEventListener('microfixd:capabilities-updated', onWsCaps);
+    window.addEventListener('microfixd:auth-changed', onAuthChanged);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('microfixd:capabilities-updated', onWsCaps);
+      window.removeEventListener('microfixd:auth-changed', onAuthChanged);
+    };
+  }, []);
+
   const handleRunSimulation = async (task: string) => {
     setSimulating(true);
+    setApiError(null);
     sound.click();
     try {
-      const res = await fetch('/api/command/world-thinking/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await api<{ success: boolean; report?: WorldThinkingReport }>(
+        'POST',
+        '/command/world-thinking/simulate',
+        {
           task,
+          includeLiveCapabilities: true,
           actions: [
             { action: 'speculative_dag_dispatch', args: { parallel_workers: 4, memory_limit_mb: 512 } },
             { action: 'deterministic_pipeline_patch', args: { sandbox_mode: 'wasm', verify_invariants: true } },
             { action: 'aggressive_cache_purge', args: { drop_active_tables: false } },
-            { action: 'self_morphing_rewrite', args: { target_layer: 'execution', depth_allowance: 2 } }
-          ]
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.report) {
-          setLatestReport(data.report);
-          setSelectedBranch(data.report.optimalBranch);
-          setHistory(prev => [data.report, ...prev.slice(0, 15)]);
-          sound.telemetry();
+            { action: 'self_morphing_rewrite', args: { target_layer: 'execution', depth_allowance: 2 } },
+          ],
+        },
+      );
+      if (data.report) {
+        setLatestReport(data.report);
+        setSelectedBranch(data.report.optimalBranch);
+        setHistory((prev) => [data.report!, ...prev.slice(0, 15)]);
+        if (data.report.metacognition) {
+          setMetaAnalysis(data.report.metacognition);
         }
+        sound.telemetry();
       }
     } catch (err) {
-      console.error('Simulation error:', err);
+      setApiError(err instanceof Error ? err.message : 'Simulation failed');
     } finally {
       setSimulating(false);
     }
   };
 
-  const handleToggleKillSwitch = async () => {
-    sound.critical();
-    const nextAction = invariants.emergencyKillEngaged ? 'reset' : 'trigger';
+  const handleRunMetacognition = async () => {
+    setMetaLoading(true);
+    setApiError(null);
+    sound.click();
     try {
-      const res = await fetch('/api/command/oversight/kill-switch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: nextAction })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setInvariants(prev => ({ ...prev, emergencyKillEngaged: data.emergencyKillEngaged }));
-        fetchOversightData();
+      const evidenceList = metaEvidence
+        .split(/[\n;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const constraintList = metaConstraints
+        .split(/[\n;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const res = await api<{ success: boolean; analysis: MetacognitiveAnalysisResult }>(
+        'POST',
+        '/command/metacognition/reason',
+        {
+          problem: metaProblem,
+          inceptionPrompt: inceptionPromptInput || metaProblem,
+          intendedOutcome: intendedOutcomeInput || undefined,
+          observedOutcome: observedOutcomeInput.trim() || undefined,
+          evidence: evidenceList,
+          constraints: constraintList,
+          useLlm: metaUseLlm,
+          requireLlm: metaUseLlm,
+        },
+      );
+      if (res.analysis) {
+        setMetaAnalysis(res.analysis);
+        setStandaloneRetro(res.analysis.retrospection);
+        sound.telemetry();
       }
     } catch (err) {
-      console.error('Kill switch toggle error:', err);
+      setApiError(err instanceof Error ? err.message : 'Metacognitive analysis failed');
+    } finally {
+      setMetaLoading(false);
+    }
+  };
+
+  const handleRunRetrospection = async () => {
+    setRetroLoading(true);
+    setApiError(null);
+    sound.click();
+    try {
+      const evidenceList = metaEvidence
+        .split(/[\n;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const constraintList = metaConstraints
+        .split(/[\n;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const res = await api<{ success: boolean; retrospection: InceptionOutcomeRetrospection }>(
+        'POST',
+        '/command/metacognition/retrospect',
+        {
+          problem: metaProblem,
+          inceptionPrompt: inceptionPromptInput || metaProblem,
+          intendedOutcome: intendedOutcomeInput || undefined,
+          observedOutcome: observedOutcomeInput.trim() || undefined,
+          evidence: evidenceList,
+          constraints: constraintList,
+        },
+      );
+      if (res.retrospection) {
+        setStandaloneRetro(res.retrospection);
+        sound.telemetry();
+      }
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Retrospection audit failed');
+    } finally {
+      setRetroLoading(false);
+    }
+  };
+
+  const handleToggleKillSwitch = async () => {
+    sound.critical();
+    setApiError(null);
+    const nextAction = invariants.emergencyKillEngaged ? 'reset' : 'trigger';
+    try {
+      const data = await api<{ emergencyKillEngaged: boolean }>('POST', '/command/oversight/kill-switch', {
+        action: nextAction,
+      });
+      setInvariants((prev) => ({ ...prev, emergencyKillEngaged: data.emergencyKillEngaged }));
+      void fetchOversightData();
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Kill switch toggle failed');
     }
   };
 
   const handleVerifyDepth = async () => {
     sound.click();
+    setApiError(null);
     try {
-      const res = await fetch('/api/command/oversight/verify-depth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'Operator_Tester', action: testAction, depth: testDepth })
+      const data = await api<{ allowed: boolean; reason: string }>('POST', '/command/oversight/verify-depth', {
+        source: 'Operator_Tester',
+        action: testAction,
+        depth: testDepth,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setDepthVerifyResult(data);
-        fetchOversightData();
-      }
-    } catch {
-      // Ignored
+      setDepthVerifyResult(data);
+      void fetchOversightData();
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Depth verification failed');
     }
   };
 
@@ -294,13 +468,13 @@ export default function WorldThinkingOversightRoom() {
       </header>
 
       {/* ── NAVIGATION TABS ── */}
-      <div className="px-6 py-2.5 border-b border-slate-800/80 bg-slate-950/40 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+      <div className="px-6 py-2.5 border-b border-slate-800/80 bg-slate-950/40 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => { setActiveTab('simulation'); sound.click(); }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
               activeTab === 'simulation'
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'
             }`}
           >
@@ -310,38 +484,62 @@ export default function WorldThinkingOversightRoom() {
 
           <button
             onClick={() => { setActiveTab('branches'); sound.click(); }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
               activeTab === 'branches'
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'
             }`}
           >
             <GitBranch className="w-3.5 h-3.5" />
-            <span>Counterfactual Branches & Pruning</span>
+            <span>Branches & Pruning</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('metacognition'); sound.click(); }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
+              activeTab === 'metacognition'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>Multi-Domain & Outcomes</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('retrospection'); sound.click(); }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
+              activeTab === 'retrospection'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5" />
+            <span>Inception & Unbiased Lenses</span>
           </button>
 
           <button
             onClick={() => { setActiveTab('oversight'); sound.click(); }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
               activeTab === 'oversight'
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>Hierarchical Oversight & Recursion</span>
+            <span>Oversight & Recursion</span>
           </button>
 
           <button
             onClick={() => { setActiveTab('organs'); sound.click(); }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
               activeTab === 'organs'
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.2)]'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Layer-11 Organs ({worldOrgans.length})</span>
+            <span>Organs ({worldOrgans.length})</span>
           </button>
         </div>
 
@@ -351,14 +549,14 @@ export default function WorldThinkingOversightRoom() {
             type="text"
             value={simulationPrompt}
             onChange={(e) => setSimulationPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleRunSimulation(simulationPrompt)}
+            onKeyDown={(e) => e.key === 'Enter' && void handleRunSimulation(simulationPrompt)}
             placeholder="Simulate action or invariant hypothesis..."
             className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
           />
           <button
-            onClick={() => handleRunSimulation(simulationPrompt)}
+            onClick={() => void handleRunSimulation(simulationPrompt)}
             disabled={simulating}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold font-mono text-xs transition-all disabled:opacity-50 shrink-0 shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold font-mono text-xs transition-all disabled:opacity-50 shrink-0"
           >
             {simulating ? (
               <>
@@ -377,9 +575,68 @@ export default function WorldThinkingOversightRoom() {
 
       {/* ── MAIN BODY CONTENT ── */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        {apiError && (
+          <div className="p-3 rounded-lg border border-rose-500/40 bg-rose-950/25 text-rose-200 text-xs font-mono flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{apiError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setApiError(null)}
+              className="px-2 py-0.5 rounded border border-rose-400/40 text-[10px]"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* TAB 1: WORLD THINKING MATRIX */}
         {activeTab === 'simulation' && (
           <div className="space-y-6">
+            {/* Live Runtime Capability Posture Bar */}
+            <div className="p-3.5 rounded-xl border border-cyan-500/25 bg-slate-900/70 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+              <div className="flex flex-wrap items-center gap-3 min-w-0">
+                <span className="text-cyan-300 font-bold tracking-wider">LIVE CAPABILITY POSTURE</span>
+                {capSnapshot ? (
+                  <>
+                    <span className="text-emerald-300 tabular-nums">
+                      {capSnapshot.counts.verified}/{capSnapshot.counts.total} VERIFIED
+                    </span>
+                    <span className="text-slate-400 tabular-nums">
+                      DEGRADED: {capSnapshot.counts.degraded} · UNAVAIL: {capSnapshot.counts.unavailable} · ISOLATED: {capSnapshot.counts.isolated}
+                    </span>
+                    <span className={capSnapshot.stale ? 'text-amber-300' : 'text-cyan-400'}>
+                      {capSnapshot.mode.toUpperCase()} · {capSnapshot.stale ? 'STALE' : 'FRESH'}
+                    </span>
+                  </>
+                ) : latestReport?.capabilityPosture ? (
+                  <span className="text-slate-300 truncate">{latestReport.capabilityPosture.summary}</span>
+                ) : (
+                  <span className="text-slate-400">Awaiting authenticated live capability snapshot</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => void handleQuickProbeCapabilities('quick')}
+                  disabled={probingCaps}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-500/20 text-[11px] text-cyan-200 disabled:opacity-40"
+                >
+                  <RefreshCw className={`w-3 h-3 ${probingCaps ? 'animate-spin' : ''}`} />
+                  <span>{probingCaps ? 'Probing...' : 'Quick Probe'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleQuickProbeCapabilities('deep')}
+                  disabled={probingCaps}
+                  className="px-2.5 py-1 rounded border border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-500/20 text-[11px] text-indigo-200 disabled:opacity-40"
+                >
+                  Deep Dry-Run
+                </button>
+              </div>
+            </div>
+
             {/* Top Stat Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="p-4 rounded-xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm relative overflow-hidden">
@@ -823,6 +1080,357 @@ export default function WorldThinkingOversightRoom() {
           </div>
         )}
 
+        {/* TAB: HIGH-BANDWIDTH MULTI-DOMAIN & MULTI-OUTCOME METACOGNITION */}
+        {activeTab === 'metacognition' && (
+          <div className="space-y-6">
+            <div className="p-5 rounded-2xl border border-cyan-500/25 bg-slate-900/70 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold font-mono text-cyan-200">
+                    MULTI-DOMAIN DECOMPOSITION & COMPLEX OUTCOME MODELING
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Maps coupled constraints, 1st/2nd/3rd-order effects, reversibility, and deterministic calibrated uncertainty across 8 cognitive domains.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs font-mono text-slate-300 px-2.5 py-1 rounded border border-slate-700 bg-slate-950 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={metaUseLlm}
+                      onChange={(e) => setMetaUseLlm(e.target.checked)}
+                      className="accent-cyan-400"
+                    />
+                    <span>{metaUseLlm ? 'Mode: LLM-Synthesized (Fail-Closed)' : 'Mode: Deterministic Structural'}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleRunMetacognition()}
+                    disabled={metaLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold font-mono text-xs disabled:opacity-50"
+                  >
+                    <Compass className={`w-3.5 h-3.5 ${metaLoading ? 'animate-spin' : ''}`} />
+                    <span>{metaLoading ? 'Analyzing...' : 'Analyze Multi-Domain'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 font-mono text-xs">
+                <div className="lg:col-span-1">
+                  <label className="block text-[11px] text-slate-400 mb-1">PROBLEM / SYSTEM BRIEF</label>
+                  <textarea
+                    rows={3}
+                    value={metaProblem}
+                    onChange={(e) => setMetaProblem(e.target.value)}
+                    className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">VERIFIED EVIDENCE (; or newline)</label>
+                  <textarea
+                    rows={3}
+                    value={metaEvidence}
+                    onChange={(e) => setMetaEvidence(e.target.value)}
+                    className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">INVARIANTS & CONSTRAINTS (; or newline)</label>
+                  <textarea
+                    rows={3}
+                    value={metaConstraints}
+                    onChange={(e) => setMetaConstraints(e.target.value)}
+                    className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {metaAnalysis ? (
+              <div className="space-y-6">
+                {/* Executive Synthesis & Uncertainty Calibration */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  <div className="lg:col-span-2 p-4 rounded-xl border border-cyan-500/25 bg-slate-900/60 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                      <span className="text-cyan-300 font-bold">EXECUTIVE SYNTHESIS</span>
+                      <span className="text-slate-400">
+                        {metaAnalysis.reasoningMode.toUpperCase()}
+                        {metaAnalysis.provider ? ` · ${metaAnalysis.provider}/${metaAnalysis.model}` : ''}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                      {metaAnalysis.executiveSynthesis}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 font-mono text-xs space-y-2 tabular-nums">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">CALIBRATED UNCERTAINTY</span>
+                      <span className="text-cyan-300 font-bold">
+                        {(metaAnalysis.uncertainty.uncertaintyScore * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-300 pt-1">
+                      <div>Evidence Deficit: {(metaAnalysis.uncertainty.breakdown.evidenceDeficit * 100).toFixed(0)}%</div>
+                      <div>Coupling Load: {(metaAnalysis.uncertainty.breakdown.domainCouplingComplexity * 100).toFixed(0)}%</div>
+                      <div>Framing Ambiguity: {(metaAnalysis.uncertainty.breakdown.framingAmbiguity * 100).toFixed(0)}%</div>
+                      <div>Value Tension: {(metaAnalysis.uncertainty.breakdown.valueTension * 100).toFixed(0)}%</div>
+                    </div>
+                    <div className="text-[11px] font-sans text-slate-400 pt-1 border-t border-slate-800">
+                      {metaAnalysis.uncertainty.calibrationBasis}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active Cognitive Domains */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-mono font-bold text-slate-300 tracking-wider">
+                    MULTI-DOMAIN LENSES ({metaAnalysis.domains.length} ACTIVE)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {metaAnalysis.domains.map((dom) => (
+                      <div key={dom.domain} className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2">
+                        <div className="flex items-center justify-between font-mono text-xs">
+                          <span className="font-bold text-cyan-200">{dom.label}</span>
+                          <span className="text-emerald-300 tabular-nums">
+                            Weight {(dom.relevanceWeight * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-300 space-y-1 font-sans">
+                          <div><strong className="text-slate-200">Constraints:</strong> {dom.coreConstraints.join(' · ')}</div>
+                          <div><strong className="text-amber-300">Failure Vectors:</strong> {dom.failureVectors.join(' · ')}</div>
+                          <div><strong className="text-emerald-300">Leverage:</strong> {dom.leveragePoints.join(' · ')}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cross-Domain Couplings */}
+                {metaAnalysis.crossDomainCouplings.length > 0 && (
+                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2.5">
+                    <h3 className="text-xs font-mono font-bold text-slate-300 tracking-wider">
+                      CROSS-DOMAIN COUPLINGS ({metaAnalysis.crossDomainCouplings.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 text-xs">
+                      {metaAnalysis.crossDomainCouplings.map((c, idx) => (
+                        <div key={idx} className="p-2.5 rounded border border-slate-800 bg-slate-950/60 space-y-1">
+                          <div className="font-mono text-[11px] flex items-center justify-between">
+                            <span className="text-cyan-300">{c.fromDomain} → {c.toDomain}</span>
+                            <span className="text-amber-300 uppercase">{c.interactionType}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-300 font-sans">{c.mechanism}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Multi-Outcome Trajectories (1st / 2nd / 3rd order) */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-mono font-bold text-slate-300 tracking-wider">
+                    COMPLEX MULTI-OUTCOME TRAJECTORIES (1ST / 2ND / 3RD-ORDER EFFECTS)
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {metaAnalysis.outcomes.map((out) => (
+                      <div key={out.outcomeId} className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2">
+                        <div className="flex items-center justify-between font-mono text-xs gap-2">
+                          <span className="font-bold text-slate-100">{out.label}</span>
+                          <span className="text-cyan-300 tabular-nums shrink-0">
+                            P={(out.probabilityWeight * 100).toFixed(0)}% · {out.reversibility.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          {out.trajectoryType} · Horizon: {out.timeHorizon}
+                        </div>
+                        <div className="text-[11px] font-sans text-slate-300 space-y-1 pt-1">
+                          <div><strong className="text-cyan-300">1st Order:</strong> {out.firstOrderEffects.join('; ')}</div>
+                          <div><strong className="text-indigo-300">2nd Order:</strong> {out.secondOrderEffects.join('; ')}</div>
+                          <div><strong className="text-amber-300">3rd Order:</strong> {out.thirdOrderEffects.join('; ')}</div>
+                          <div><strong className="text-emerald-300">Safeguards:</strong> {out.safeguardsRequired.join('; ')}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 rounded-xl border border-slate-800 bg-slate-900/40 text-center text-xs font-mono text-slate-400">
+                Run "Analyze Multi-Domain" above to compute coupled domain constraints, 3rd-order outcome trajectories, and calibrated epistemic uncertainty.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: INCEPTION-TO-OUTCOME RETROSPECTION & UNBIASED PERSPECTIVES */}
+        {activeTab === 'retrospection' && (
+          <div className="space-y-6">
+            <div className="p-5 rounded-2xl border border-cyan-500/25 bg-slate-900/70 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold font-mono text-cyan-200">
+                    INCEPTION-TO-OUTCOME RETROSPECTION & UNBIASED HUMAN PERSPECTIVES
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Audits inception framing biases, hidden assumptions, and outcome divergence while synthesizing 6 steelmanned non-biased human stakeholder views.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleRunRetrospection()}
+                    disabled={retroLoading || metaLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-400/50 bg-indigo-950/40 hover:bg-indigo-500/20 text-indigo-200 font-mono text-xs disabled:opacity-50"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>{retroLoading ? 'Auditing...' : 'Retrospect Only'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRunMetacognition()}
+                    disabled={metaLoading || retroLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold font-mono text-xs disabled:opacity-50"
+                  >
+                    <Scale className="w-3.5 h-3.5" />
+                    <span>{metaLoading ? 'Running Audit...' : 'Run Full Perspective + Retrospect'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 font-mono text-xs">
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">INCEPTION PROMPT (ORIGINAL FRAMING)</label>
+                  <textarea
+                    rows={2}
+                    value={inceptionPromptInput}
+                    onChange={(e) => setInceptionPromptInput(e.target.value)}
+                    className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">INTENDED OUTCOME</label>
+                  <textarea
+                    rows={2}
+                    value={intendedOutcomeInput}
+                    onChange={(e) => setIntendedOutcomeInput(e.target.value)}
+                    className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-slate-400 mb-1">OBSERVED OUTCOME (OPTIONAL FOR RETROSPECTION)</label>
+                  <textarea
+                    rows={2}
+                    value={observedOutcomeInput}
+                    onChange={(e) => setObservedOutcomeInput(e.target.value)}
+                    placeholder="Leave empty for prospective alignment, or enter realized outcome (e.g. skipped validation caused schema drift)"
+                    className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {(standaloneRetro || metaAnalysis?.retrospection) && (() => {
+              const retro = standaloneRetro ?? metaAnalysis!.retrospection;
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2.5">
+                    <div className="flex items-center justify-between font-mono text-xs border-b border-slate-800 pb-2">
+                      <span className="text-cyan-300 font-bold">INCEPTION AUDIT</span>
+                      <span className="text-slate-400 uppercase">{retro.mode}</span>
+                    </div>
+                    <div className="text-xs font-sans text-slate-300 space-y-1.5">
+                      <div><strong className="text-slate-100">Initial Framing:</strong> {retro.inceptionAudit.initialFraming}</div>
+                      <div><strong className="text-amber-300">Framing Bias Signals:</strong> {retro.inceptionAudit.framingBiasDetected.join('; ') || 'None'}</div>
+                      <div><strong className="text-indigo-300">Hidden Assumptions:</strong> {retro.inceptionAudit.hiddenAssumptions.join('; ') || 'None'}</div>
+                      <div><strong className="text-rose-300">Boundary Gaps:</strong> {retro.inceptionAudit.boundaryGaps.join('; ') || 'None'}</div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2.5">
+                    <div className="flex items-center justify-between font-mono text-xs border-b border-slate-800 pb-2">
+                      <span className="text-emerald-300 font-bold">OUTCOME RETROSPECTION</span>
+                      <span className={`uppercase font-bold ${
+                        retro.outcomeRetrospection.alignmentStatus === 'material_divergence'
+                          ? 'text-rose-300'
+                          : retro.outcomeRetrospection.alignmentStatus === 'partial_divergence'
+                          ? 'text-amber-300'
+                          : 'text-emerald-300'
+                      }`}>
+                        {retro.outcomeRetrospection.alignmentStatus}
+                      </span>
+                    </div>
+                    <div className="text-xs font-sans text-slate-300 space-y-1.5">
+                      <div><strong className="text-slate-100">Alignment Delta:</strong> {retro.outcomeRetrospection.alignmentDelta}</div>
+                      <div><strong className="text-amber-300">Divergence Causes:</strong> {retro.outcomeRetrospection.rootCausesOfDivergence.join('; ') || 'None'}</div>
+                      <div><strong className="text-cyan-300">Counterfactual Hindsight:</strong> {retro.outcomeRetrospection.counterfactualHindsight}</div>
+                      <div><strong className="text-emerald-300">Corrective Directives:</strong> {retro.outcomeRetrospection.correctiveDirectives.join('; ')}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {metaAnalysis?.perspectives ? (
+              <div className="space-y-4">
+                {/* Bias Audit Summary */}
+                <div className="p-4 rounded-xl border border-cyan-500/25 bg-slate-900/60 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs border-b border-slate-800 pb-2">
+                    <span className="text-cyan-200 font-bold">COGNITIVE BIAS NEUTRALIZATION & ROLE-REVERSAL SYNTHESIS</span>
+                    <span className={`font-bold uppercase ${
+                      metaAnalysis.perspectives.overallBiasRisk === 'high'
+                        ? 'text-rose-300'
+                        : metaAnalysis.perspectives.overallBiasRisk === 'moderate'
+                        ? 'text-amber-300'
+                        : 'text-emerald-300'
+                    }`}>
+                      Bias Risk: {metaAnalysis.perspectives.overallBiasRisk} · Human Judgment Required: {metaAnalysis.perspectives.requiresHumanJudgment ? 'YES' : 'NO'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-200 font-sans">
+                    {metaAnalysis.perspectives.balancedRecommendation}
+                  </p>
+                  <div className="text-[11px] font-sans text-slate-400">
+                    <strong className="text-slate-200">Role-Reversal Check:</strong> {metaAnalysis.perspectives.roleReversalCheck}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+                    {metaAnalysis.perspectives.biasAudit.map((b, i) => (
+                      <div key={i} className="p-2.5 rounded border border-slate-800 bg-slate-950/60 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between font-mono">
+                          <span className="text-slate-200 font-semibold">{b.biasType}</span>
+                          <span className={b.severity === 'high' ? 'text-rose-300' : b.severity === 'moderate' ? 'text-amber-300' : 'text-emerald-300'}>
+                            {b.severity.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="text-slate-400 font-sans">{b.neutralizationStrategy}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 6 Steelmanned Human Stakeholder Perspectives */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {metaAnalysis.perspectives.perspectivesEvaluated.map((p) => (
+                    <div key={p.roleId} className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-2">
+                      <div className="font-mono text-xs font-bold text-cyan-200 border-b border-slate-800 pb-1.5">
+                        {p.roleLabel}
+                      </div>
+                      <div className="text-[11px] font-sans text-slate-300 space-y-1.5">
+                        <div><strong className="text-slate-100">Steelmanned Argument:</strong> {p.steelmannedArgument}</div>
+                        <div><strong className="text-amber-300">Role Blind Spots:</strong> {p.blindSpotsOfRole.join('; ')}</div>
+                        <div><strong className="text-emerald-300">Safeguards:</strong> {p.nonNegotiableSafeguards.join('; ')}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 rounded-xl border border-slate-800 bg-slate-900/40 text-center text-xs font-mono text-slate-400">
+                Click "Run Full Perspective + Retrospect" to inspect all 6 balanced human stakeholder lenses and cognitive bias audits.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* TAB 4: LAYER-11 ORGANS DIRECTORY */}
         {activeTab === 'organs' && (
           <div className="space-y-4">
@@ -846,33 +1454,53 @@ export default function WorldThinkingOversightRoom() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredOrgans.map((organ) => (
-                <div
-                  key={organ.id}
-                  className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm hover:border-cyan-500/40 transition-all flex flex-col justify-between space-y-3"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">{organ.layer}</span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        {organ.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <h4 className="font-mono font-bold text-xs text-slate-200">{organ.name}</h4>
-                    <p className="text-xs text-slate-400 font-sans mt-1">{organ.role}</p>
-                  </div>
+              {filteredOrgans.map((organ) => {
+                const liveRec = capSnapshot?.records.find((r) => r.id === organ.id);
+                const statusText = (liveRec?.status ?? organ.fallbackStatus).toUpperCase();
+                const latencyText =
+                  liveRec && liveRec.latencyMs !== null ? `${liveRec.latencyMs}ms` : organ.fallbackLatency;
+                const tierText = liveRec?.verificationTier ?? 'unverified';
 
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 font-mono text-[11px] text-slate-400">
-                    <span>Latency: <strong className="text-cyan-300">{organ.latency}</strong></span>
-                    <button
-                      onClick={() => handleRunSimulation(`Simulate organ execution on ${organ.id}`)}
-                      className="px-2 py-1 rounded bg-slate-800 hover:bg-cyan-600 hover:text-slate-950 text-slate-200 text-[10px] transition-all"
-                    >
-                      Probe
-                    </button>
+                return (
+                  <div
+                    key={organ.id}
+                    className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 backdrop-blur-sm hover:border-cyan-500/40 transition-all flex flex-col justify-between space-y-3"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+                          {organ.layer} · {tierText}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                            statusText === 'DEGRADED' || statusText === 'ENGAGED'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : statusText === 'UNAVAILABLE'
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                              : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                          }`}
+                        >
+                          {statusText}
+                        </span>
+                      </div>
+                      <h4 className="font-mono font-bold text-xs text-slate-200">{organ.name}</h4>
+                      <p className="text-xs text-slate-400 font-sans mt-1">{organ.role}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 font-mono text-[11px] text-slate-400">
+                      <span>
+                        Latency: <strong className="text-cyan-300 tabular-nums">{latencyText}</strong>
+                      </span>
+                      <button
+                        onClick={() => void handleRunSimulation(`Simulate organ execution on ${organ.id}`)}
+                        className="px-2 py-1 rounded bg-slate-800 hover:bg-cyan-600 hover:text-slate-950 text-slate-200 text-[10px] transition-all"
+                      >
+                        Probe
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

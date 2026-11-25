@@ -40,6 +40,8 @@ const ROUTE_PERMISSIONS: Record<string, string> = {
   "/api/security":        "monitor",
   "/api/evolution":       "execute",
   "/api/execution":       "monitor",
+  "/api/realtime":        "monitor",
+  "/api/decisions":       "monitor",
   "/api/skin":            "read",
 };
 

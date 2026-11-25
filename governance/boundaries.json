@@ -9,12 +9,12 @@
     "server/metacognition/responseBoundary.ts": "75faf14ae2f3d60d035e6b504269f65ba954de2e66b087189904ea8c6c3e38c3",
     "server/hitl/hitlManager.ts": "b70a758b5d327a1251b9d6c2884f97c0abee82a8ec05c457e8238c4f8a9e3656",
     "server/security/identityLock.ts": "8f73ea2ec740f6bec0792f83f80aa34b12f66d3b9e88750db0ef6b03ec73b334",
-    "server/security/rbac.ts": "4caeb718c5a8b5c7ee0fc5f8c515ad6557e3f29702507c8ba7835fcf095e9707",
+    "server/security/rbac.ts": "d0a8e637adbd853dacc9732b0ad11954765e9927425085a05404a12ad69dc335",
     "server/planner/missionAudit.ts": "669228a20b119890b0c92f6915e29f4aaec9cc83a5f207540c77663fcfdb08da",
-    "server/planner/governedTools.ts": "0c64043d9fc0401d0643a15d6db352e6b86d6f0c6b5ca524e473183d683be0b2",
+    "server/planner/governedTools.ts": "82587eb10bcdabd197d553d16b9740d4837d5ad548edb6e8ffab896060e032b2",
     "public/recovery.html": "0a94940293f39e84d5e6dc76667d9633c378ca7fb9ef5057bf3cdd554d41972c",
     "public/recovery-worker.js": "c4ff9533fb867b97f1776d813c87059de40157bd053cba34cd1facd6b3e9240b",
-    "server/organs/organs/brainOrgan.ts": "9e429edbaf7ea88fe069619fad82db2a7a96b3fb0d67afd456a26c0c6d44b2c3",
-    "server/orchestration/commandCenter.ts": "209556e5d22e47424d52054303d783238367ad75445cf4284dab392af97dcf08"
+    "server/organs/organs/brainOrgan.ts": "a885b6473f7d39d0d44dfdc26a18e334528cbb6a2264a7bd8434d1c176341379",
+    "server/orchestration/commandCenter.ts": "f5172d193128d11494153ed4dd747901f0a8e7e7251a82c9391430978fd4e328"
   }
 }

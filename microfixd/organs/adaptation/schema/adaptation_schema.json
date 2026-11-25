@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AdaptationSchema",
+  "type": "object",
+  "required": [
+    "adaptation_id",
+    "source_evaluation",
+    "source_verification",
+    "adaptation_type",
+    "target_component",
+    "proposed_change",
+    "rollback_plan",
+    "status"
+  ],
+  "properties": {
+    "adaptation_id": { "type": "string" },
+    "source_evaluation": { "type": "string" },
+    "source_verification": { "type": "string" },
+    "adaptation_type": {
+      "type": "string",
+      "enum": [
+        "prompt_update",
+        "reasoning_update",
+        "tool_selection_update",
+        "workflow_update",
+        "memory_update",
+        "policy_update",
+        "planner_update"
+      ]
+    },
+    "target_component": { "type": "string" },
+    "proposed_change": { "type": "object" },
+    "rollback_plan": { "type": "object" },
+    "status": { "type": "string" }
+  }
+}

@@ -1,3 +1,6 @@
+import { runMetacognitiveReasoning } from "./metacognitiveReasoning";
+import { liveCapabilityLedger } from "../runtime/liveCapabilities";
+
 // @ts-nocheck
 import {asksForMissionReview,reviewMissionPerformance} from '../planner/missionIntrospection';
 import {asksAboutPausedMissions,pausedMissionReport} from '../planner/pausedMissionReport';
@@ -253,7 +256,21 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     checkTextOnlyAnswer(output);
     const evaluation = await executeEvaluationOrgan("evaluate", { candidate: output });
     const uncertainty = await executeUncertaintyOrgan("score", { output, evidenceCount: Object.keys(organResults).length });
+    const shouldAttachMetacognition = routing.complexity === "high" || routing.intent === "reflect" || req.context?.metacognitive === true;
+    const metacognition = shouldAttachMetacognition
+      ? await runMetacognitiveReasoning({
+          problem: req.task,
+          observedOutcome: output.slice(0, 1000),
+          evidence: Object.keys(organResults).map(o => `Executed organ: ${o}`),
+          useLlm: false,
+          tenantId: req.tenant_id || "global",
+        }).catch(() => undefined)
+      : undefined;
+    const capabilitySnapshot = liveCapabilityLedger.hasSnapshot() ? liveCapabilityLedger.getSnapshot() : null;
     const assurance = {
+      ...(capabilitySnapshot ? { liveCapabilityPosture: { verified: capabilitySnapshot.counts.verified, degraded: capabilitySnapshot.counts.degraded, unavailable: capabilitySnapshot.counts.unavailable, stale: capabilitySnapshot.stale, generatedAt: capabilitySnapshot.generatedAt } } : {}),
+      ...(metacognition ? { metacognition: { analysisId: metacognition.analysisId, activeDomains: metacognition.domains.map(d => d.domain), overallBiasRisk: metacognition.perspectives.overallBiasRisk, calibratedUncertainty: metacognition.uncertainty.uncertaintyScore, alignmentStatus: metacognition.retrospection.outcomeRetrospection.alignmentStatus } } : {}),
+
       evaluationScore: evaluation.score,
       uncertainty: uncertainty.uncertainty,
       confidence: uncertainty.confidence,

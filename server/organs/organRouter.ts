@@ -12,6 +12,7 @@ import {randomUUID} from "node:crypto";
 import {dispatchOrgan} from "./dispatch";
 import {probeCanary} from "./probes";
 import {EXECUTORS} from "./executors";
+import {liveCapabilityLedger} from "../runtime/liveCapabilities";
 
 export const organRouter = Router();
 
@@ -55,6 +56,47 @@ organRouter.post('/broadcast',async(req,res)=>{
 // ── GET /api/organs/snapshot — system snapshot ────────────────────────────
 organRouter.get("/snapshot", (req, res) => {
   res.json(getSystemSnapshot());
+});
+
+// ── Live Runtime Capability Probing ──────────────────────────────────────
+organRouter.get("/capabilities/live", async (req, res) => {
+  try {
+    const runIfEmpty = req.query.run_if_empty === "1" || req.query.run_if_empty === "true";
+    if (runIfEmpty && !liveCapabilityLedger.hasSnapshot()) {
+      const snap = await liveCapabilityLedger.runSweep({
+        mode: "quick",
+        tenantId: (req as any).microfixdTenantId ?? "default",
+      });
+      return res.json(snap);
+    }
+    return res.json(liveCapabilityLedger.getSnapshot());
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : "CAPABILITY_READ_FAILED" });
+  }
+});
+
+organRouter.post("/capabilities/probe", async (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+    const rawMode = body.mode;
+    const mode = rawMode === "deep" || rawMode === "quick" || rawMode === "targeted" ? rawMode : "quick";
+    const targetIds = Array.isArray(body.targetIds)
+      ? body.targetIds.map(v => String(v).trim()).filter(Boolean).slice(0, 64)
+      : undefined;
+    if (mode === "targeted" && (!targetIds || targetIds.length === 0)) {
+      return res.status(400).json({ code: "TARGET_IDS_REQUIRED", error: "targetIds array required for targeted probe" });
+    }
+    const verifyLlmLive = Boolean(body.verifyLlmLive);
+    const snapshot = await liveCapabilityLedger.runSweep({
+      mode,
+      targetIds,
+      verifyLlmLive,
+      tenantId: (req as any).microfixdTenantId ?? "default",
+    });
+    return res.json({ success: true, snapshot });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : "CAPABILITY_PROBE_FAILED" });
+  }
 });
 
 // ── GET /api/organs/:id/status ────────────────────────────────────────────

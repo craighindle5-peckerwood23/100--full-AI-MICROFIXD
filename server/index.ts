@@ -15,7 +15,7 @@ import express, { type RequestHandler } from "express";
 import cors from "cors";
 import http from "http";
 import path from "path";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { WebSocketServer, WebSocket } from "ws";
 import { securityHeaders } from "./security/securityHeaders";
 import { broadcast, registerWsClient, unregisterWsClient } from "./events";
@@ -27,7 +27,21 @@ const HOST = "0.0.0.0";
 
 export const app = express();
 export const server = http.createServer(app);
-export const wss = new WebSocketServer({ server, path: "/ws" });
+export const wss = new WebSocketServer({ noServer: true });
+
+import { attachLiveVisionVoiceBridge } from "./realtime/liveVisionVoiceBridge";
+const liveWss = attachLiveVisionVoiceBridge(server);
+
+server.on("upgrade", (req, socket, head) => {
+  const reqUrl = req.url || "";
+  if (reqUrl === "/ws" || reqUrl.startsWith("/ws?")) {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
+    });
+  } else if (!(reqUrl === "/ws/live" || reqUrl.startsWith("/ws/live?"))) {
+    socket.destroy();
+  }
+});
 
 type LazyHandler = () => Promise<RequestHandler>;
 function lazyRouter(load: LazyHandler): RequestHandler {
@@ -459,6 +473,24 @@ app.use("/api/autonomy", lazyRouter(async () => {
   const { autonomyRouter } = await import("./autonomy-adapter/autonomyRouter");
   return autonomyRouter;
 }));
+app.use("/api/learning", lazyRouter(async () => {
+  await ensureMemoryTransport();
+  const { learningRouter } = await import("./routes/learningRoutes");
+  return learningRouter;
+}));
+app.use("/api/realtime", lazyRouter(async () => {
+  const { realtimeRouter } = await import("./realtime/realtimeRouter");
+  return realtimeRouter;
+}));
+app.use("/api/decisions", lazyRouter(async () => {
+  await ensureMemoryTransport();
+  const { autonomousHomeRouter } = await import("./orchestration/autonomousHomeRouter");
+  const { Router } = await import("express");
+  const r = Router();
+  r.get("/pending", (req, res, next) => { req.url = "/decisions/pending"; autonomousHomeRouter(req, res, next); });
+  r.post("/resolve", (req, res, next) => { req.url = "/decisions/resolve"; autonomousHomeRouter(req, res, next); });
+  return r;
+}));
 
 app.get("/api/groq/status", async (_, res) => {
   const { groqConfiguration } = await import("./orchestration/groqRuntime");
@@ -524,15 +556,22 @@ app.get("/api/groq/debug-logs", async (req, res) => {
 
 // ── Static production UI ───────────────────────────────────────────────────
 const distDir = path.resolve(process.cwd(), "dist");
-app.use(marketingRouter(distDir));
-app.use(express.static(distDir));
+if (existsSync(distDir)) {
+  app.use(marketingRouter(distDir));
+  app.use(express.static(distDir));
+}
 
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/") || req.path === "/api") {
     next();
     return;
   }
-  res.sendFile(path.join(distDir, "index.html"), (error) => error && next(error));
+  const indexPath = path.join(distDir, "index.html");
+  if (existsSync(indexPath)) {
+    res.sendFile(indexPath, (error) => error && next(error));
+  } else {
+    next();
+  }
 });
 
 // ── WebSocket hub ──────────────────────────────────────────────────────────
@@ -621,8 +660,9 @@ if (
 ) {
   server.listen(PORT, HOST, () => {
     console.log("\n🧠 Microfixd Backend Server");
-    console.log(`   REST: http://${HOST}:${PORT}/api`);
-    console.log(`   WS:   ws://${HOST}:${PORT}/ws`);
+    console.log(`   REST:    http://${HOST}:${PORT}/api`);
+    console.log(`   WS:      ws://${HOST}:${PORT}/ws`);
+    console.log(`   WS LIVE: ws://${HOST}:${PORT}/ws/live (${liveWss.clients.size} clients)`);
     console.log("   Bootstrap: live; operational modules lazy-loaded on demand\n");
   });
 
@@ -650,5 +690,16 @@ if (
         .then(({ runStartupProbe }) => runStartupProbe())
         .catch(() => console.error("[system-probe] failed"));
     }, 20_000).unref();
+  }
+
+  if (process.env.NODE_ENV !== "test" || process.env.MICROFIXD_ENABLE_LIVE_PROBES_IN_TEST === "1") {
+    setTimeout(() => {
+      void import("./runtime/liveCapabilities")
+        .then(({ startLiveCapabilityLoop }) => {
+          const stopCapabilitiesLoop = startLiveCapabilityLoop();
+          server.once("close", stopCapabilitiesLoop);
+        })
+        .catch((error) => console.error("[live-capabilities] loop start failed", error));
+    }, 2_500).unref();
   }
 }

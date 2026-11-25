@@ -77,6 +77,10 @@ try{
  });
  await page.goto(base,{waitUntil:'domcontentloaded'});await page.getByRole('button',{name:'Fast Boot'}).click({timeout:10000}).catch(async()=>{console.log('INITIAL BODY',(await page.locator('body').innerText()).slice(0,600));});
  await page.waitForFunction(()=>document.querySelector('.hio-top')?.textContent?.includes('ONLINE'),{},{timeout:30000});
+ const diag=page.getByRole('region',{name:'System Diagnostics'});await diag.waitFor();
+ await diag.getByTestId('diag-ws-badge').waitFor();await diag.getByTestId('diag-api-badge').waitFor();
+ await diag.getByText('/api/health',{exact:true}).waitFor();await diag.getByText('/readyz',{exact:true}).waitFor();await diag.getByText('/api/health/deep',{exact:true}).waitFor();
+ await diag.getByRole('button',{name:'Collapse diagnostics'}).click();await diag.getByRole('button',{name:'Expand diagnostics'}).click();
  assert.equal(await page.locator('canvas').count(),1);await page.screenshot({path:join(evidence,'Microfixd-HIO-Desktop.png')});
  await page.getByRole('button',{name:'minimal',exact:true}).click();assert.equal(await page.getByRole('button',{name:'minimal',exact:true}).getAttribute('aria-pressed'),'true');
  await page.getByRole('button',{name:'Pause avatar',exact:true}).click();assert.equal(await page.locator('canvas').count(),0);
@@ -121,12 +125,15 @@ try{
  await page.getByRole('button',{name:'Open Microfixd settings'}).click();await page.getByRole('dialog').waitFor();await page.getByRole('button',{name:'Close settings',exact:true}).click();
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:join(evidence,'Microfixd-HIO-Mobile.png'),fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
- await page.setViewportSize({width:1536,height:960});await page.getByRole('button',{name:'Replay boot sequence'}).click();
- const titles=[];for(const title of ['BOOT SEQUENCE','EMERGENCE','AWARENESS','GREETING','INTERACTION','FULL INTERFACE']){
-  await page.getByRole('heading',{name:title,exact:true}).waitFor({timeout:20000});titles.push(title);
-  if(title==='AWARENESS')await page.screenshot({path:join(evidence,'Microfixd-HIO-Boot.png')});
- }
- await page.locator('.hio-cockpit').waitFor({timeout:20000});assert.equal(await page.locator('canvas').count(),1);assert.deepEqual(graphicsErrors,[]);
+ await page.setViewportSize({width:1536,height:960});
+ await page.evaluate(()=>{window.__bootStages=[];const record=()=>{const h=document.querySelector('.hio-boot h1')?.textContent?.trim();if(h&&window.__bootStages.at(-1)!==h)window.__bootStages.push(h);};const obs=new MutationObserver(record);obs.observe(document.body,{childList:true,subtree:true,characterData:true});window.__stopBootObs=()=>obs.disconnect();});
+ await page.getByRole('button',{name:'Replay boot sequence'}).click();
+ await page.getByRole('heading',{name:'AWARENESS',exact:true}).waitFor({timeout:20000});
+ await page.screenshot({path:join(evidence,'Microfixd-HIO-Boot.png')});
+ await page.locator('.hio-cockpit').waitFor({timeout:30000});
+ const titles=await page.evaluate(()=>{window.__stopBootObs?.();return window.__bootStages;});
+ assert.deepEqual(titles,['BOOT SEQUENCE','EMERGENCE','AWARENESS','GREETING','INTERACTION','FULL INTERFACE']);
+ assert.equal(await page.locator('canvas').count(),1);assert.deepEqual(graphicsErrors,[]);
  await page.goto(base+'/saas');
  await page.getByRole('heading',{name:/Give your work/}).waitFor();
  await page.getByLabel('Preview brand name').fill('Craig AI');

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { SystemMetrics } from '../../types';
-import { Activity, Download, Filter, Radio, ShieldCheck, BarChart3, List } from 'lucide-react';
+import { Activity, Download, Filter, Radio, ShieldCheck, BarChart3, List, Cpu } from 'lucide-react';
 import { sound } from '../../utils/audio';
 import SystemLoadDashboard from '../telemetry/SystemLoadDashboard';
+import LiveCapabilityMatrix from '../telemetry/LiveCapabilityMatrix';
 
 export default function TelemetryPanel() {
-  const [viewMode, setViewMode] = useState<'dashboard' | 'logs'>('dashboard');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'capabilities' | 'logs'>('dashboard');
   const [metrics, setMetrics] = useState<SystemMetrics>({
     cpu: 18,
     memory: 42,
@@ -84,6 +85,18 @@ export default function TelemetryPanel() {
             </button>
 
             <button
+              onClick={() => setViewMode('capabilities')}
+              className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-all ${
+                viewMode === 'capabilities'
+                  ? 'bg-cyan-500/20 border border-cyan-400 text-white font-bold'
+                  : 'text-cyan-500/60 hover:text-cyan-200'
+              }`}
+            >
+              <Cpu size={13} />
+              Live Capabilities
+            </button>
+
+            <button
               onClick={() => setViewMode('logs')}
               className={`px-2.5 py-1 rounded flex items-center gap-1.5 transition-all ${
                 viewMode === 'logs'
@@ -107,6 +120,8 @@ export default function TelemetryPanel() {
 
       {viewMode === 'dashboard' ? (
         <SystemLoadDashboard />
+      ) : viewMode === 'capabilities' ? (
+        <LiveCapabilityMatrix />
       ) : (
         <>
           {/* Primary Metrics Strip */}

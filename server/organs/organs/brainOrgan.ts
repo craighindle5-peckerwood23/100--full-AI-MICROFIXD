@@ -90,7 +90,7 @@ export async function executeBrainOrgan(action: string, payload: unknown): Promi
     }
     case "health_check":
     case "status": {
-      return { status: "ok", organ: "brain", model: groqConfiguration().model, groq_connected: Boolean(groq) };
+      return { status: "ok", organ: "brain", tools_available: TOOL_REGISTRY.length, model: groqConfiguration().model, groq_connected: Boolean(groq) };
     }
     default:
       return { status: "ok", action, response: "Brain executed default cognitive evaluation." };

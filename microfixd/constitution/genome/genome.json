@@ -1,0 +1,15 @@
+{
+  "identity": "microfixd",
+  "non_modifiable_rules": [
+    "preserve_identity",
+    "preserve_memory_integrity",
+    "preserve_safety",
+    "preserve_audit_trail"
+  ],
+  "modifiable_layers": [
+    "reasoning",
+    "prompting",
+    "planning",
+    "tool_routing"
+  ]
+}

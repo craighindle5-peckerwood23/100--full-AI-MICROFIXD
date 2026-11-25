@@ -29,6 +29,7 @@ export const ORGAN_DEFINITIONS: { id: string; name: string; layer: string }[] = 
   { id: "prompt_compiler",           name: "Dynamic Prompt Compiler",           layer: "cognition" },
   { id: "cognitive_planner",         name: "Hierarchical Cognitive Planner",    layer: "cognition" },
   { id: "critic_organ",              name: "Autonomous Critic Organ",           layer: "cognition" },
+  { id: "evaluation_organ",          name: "High-Order Evaluation Organ",       layer: "cognition" },
   { id: "reflection_organ",          name: "Episodic Reflection Organ",         layer: "cognition" },
   { id: "doctrine_gate",             name: "Doctrine Pre-check Gate",           layer: "cognition" },
   { id: "synthesis_organ",           name: "Multi-Source Synthesis Organ",      layer: "cognition" },
@@ -86,6 +87,7 @@ export const ORGAN_DEFINITIONS: { id: string; name: string; layer: string }[] = 
   { id: "priority_queue_manager",    name: "Priority Action Queue Manager",     layer: "autonomy" },
   { id: "autonomous_sentinel",       name: "Autonomous Health Sentinel",        layer: "autonomy" },
   { id: "self_healer",               name: "Process Isolation & Auto-Healer",   layer: "autonomy" },
+  { id: "adaptation_organ",          name: "Autonomous Adaptation Organ",       layer: "autonomy" },
   { id: "reflex",                    name: "Reflex Engine",                     layer: "autonomy" },
   { id: "interrupt_handler",         name: "Sub-millisecond Interrupt Handler", layer: "autonomy" },
   { id: "preemptive_scheduler",      name: "Preemptive Task Arbiter",           layer: "autonomy" },
@@ -188,6 +190,7 @@ export const ORGAN_DEFINITIONS: { id: string; name: string; layer: string }[] = 
   { id: "tamper_alert_broadcaster",  name: "Tamper Alarm WebSocket Emitter",     layer: "security" },
   { id: "security_tracer",           name: "Security Flow Tracer",               layer: "security" },
   { id: "policy_verifier",           name: "Constitutional Safety Rule Verifier",layer: "security" },
+  { id: "verification_organ",        name: "Empirical Verification Organ",      layer: "security" },
   { id: "vulnerability_scanner",     name: "Dependency Vulnerability Scanner",   layer: "security" },
   { id: "overwatch",                 name: "Metacognitive Overwatch",            layer: "security" },
 
@@ -260,6 +263,7 @@ export const ORGAN_DEFINITIONS: { id: string; name: string; layer: string }[] = 
   // ── Layer 10: Infrastructure, Evolution & Self-Repair (18) ──
   { id: "evolution_engine",          name: "Evolution Engine",                   layer: "evolution" },
   { id: "self_repair",               name: "Self-Repair Engine",                 layer: "evolution" },
+  { id: "self_healing_organ",        name: "Autonomous Self-Healing Pipeline",  layer: "evolution" },
   { id: "self_morphing",             name: "Dynamic Self-Morphing Architecture", layer: "evolution" },
   { id: "health_monitor",            name: "Health Monitor & Circuit Breaker",   layer: "evolution" },
   { id: "db_migration_organ",        name: "Automated DB Schema Migrator",       layer: "evolution" },
