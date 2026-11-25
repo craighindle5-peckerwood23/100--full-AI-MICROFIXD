@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VerificationSchema",
+  "type": "object",
+  "required": [
+    "verification_id",
+    "change_id",
+    "evaluation_id",
+    "before_state",
+    "after_state",
+    "comparison",
+    "tests",
+    "regressions",
+    "verification_result",
+    "deployment_recommendation"
+  ],
+  "properties": {
+    "verification_id": { "type": "string" },
+    "change_id": { "type": "string" },
+    "evaluation_id": { "type": "string" },
+    "before_state": { "type": "object" },
+    "after_state": { "type": "object" },
+    "comparison": {
+      "type": "object",
+      "required": ["score_before", "score_after", "improvement_delta"],
+      "properties": {
+        "score_before": { "type": "number" },
+        "score_after": { "type": "number" },
+        "improvement_delta": { "type": "number" }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["test_id", "result", "score"],
+        "properties": {
+          "test_id": { "type": "string" },
+          "result": { "type": "string" },
+          "score": { "type": "number" }
+        }
+      }
+    },
+    "regressions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "verification_result": {
+      "type": "string",
+      "enum": ["verified", "partially_verified", "failed_verification", "regression_detected"]
+    },
+    "deployment_recommendation": {
+      "type": "string",
+      "enum": ["deploy", "deploy_with_monitoring", "retest", "reject"]
+    }
+  }
+}

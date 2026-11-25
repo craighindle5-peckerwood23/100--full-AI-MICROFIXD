@@ -5,6 +5,7 @@ import { defineConfig, Plugin } from 'vite';
 import { WebSocketServer } from 'ws';
 import { app } from './server/index';
 import { registerWsClient, unregisterWsClient } from './server/events';
+import { attachLiveVisionVoiceBridge } from './server/realtime/liveVisionVoiceBridge';
 
 const backendPlugin = (): Plugin => ({
   name: 'microfixd-backend-unified',
@@ -12,9 +13,10 @@ const backendPlugin = (): Plugin => ({
     // 1. Mount complete Express backend routes (/api/*) directly on dev server
     server.middlewares.use(app);
 
-    // 2. Attach WebSocket server natively to Vite dev server HTTP instance (/ws)
+    // 2. Attach WebSocket server natively to Vite dev server HTTP instance (/ws & /ws/live)
     if (server.httpServer) {
       const wss = new WebSocketServer({ noServer: true });
+      attachLiveVisionVoiceBridge(server.httpServer);
 
       server.httpServer.on('upgrade', (req, socket, head) => {
         const url = req.url || '';

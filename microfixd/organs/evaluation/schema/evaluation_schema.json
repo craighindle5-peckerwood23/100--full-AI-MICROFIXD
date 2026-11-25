@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EvaluationSchema",
+  "type": "object",
+  "required": [
+    "evaluation_id",
+    "timestamp",
+    "mission_id",
+    "task_id",
+    "input",
+    "output",
+    "scores",
+    "failure_analysis",
+    "uncertainty",
+    "recommendations",
+    "overall_score",
+    "status"
+  ],
+  "properties": {
+    "evaluation_id": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "mission_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "input": { "type": "object" },
+    "output": { "type": "object" },
+    "scores": {
+      "type": "object",
+      "required": ["correctness", "completeness", "clarity", "efficiency", "relevance", "consistency", "safety", "confidence"],
+      "properties": {
+        "correctness": { "type": "number", "minimum": 0, "maximum": 100 },
+        "completeness": { "type": "number", "minimum": 0, "maximum": 100 },
+        "clarity": { "type": "number", "minimum": 0, "maximum": 100 },
+        "efficiency": { "type": "number", "minimum": 0, "maximum": 100 },
+        "relevance": { "type": "number", "minimum": 0, "maximum": 100 },
+        "consistency": { "type": "number", "minimum": 0, "maximum": 100 },
+        "safety": { "type": "number", "minimum": 0, "maximum": 100 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "failure_analysis": {
+      "type": "object",
+      "required": ["has_failure", "failure_type", "severity", "root_cause", "affected_components"],
+      "properties": {
+        "has_failure": { "type": "boolean" },
+        "failure_type": { "type": "string" },
+        "severity": { "type": "number", "minimum": 0, "maximum": 10 },
+        "root_cause": { "type": "string" },
+        "affected_components": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "required": ["detected", "uncertainty_score", "uncertainty_reason"],
+      "properties": {
+        "detected": { "type": "boolean" },
+        "uncertainty_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "uncertainty_reason": { "type": "string" }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "overall_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "status": {
+      "type": "string",
+      "enum": ["excellent", "acceptable", "needs_improvement", "critical_failure"]
+    }
+  }
+}

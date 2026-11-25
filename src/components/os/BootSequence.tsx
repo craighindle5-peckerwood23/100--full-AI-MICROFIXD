@@ -29,7 +29,8 @@ export default function BootSequence({onComplete}:{onComplete?:()=>void}={}){
   }).catch(()=>{[1,3,5].forEach(i=>patch(i,'degraded','Runtime API unreachable'));});
   const ready=fetchJSON('/readyz').then(({ok,data})=>patch(2,ok&&data?.storage?.durable?'ready':'degraded',ok&&data?.storage?.durable?`Durable store: ${data.storage.engine||'configured'}`:'Durable memory not reported ready')).catch(()=>patch(2,'degraded','Readiness endpoint unreachable'));
   void Promise.all([health,ready]).then(()=>{clearTimeout(timeout);if(!cancelled)setFinished(true);});
-  const timer=window.setInterval(()=>{if(!cancelled){const now=performance.now();if(start===null&&now-mountedAt>8000)start=now;if(start!==null)setElapsed(now-start);}},100);
+  let lastTick=performance.now();
+  const timer=window.setInterval(()=>{if(!cancelled){const now=performance.now();const dt=Math.min(950,Math.max(0,now-lastTick));lastTick=now;if(start===null&&now-mountedAt>8000)start=now;if(start!==null)setElapsed(prev=>prev+dt);}},100);
   return()=>{cancelled=true;window.removeEventListener('microfixd:hio-status',readyFrame);clearInterval(timer);clearTimeout(timeout);controller.abort();};
  },[]);
  useEffect(()=>{if(elapsed>=11400&&finished)complete();},[elapsed,finished]);
@@ -38,7 +39,7 @@ export default function BootSequence({onComplete}:{onComplete?:()=>void}={}){
  const reveal=stage===0?0:stage===1?.08+Math.min(1,(elapsed-1900)/1900)*.68:1;
  const vm:ShellViewModel={emotion:stage<3?'thinking':'calm',pose:{yaw:stage===4?-24:stage===3?8:0,pitch:0,attention:1},mouth:'idle',indicators:{status:'BOOT',agents:0,signal:0,severity:'info'},hio:{bootProgress:reveal}};
  return <div className="hio-boot">
-  <header><div><b>{brand.productName.toUpperCase()}</b><span>HOLOGRAPHIC INTERFACE ORGAN</span></div><button onClick={complete}><FastForward size={13}/>Fast Boot</button></header>
+  <header><div><b>{brand.productName.toUpperCase()}</b><span>HOLOGRAPHIC INTERFACE ORGAN</span></div><button onClick={complete}><FastForward size={13}/>Fast Boot (Skip)</button></header>
   <div className="hio-boot-visual"><HolographicHeadCanvas vm={vm}/></div>
   <section className="hio-boot-caption" aria-live="polite"><span>0{stage+1} / 06</span><h1>{STAGES[stage][0]}</h1><p>{STAGES[stage][1]}</p></section>
   <section className="hio-boot-probes"><h2>LIVE READINESS <span>{finished?(probes.some(p=>p.state==='degraded')?'DEGRADED':'PROBES COMPLETE'):'CHECKING'}</span></h2>{probes.map(p=><div key={p.label} className={p.state}>{p.state==='ready'?<CheckCircle2 size={11}/>:p.state==='degraded'?<AlertTriangle size={11}/>:<span className="hio-probe-dot"/>}<span>{p.label}<small>{p.detail}</small></span></div>)}</section>

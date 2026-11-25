@@ -22,6 +22,12 @@ export async function executeKnowledgeOrgan(action:string,payload:unknown){
   return{success:true,mode:'durable_rag_context',query,source:'supabase',...result};
 }
 
+import { evaluationOrgan } from '../../../microfixd/organs/evaluation/evaluator';
+import { reflectionOrgan } from '../../../microfixd/organs/reflection';
+import { adaptationOrgan } from '../../../microfixd/organs/adaptation/adapter';
+import { verificationOrgan } from '../../../microfixd/organs/verification/verifier';
+import { selfHealingPipeline } from '../../../learning/self_healing';
+
 export async function executeEvaluationOrgan(action:string,payload:unknown){
   if(!['evaluate','verify','execute'].includes(action))throw new Error(`Unsupported evaluation action: ${action}`);
   const p=object(payload);const candidate=text(p.candidate??p.output??p.text);
@@ -34,15 +40,90 @@ export async function executeEvaluationOrgan(action:string,payload:unknown){
     ...forbidden.map((v:string)=>({id:`excludes:${v.slice(0,48)}`,passed:!candidate.toLowerCase().includes(v.toLowerCase())})),
   ];
   const passed=checks.filter(c=>c.passed).length;
-  return{success:passed===checks.length,score:checks.length?passed/checks.length:1,checks,measured:{characters:candidate.length,lines:candidate.split(/\r?\n/).length}};
+  const legacyScore=checks.length?passed/checks.length:1;
+
+  // Run full multi-dimensional Evaluation Organ
+  const highOrderEval = evaluationOrgan.evaluate({
+    task: text(p.task || 'eval_task'),
+    candidate,
+    expectedContains: expected,
+    mustNotContain: forbidden,
+    tenant_id: text(p.tenant_id || 'global'),
+  });
+
+  return {
+    success: passed === checks.length && highOrderEval.success,
+    score: legacyScore,
+    checks,
+    measured: { characters: candidate.length, lines: candidate.split(/\r?\n/).length },
+    evaluationScores: highOrderEval.scores,
+    feedback: highOrderEval.feedback,
+    metrics: highOrderEval.metrics,
+    record: highOrderEval.record,
+  };
+}
+
+export async function executeAdaptationOrgan(action:string,payload:unknown){
+  const p=object(payload);
+  const plan = p.plan || { keyDirectives: [text(p.directive || 'Refine prompt constraints')] };
+  const result = adaptationOrgan.adapt({
+    plan,
+    currentPrompt: text(p.prompt || p.task || ''),
+    currentTools: Array.isArray(p.tools) ? p.tools : undefined,
+  });
+  return { success: true, action, adaptation: result };
+}
+
+export async function executeVerificationOrgan(action:string,payload:unknown){
+  const p=object(payload);
+  const baseline = p.baselineScore || { overall_score: Number(p.baseline) || 5, constitution_compliance: 10 };
+  const proposal = p.proposal || adaptationOrgan.adapt({ plan: { keyDirectives: ['Verify invariant'] } });
+  const result = verificationOrgan.verify({
+    proposal,
+    baselineScore: baseline,
+    simulatedCandidateScore: p.candidateScore,
+  });
+  return { success: result.approvedForPromotion, action, verification: result };
+}
+
+export async function executeSelfHealingOrgan(action:string,payload:unknown){
+  const p=object(payload);
+  const source = text(p.source || 'runtime');
+  const errorMsg = text(p.error || p.message || 'Detected runtime anomaly');
+  const report = await selfHealingPipeline.runHealingCycle(source, errorMsg);
+  return { success: report.deployed, action, report };
 }
 
 export async function executeReflectionOrgan(action:string,payload:unknown){
-  if(!['reflect','review','execute'].includes(action))throw new Error(`Unsupported reflection action: ${action}`);
-  const p=object(payload);const task=text(p.task).trim();const candidate=text(p.output??p.candidate).trim();
+  if(!['reflect','review','execute','retrospect','metacognitive_review'].includes(action))throw new Error(`Unsupported reflection action: ${action}`);
+  const p=object(payload);const task=text(p.task||p.problem).trim();const candidate=text(p.output??p.candidate).trim();
   if(!task&&!candidate)throw new Error('Reflection requires task or output');
+
+  if(action==='retrospect'||action==='metacognitive_review'){
+    const { runMetacognitiveReasoning } = await import('../../orchestration/metacognitiveReasoning');
+    const analysis = await runMetacognitiveReasoning({
+      problem: task || candidate,
+      inceptionPrompt: text(p.inception_prompt || p.inceptionPrompt || task).trim() || undefined,
+      intendedOutcome: text(p.intended_outcome || p.intendedOutcome).trim() || undefined,
+      observedOutcome: text(p.observed_outcome || p.observedOutcome || candidate).trim() || undefined,
+      evidence: Array.isArray(p.evidence) ? p.evidence.map(text).filter(Boolean) : undefined,
+      constraints: Array.isArray(p.constraints) ? p.constraints.map(text).filter(Boolean) : undefined,
+      useLlm: Boolean(p.use_llm ?? p.useLlm),
+      tenantId: text(p.tenant_id || 'default'),
+    });
+    return {
+      success: true,
+      action,
+      reasoningMode: analysis.reasoningMode,
+      retrospection: analysis.retrospection,
+      perspectives: analysis.perspectives,
+      uncertainty: analysis.uncertainty,
+      executiveSynthesis: analysis.executiveSynthesis,
+    };
+  }
+
   const res=await completeTextWithFallback([
-    {role:'system',content:'Review the supplied task/output as an engineering critic. Identify concrete assumptions, missing evidence, contradictions, failure modes, and the single highest-value correction. Do not claim execution you cannot verify. Return concise JSON with keys assumptions, missingEvidence, contradictions, failureModes, correction.'},
+    {role:'system',content:'Review the supplied task/output as an unbiased engineering and multi-stakeholder critic. Identify concrete assumptions, missing evidence, contradictions, failure modes, cognitive/framing biases, and the single highest-value correction. Do not claim execution you cannot verify. Return concise JSON with keys assumptions, missingEvidence, contradictions, failureModes, biasNotes, correction.'},
     {role:'user',content:JSON.stringify({task,candidate,evidence:p.evidence??null})},
   ],Math.max(256,Math.min(1800,Number(p.max_tokens)||900)),0.1);
   return{success:true,provider:res.provider,model:res.model,reflection:res.content,tokensUsed:res.tokensUsed};

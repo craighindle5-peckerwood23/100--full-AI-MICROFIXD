@@ -73,7 +73,7 @@ export async function recallKnowledge(db: SupabaseClient, who: MemoryIdentity, q
   identity(who); text(query, 4000);
   if (!Number.isInteger(limit) || limit < 1 || limit > 30) throw new Error('INVALID_MEMORY_LIMIT');
   const batches = await Promise.all([rows(db, who, 'knowledge', 'tenant'), rows(db, who, 'knowledge', 'session')]);
-  const candidates = batches.flat().sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const candidates = batches.flat().sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '') || (b.id ?? '').localeCompare(a.id ?? ''));
   const active = new Map<string, MemoryRow>(), older = new Map<string, string[]>();
   for (const row of candidates) {
     const meta = row.metadata;
@@ -88,7 +88,7 @@ export async function recallKnowledge(db: SupabaseClient, who: MemoryIdentity, q
   const entities = new Set(seeds.flatMap(({row}) => [row.metadata.subject, row.metadata.object]).filter(Boolean).map(normalize));
   const memories = scored.map(item => ({...item, related: [item.row.metadata.subject, item.row.metadata.object].some(v => v && entities.has(normalize(v)))}))
     .filter(item => !query.trim() || item.score > 0 || item.related)
-    .sort((a, b) => b.score - a.score || Number(b.related) - Number(a.related) || b.row.created_at.localeCompare(a.row.created_at))
+    .sort((a, b) => b.score - a.score || Number(b.related) - Number(a.related) || (b.row.created_at ?? '').localeCompare(a.row.created_at ?? ''))
     .slice(0, limit).map(({slot, row, score, related}) => ({id: row.id, content: row.content, created_at: row.created_at,
       kind: row.metadata.kind as Kind, scope: row.metadata.scope as string, key: row.metadata.key as string,
       confidence: row.metadata.confidence as number, trust: 'recorded_assertion',
@@ -144,6 +144,6 @@ export async function recallProcedures(db: SupabaseClient, who: MemoryIdentity, 
   const procedures = candidates.filter(row => completed.get(row.metadata.mission_id) === row.metadata.final_artifact_id)
     .map(row => ({id: row.id, content: row.content, mission_id: row.metadata.mission_id as string, trust: 'historical_execution',
       score: relevance(query, row.content), created_at: row.created_at}))
-    .filter(row => !query.trim() || row.score > 0).sort((a, b) => b.score - a.score || b.created_at.localeCompare(a.created_at)).slice(0, limit);
+    .filter(row => !query.trim() || row.score > 0).sort((a, b) => b.score - a.score || (b.created_at ?? '').localeCompare(a.created_at ?? '')).slice(0, limit);
   return {procedures, count: procedures.length, source: 'supabase', durable: true};
 }

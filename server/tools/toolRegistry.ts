@@ -168,6 +168,46 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     },
     organ: "world_thinking_engine", action: "estimate_uncertainty",
   },
+  {
+    name: "run_live_capability_probe",
+    description: "Run a read-only live runtime capability probe across subsystems, organs, sandbox WASM dry-run, browser readiness, OBD adapters, and safe state-evolution checks.",
+    parameters: {
+      type: "object",
+      properties: {
+        mode: { type: "string", description: "Sweep depth: quick (routing + read checks) or deep (includes synthetic dry-runs and evolution gate checks)", enum: ["quick", "deep"] },
+      },
+      required: [],
+    },
+    organ: "system_catalog", action: "live_probe",
+  },
+  {
+    name: "metacognitive_multi_domain_reason",
+    description: "Analyze a complex problem across multiple technical and human domains, model 1st/2nd/3rd-order multi-outcome trajectories, neutralize framing biases, and synthesize unbiased human stakeholder perspectives.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Complex problem or decision to analyze" },
+        inception_prompt: { type: "string", description: "Optional original framing at inception" },
+      },
+      required: ["task"],
+    },
+    organ: "world_thinking_engine", action: "deep_metacognition",
+  },
+  {
+    name: "retrospect_inception_to_outcome",
+    description: "Perform metacognitive inception-to-outcome retrospection auditing hidden assumptions, evidence vs inference separation, divergence causes, and counterfactual hindsight.",
+    parameters: {
+      type: "object",
+      properties: {
+        task: { type: "string", description: "Problem or mission objective" },
+        inception_prompt: { type: "string", description: "Original prompt or framing at inception" },
+        intended_outcome: { type: "string", description: "Target outcome intended at inception" },
+        observed_outcome: { type: "string", description: "Actual or projected outcome to compare against" },
+      },
+      required: ["task"],
+    },
+    organ: "world_thinking_engine", action: "retrospect_inception",
+  },
   // ── Orchestration Oversight & Invariance ──────────────────────────────
   {
     name: "verify_orchestration_oversight",
@@ -194,6 +234,43 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
       required: ["reason"],
     },
     organ: "orchestration_oversight", action: "emergency_kill",
+  },
+  // ── Universal App Connectors & External MCP ───────────────────────────
+  {
+    name: "list_app_connectors",
+    description: "List installed external app APIs, webhooks, GraphQL endpoints, and MCP servers configured for this tenant.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    organ: "system_catalog", action: "list_connectors",
+  },
+  {
+    name: "discover_mcp_server",
+    description: "Discover available tools from a remote HTTPS Model Context Protocol (MCP) server via JSON-RPC.",
+    parameters: {
+      type: "object",
+      properties: {
+        base_url: { type: "string", description: "HTTPS URL of the remote MCP server" },
+      },
+      required: ["base_url"],
+    },
+    organ: "system_catalog", action: "discover_mcp",
+  },
+  {
+    name: "call_app_connector",
+    description: "Invoke a tool on an enabled external app connector (REST, GraphQL, Webhook, or remote MCP server).",
+    parameters: {
+      type: "object",
+      properties: {
+        connector_id: { type: "string", description: "Installed connector ID" },
+        tool_name: { type: "string", description: "Tool name declared on the connector" },
+        arguments_json: { type: "string", description: "JSON object of tool arguments" },
+      },
+      required: ["connector_id", "tool_name", "arguments_json"],
+    },
+    organ: "system_catalog", action: "call_connector",
   },
 ];
 

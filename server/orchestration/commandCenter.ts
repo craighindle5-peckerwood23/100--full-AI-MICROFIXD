@@ -1,4 +1,6 @@
-// @ts-nocheck
+import { runMetacognitiveReasoning } from "./metacognitiveReasoning";
+import { liveCapabilityLedger } from "../runtime/liveCapabilities";
+
 import {asksForMissionReview,reviewMissionPerformance} from '../planner/missionIntrospection';
 import {asksAboutPausedMissions,pausedMissionReport} from '../planner/pausedMissionReport';
 import {plannerClient} from '../planner/supabaseRuntime';
@@ -46,6 +48,8 @@ export interface CommandRequest {
 }
 
 export interface CommandResult {
+  response_id?: string;
+  delivery_state?: "awaiting_playback" | "text_ready";
   session_id:   string;
   task:         string;
   output:       string;
@@ -253,7 +257,21 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
     checkTextOnlyAnswer(output);
     const evaluation = await executeEvaluationOrgan("evaluate", { candidate: output });
     const uncertainty = await executeUncertaintyOrgan("score", { output, evidenceCount: Object.keys(organResults).length });
+    const shouldAttachMetacognition = routing.complexity === "high" || routing.intent === "reflect" || req.context?.metacognitive === true;
+    const metacognition = shouldAttachMetacognition
+      ? await runMetacognitiveReasoning({
+          problem: req.task,
+          observedOutcome: output.slice(0, 1000),
+          evidence: Object.keys(organResults).map(o => `Executed organ: ${o}`),
+          useLlm: false,
+          tenantId: req.tenant_id || "global",
+        }).catch(() => undefined)
+      : undefined;
+    const capabilitySnapshot = liveCapabilityLedger.hasSnapshot() ? liveCapabilityLedger.getSnapshot() : null;
     const assurance = {
+      ...(capabilitySnapshot ? { liveCapabilityPosture: { verified: capabilitySnapshot.counts.verified, degraded: capabilitySnapshot.counts.degraded, unavailable: capabilitySnapshot.counts.unavailable, stale: capabilitySnapshot.stale, generatedAt: capabilitySnapshot.generatedAt } } : {}),
+      ...(metacognition ? { metacognition: { analysisId: metacognition.analysisId, activeDomains: metacognition.domains.map(d => d.domain), overallBiasRisk: metacognition.perspectives.overallBiasRisk, calibratedUncertainty: metacognition.uncertainty.uncertaintyScore, alignmentStatus: metacognition.retrospection.outcomeRetrospection.alignmentStatus } } : {}),
+
       evaluationScore: evaluation.score,
       uncertainty: uncertainty.uncertainty,
       confidence: uncertainty.confidence,
@@ -269,6 +287,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       content: JSON.stringify({ task: req.task, output }),
     });
 
+    if (!persisted || typeof persisted !== "object" || !("id" in persisted) || typeof persisted.id !== "string" || !persisted.id) throw new Error("Memory write returned no response ID");
     stages.push("persistence");
 
     // ── Step 6: Feedback collection ───────────────────────────────────
@@ -295,7 +314,7 @@ export async function runCommand(req: CommandRequest): Promise<CommandResult> {
       reflex_hit:  false,
       groq_tokens: groqTokens,
       diagnostics: {warnings, model:modelUsed, provider:providerUsed, assurance, stages:[...stages,"feedback","response"]},
-      feedback,
+      feedback: {...feedback},
       ts:          new Date().toISOString(),
     };
 
@@ -373,7 +392,7 @@ export async function runSystemLoadTest(concurrencyFactor:number=1.0){
     const organ=all[i%all.length];const t=performance.now();
     try{
       const result=await probeOrgan(organ.id,`${requestId}:${i}`,'system-load-test');
-      return{organId:organ.id,success:true,latency:Math.round((performance.now()-t)*10)/10,nativeExecutor:Boolean(result.native_executor)};
+      return{organId:organ.id,success:true,latency:Math.round((performance.now()-t)*10)/10,nativeExecutor:Boolean(result.value.native_executor)};
     }catch(error){
       return{organId:organ.id,success:false,latency:Math.round((performance.now()-t)*10)/10,error:String(error).slice(0,240),nativeExecutor:false};
     }

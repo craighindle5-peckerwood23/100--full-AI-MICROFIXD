@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExperienceSchema",
+  "type": "object",
+  "required": [
+    "experience_id",
+    "mission_id",
+    "situation",
+    "action_taken",
+    "outcome",
+    "evaluation_score",
+    "verified",
+    "lesson_learned",
+    "future_rule"
+  ],
+  "properties": {
+    "experience_id": { "type": "string" },
+    "mission_id": { "type": "string" },
+    "situation": { "type": "string" },
+    "action_taken": { "type": "string" },
+    "outcome": { "type": "string" },
+    "evaluation_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "verified": { "type": "boolean" },
+    "lesson_learned": { "type": "string" },
+    "future_rule": { "type": "string" }
+  }
+}

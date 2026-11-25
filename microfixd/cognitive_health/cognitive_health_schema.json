@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CognitiveHealthSchema",
+  "type": "object",
+  "required": [
+    "timestamp",
+    "provider_health",
+    "memory_health",
+    "reasoning_health",
+    "evaluation_health",
+    "reflection_health",
+    "tool_health",
+    "drift_score",
+    "overall_health"
+  ],
+  "properties": {
+    "timestamp": { "type": "string", "format": "date-time" },
+    "provider_health": { "type": "number", "minimum": 0, "maximum": 100 },
+    "memory_health": { "type": "number", "minimum": 0, "maximum": 100 },
+    "reasoning_health": { "type": "number", "minimum": 0, "maximum": 100 },
+    "evaluation_health": { "type": "number", "minimum": 0, "maximum": 100 },
+    "reflection_health": { "type": "number", "minimum": 0, "maximum": 100 },
+    "tool_health": { "type": "number", "minimum": 0, "maximum": 100 },
+    "drift_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "overall_health": { "type": "number", "minimum": 0, "maximum": 100 }
+  }
+}

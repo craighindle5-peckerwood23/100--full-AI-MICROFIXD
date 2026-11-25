@@ -12,7 +12,7 @@ export class BrowserManager {
     if(this.page)return;
     if(this.starting)return this.starting;
     this.starting=(async()=>{
-      const packaged = !process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH && process.env.NODE_ENV === 'production';
+      const packaged = !process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
       const serverlessChromium = packaged ? (await import('@sparticuz/chromium')).default : null;
       if (serverlessChromium && !packagedExecutable) {
         packagedExecutable = serverlessChromium.executablePath().catch(error => {

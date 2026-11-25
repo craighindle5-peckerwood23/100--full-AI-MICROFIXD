@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReflectionInputSchema",
+  "type": "object",
+  "required": [
+    "evaluation_id",
+    "identified_failures",
+    "identified_strengths",
+    "improvement_candidates"
+  ],
+  "properties": {
+    "evaluation_id": { "type": "string" },
+    "identified_failures": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "identified_strengths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "improvement_candidates": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

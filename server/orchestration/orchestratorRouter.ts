@@ -16,8 +16,10 @@ import { feedbackLoop } from "./feedbackLoop";
 import { getSystemSnapshot } from "../organs/organMetrics";
 import { worldThinkingEngine } from "./worldThinkingEngine";
 import { orchestrationOversight } from "./orchestrationOversight";
+import { autonomousHomeRouter } from "./autonomousHomeRouter";
 
 export const orchestratorRouter = Router();
+orchestratorRouter.use("/", autonomousHomeRouter);
 
 orchestratorRouter.post("/output/ack", async (req,res) => {
   try {
@@ -29,11 +31,11 @@ orchestratorRouter.post("/output/ack", async (req,res) => {
 });
 
 orchestratorRouter.post("/run", async (req, res,next) => {
-  if(req.body?.mode!=='chat'){req.body={...req.body,objective:req.body?.objective??req.body?.task};return submitMission(req,res,next);}
+  if(req.body?.mode==='mission' || (!req.body?.session_id && req.body?.mode!=='chat')){req.body={...req.body,objective:req.body?.objective??req.body?.task};return submitMission(req,res,next);}
   const { task, session_id = crypto.randomUUID(), source = "api", priority = "normal", context } = req.body;
   if (!task) return res.status(400).json({ error: "task required" });
   try {
-    const result = await runCommand({ task, tenant_id:(req as any).microfixdTenantId, session_id:`${(req as any).microfixdTenantId}:${session_id}`, source, priority, context:{...context,responseOnly:true} });
+    const result = await runCommand({ task, tenant_id:(req as any).microfixdTenantId, session_id, source, priority, context:{...context,responseOnly:true} });
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: String(err) });
@@ -63,8 +65,18 @@ orchestratorRouter.get("/metrics", (req, res) => {
 // ── World Thinking Engine REST API ──────────────────────────────────────────
 orchestratorRouter.post("/world-thinking/simulate", async (req, res) => {
   try {
-    const { task = "System Invariant & Future State Projection", actions = [] } = req.body;
-    const report = await worldThinkingEngine.simulateWorldThinking(task, actions);
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+    const task = typeof body.task === "string" && body.task.trim()
+      ? body.task.trim()
+      : "System Invariant & Future State Projection";
+    const actions = Array.isArray(body.actions) ? body.actions : [];
+    const tenantId = (req as any).microfixdTenantId ?? "default";
+    const report = await worldThinkingEngine.simulateWorldThinking(task, actions, {
+      tenantId,
+      evidence: Array.isArray(body.evidence) ? body.evidence.map(String) : undefined,
+      useLlm: Boolean(body.useLlm ?? body.use_llm),
+      includeLiveCapabilities: body.includeLiveCapabilities !== false,
+    });
     res.json({ success: true, report });
   } catch (err) {
     res.status(500).json({ success: false, error: String(err) });
@@ -72,8 +84,66 @@ orchestratorRouter.post("/world-thinking/simulate", async (req, res) => {
 });
 
 orchestratorRouter.get("/world-thinking/history", (req, res) => {
-  const limit = Number(req.query.limit ?? 20);
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit ?? 20) || 20));
   res.json({ history: worldThinkingEngine.getHistory(limit) });
+});
+
+// ── High-Bandwidth Metacognition & Unbiased Perspectives REST API ───────────
+orchestratorRouter.post("/metacognition/reason", async (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+    const problem = typeof body.problem === "string" ? body.problem.trim() : typeof body.task === "string" ? body.task.trim() : "";
+    if (!problem || problem.length > 16000) {
+      return res.status(400).json({ success: false, code: "INVALID_PROBLEM", error: "problem (1-16000 chars) required" });
+    }
+    const tenantId = (req as any).microfixdTenantId ?? "default";
+    const analysis = await worldThinkingEngine.runDeepMetacognition({
+      problem,
+      inceptionPrompt: typeof body.inceptionPrompt === "string" ? body.inceptionPrompt.slice(0, 8000) : undefined,
+      intendedOutcome: typeof body.intendedOutcome === "string" ? body.intendedOutcome.slice(0, 4000) : undefined,
+      observedOutcome: typeof body.observedOutcome === "string" ? body.observedOutcome.slice(0, 4000) : undefined,
+      evidence: Array.isArray(body.evidence) ? body.evidence.map(v => String(v).slice(0, 1000)).slice(0, 20) : undefined,
+      constraints: Array.isArray(body.constraints) ? body.constraints.map(v => String(v).slice(0, 500)).slice(0, 20) : undefined,
+      domains: Array.isArray(body.domains) ? body.domains.slice(0, 8) : undefined,
+      proposedActions: Array.isArray(body.proposedActions) ? body.proposedActions.slice(0, 8) : undefined,
+      perspectives: Array.isArray(body.perspectives) ? body.perspectives.slice(0, 10) : undefined,
+      useLlm: Boolean(body.useLlm ?? body.use_llm),
+      requireLlm: Boolean(body.requireLlm ?? body.require_llm),
+      tenantId,
+    });
+    return res.json({ success: true, analysis });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+orchestratorRouter.post("/metacognition/retrospect", async (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
+    const problem = typeof body.problem === "string" ? body.problem.trim() : typeof body.task === "string" ? body.task.trim() : "";
+    if (!problem || problem.length > 16000) {
+      return res.status(400).json({ success: false, code: "INVALID_PROBLEM", error: "problem (1-16000 chars) required" });
+    }
+    const tenantId = (req as any).microfixdTenantId ?? "default";
+    const retrospection = await worldThinkingEngine.retrospect({
+      problem,
+      inceptionPrompt: typeof body.inceptionPrompt === "string" ? body.inceptionPrompt.slice(0, 8000) : undefined,
+      intendedOutcome: typeof body.intendedOutcome === "string" ? body.intendedOutcome.slice(0, 4000) : undefined,
+      observedOutcome: typeof body.observedOutcome === "string" ? body.observedOutcome.slice(0, 4000) : undefined,
+      evidence: Array.isArray(body.evidence) ? body.evidence.map(v => String(v).slice(0, 1000)).slice(0, 20) : undefined,
+      constraints: Array.isArray(body.constraints) ? body.constraints.map(v => String(v).slice(0, 500)).slice(0, 20) : undefined,
+      tenantId,
+    });
+    return res.json({ success: true, retrospection });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+orchestratorRouter.get("/metacognition/history", (req, res) => {
+  const tenantId = (req as any).microfixdTenantId ?? "default";
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit ?? 20) || 20));
+  res.json({ history: worldThinkingEngine.getMetacognitiveHistory(tenantId, limit) });
 });
 
 // ── Orchestration Oversight & Recursion Governance REST API ───────────────────

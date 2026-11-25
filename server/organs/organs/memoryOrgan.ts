@@ -67,7 +67,7 @@ export async function executeMemoryOrgan(action: string, payload: unknown): Prom
   if (action === "store") {
     if (typeof p.content !== "string" || !p.content.trim()) throw new Error("Memory content required");
     const { data, error } = await db.from("microfixd_memory_records").insert({
-      id: randomUUID(), agent_id: agent, kind: "episodic", content: p.content,
+      id: randomUUID(), created_at: new Date().toISOString(), agent_id: agent, kind: "episodic", content: p.content,
       tags: Array.isArray(p.tags) ? p.tags : [], importance: Number(p.importance ?? 0.5),
       metadata: { ...(p.metadata || {}), session_id: session }, tenant_id: tenant,
     }).select("id").single();
