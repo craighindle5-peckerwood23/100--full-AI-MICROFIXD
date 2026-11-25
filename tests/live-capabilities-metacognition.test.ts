@@ -186,6 +186,9 @@ test('Metacognitive multi-domain reasoning, inception-to-outcome retrospection, 
   // Fail-closed when requireLlm=true without configured LLM keys
   const savedKeys = {
     GROQ_API_KEY: process.env.GROQ_API_KEY,
+    VITE_GROQ_API_KEY: process.env.VITE_GROQ_API_KEY,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
