@@ -12,6 +12,7 @@ import {auditMission} from './missionAudit';
 import {readMissionArtifact, loadMissionNotes} from './taskContinuity';
 import {readWorkflowSkill,compileSkill,listWorkflowSkills} from './workflowSkills';
 import {recoverWaitingRepairs} from '../engineering/repairRecovery';
+import {readProcedureConsolidation,recoverProcedureConsolidation} from '../memory/procedureConsolidation';
 import {
  getPlannerWorkerStatus,plannerWorkerStarted,plannerWorkerTickStarted,plannerWorkerMissionStarted,
  plannerWorkerMissionCompleted,plannerWorkerTickCompleted,plannerWorkerError,plannerWorkerStopped
@@ -22,6 +23,16 @@ const uuid=(text:string)=>{const h=createHash('sha256').update(text).digest('hex
 plannerRouter.get('/capabilities',(_req,res)=>res.json(systemCapabilities()));
 plannerRouter.get('/skills',async(req,res)=>{try{res.json(await listWorkflowSkills(plannerClient(),(req as any).microfixdTenantId));}catch{res.status(503).json({code:'SKILL_STORAGE_UNAVAILABLE'});}});
 plannerRouter.get('/tools',(_req,res)=>res.json({tools:ENABLED_TOOLS.map(name=>getTool(name)).filter(Boolean)}));
+plannerRouter.get('/missions/:id/learning',async(req,res)=>{
+ const tenant=(req as any).microfixdTenantId;
+ if(!tenant)return res.status(403).json({code:'AUTH_REQUIRED'});
+ try{
+  const result=await readProcedureConsolidation(plannerClient(),tenant,req.params.id);
+  res.set('Cache-Control','no-store');
+  if(!result)return res.status(404).json({code:'MISSION_NOT_FOUND'});
+  res.json(result);
+ }catch{res.status(503).json({code:'CONSOLIDATION_STORAGE_UNAVAILABLE'});}
+});
 export const submitMission:import('express').RequestHandler=async(req,res)=>{
  try{
   const tenant=(req as any).microfixdTenantId;
@@ -129,13 +140,17 @@ plannerRouter.get('/agents',async(req,res)=>{
  if(error)throw error;res.json({agents:data});}catch{res.status(503).json({code:'STORAGE_UNAVAILABLE'});}
 });
 export function startPlannerWorker():()=>void {
- let busy=false,stopped=false,cursor=0,repairCursor=0;
+ let busy=false,stopped=false,cursor=0,repairCursor=0,learningCursor=0;
  plannerWorkerStarted();
  const tick=async()=>{
   if(busy||stopped)return;busy=true;plannerWorkerTickStarted();
   try{
    const client=plannerClient();
    try{repairCursor=await recoverWaitingRepairs(client,repairCursor);}catch(error){plannerWorkerError(error);console.error('[repair] completion recovery deferred');}
+   try{
+    const learning=await recoverProcedureConsolidation(client,learningCursor);learningCursor=learning.nextCursor;
+    if(learning.failed)console.error('[memory] procedure consolidation deferred for %d completed missions; scan will retry',learning.failed);
+   }catch{console.error('[memory] procedure recovery unavailable; mission processing continues');}
    const {data,error}=await client.from('spine_rows').select('data,sequence').eq('kind','missions').in('data->>status',['queued','running']).gt('sequence',cursor).order('sequence').limit(10);
    if(error)throw error;
    if(!data.length)cursor=0;
