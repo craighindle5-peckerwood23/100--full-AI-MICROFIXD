@@ -8,7 +8,8 @@ export function sourceIncident(error:unknown){
  const frames=[...new Set([...String(error.stack??'').matchAll(/(?:^|[/( ])((?:server|src|microfixd)\/[a-zA-Z0-9_./-]+\.(?:tsx?|m?js)):(\d+):(\d+)/gm)].map(m=>`${m[1].replace(/^(?:src\/)+(?=(?:server|src|microfixd)\/)/,'')}:${m[2]}:${m[3]}`))].slice(0,5);
  const paths=[...new Set(frames.map(frame=>frame.split(':')[0]).filter(path=>{try{repairPath(path);return true;}catch{return false;}}))].slice(0,3);
  if(!paths.length)return null;
- return {paths,objective:`Investigate and minimally repair the observed ${error.name} in ${frames.join(', ')}. Preserve existing behavior, authorization and validation. Return an exact source edit only when the code supports a fix.`,fingerprint:createHash('sha256').update(JSON.stringify([error.name,error.message.replace(/[a-f0-9]{16,}|\d+/gi,'#'),paths])).digest('hex')};
+ const revision=/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT??'')?process.env.RENDER_GIT_COMMIT:'local';
+ return {paths,objective:`Investigate and minimally repair the observed ${error.name} in ${frames.join(', ')}. Preserve existing behavior, authorization and validation. Return an exact source edit only when the code supports a fix.`,fingerprint:createHash('sha256').update(JSON.stringify([revision,error.name,error.message.replace(/[a-f0-9]{16,}|\d+/gi,'#'),paths])).digest('hex')};
 }
 /** Trusted error observation only. Provider/permission waits and model-reported bugs never enqueue. */
 export async function enqueueSourceIncident(db:SupabaseClient,context:ExecutionContext,error:unknown){

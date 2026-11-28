@@ -22,6 +22,7 @@ import { LearningCycle } from '../../types';
 import { INITIAL_LEARNING_CYCLES } from '../../data/osData';
 import { sound } from '../../utils/audio';
 import { api } from '../../lib/serverApi';
+import {SelfHealingPanel} from './SelfHealingPanel';
 
 interface EvaluationData {
   correctness: number;
@@ -49,10 +50,6 @@ export default function LearningRoom() {
   // Real learning pipeline test state
   const [learningLoopResult, setLearningLoopResult] = useState<any>(null);
   const [isLoopRunning, setIsLoopRunning] = useState(false);
-
-  // Self healing test state
-  const [healingResult, setHealingResult] = useState<any>(null);
-  const [isHealingRunning, setIsHealingRunning] = useState(false);
 
   const selectedCycle = cycles.find(c => c.id === selectedCycleId) || cycles[0];
 
@@ -142,27 +139,6 @@ export default function LearningRoom() {
     }
   };
 
-  const handleRunSelfHealing = async () => {
-    sound.playAlert();
-    setIsHealingRunning(true);
-    try {
-      const res = await api<any>('POST', '/learning/self-healing', {
-        source: "runtime_circuit_breaker",
-        error: "Simulated upstream rate limit: 429 Too Many Requests",
-      });
-      setHealingResult(res);
-      sound.playWarp();
-    } catch (err) {
-      setHealingResult({
-        deployed: true,
-        verifiedLive: true,
-        diagnosis: { suspectedComponent: "llmProvider", underlyingMechanism: "Upstream rate limit detected", recommendedRepairStrategy: "FALLBACK_PROVIDER" },
-        patch: { strategy: "FALLBACK_PROVIDER", actionScript: "switchProviderFallbackCascade('groq', 'gemini')" }
-      });
-    } finally {
-      setIsHealingRunning(false);
-    }
-  };
 
   return (
     <div className="h-full flex flex-col gap-4 font-mono text-cyan-400">
@@ -461,71 +437,7 @@ export default function LearningRoom() {
       )}
 
       {/* Tab 4: Self-Healing Pipeline */}
-      {activeTab === 'self_healing' && (
-        <div className="flex-1 flex flex-col gap-4 min-h-0 overflow-y-auto">
-          {/* Healing Pipeline Diagram */}
-          <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex flex-wrap items-center justify-between text-xs gap-2">
-            <span className="text-white font-bold uppercase tracking-wider text-[11px]">Self-Healing Pipeline:</span>
-            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-cyan-300 font-bold">
-              <span>Monitor</span> &rarr;
-              <span className="text-amber-400">Detect Failure</span> &rarr;
-              <span>Locate Cause</span> &rarr;
-              <span>Generate Fix</span> &rarr;
-              <span className="text-purple-300">Sandbox Test</span> &rarr;
-              <span>Deploy</span> &rarr;
-              <span className="text-emerald-400">Verify</span>
-            </div>
-            <button
-              onClick={handleRunSelfHealing}
-              disabled={isHealingRunning}
-              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400 text-xs text-white font-bold flex items-center gap-1.5"
-            >
-              <Wrench size={13} className={isHealingRunning ? 'animate-spin' : ''} />
-              {isHealingRunning ? 'Diagnosing & Healing...' : 'Simulate Fault & Auto-Heal'}
-            </button>
-          </div>
-
-          {healingResult ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl bg-black/60 border border-amber-500/30 space-y-3">
-                <span className="text-xs text-white font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-300">
-                  <ShieldAlert size={15} />
-                  Fault Detected & Diagnosed
-                </span>
-                <div className="text-xs space-y-1">
-                  <div className="text-[10px] text-cyan-400 uppercase">Suspected Component</div>
-                  <div className="text-white font-bold">{healingResult.diagnosis?.suspectedComponent ?? "llmProvider"}</div>
-                </div>
-                <div className="text-xs space-y-1">
-                  <div className="text-[10px] text-cyan-400 uppercase">Root Cause Mechanism</div>
-                  <div className="text-white/80 font-sans">{healingResult.diagnosis?.underlyingMechanism ?? "Upstream rate limit"}</div>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-black/60 border border-emerald-500/30 space-y-3">
-                <span className="text-xs text-white font-bold uppercase tracking-wider flex items-center gap-1.5 text-emerald-400">
-                  <CheckCircle size={15} />
-                  Patch Generated & Verified in Sandbox
-                </span>
-                <div className="text-xs space-y-1">
-                  <div className="text-[10px] text-cyan-400 uppercase">Repair Action Script</div>
-                  <div className="p-2 rounded bg-black/60 border border-cyan-500/20 text-cyan-300 font-mono text-[11px]">
-                    {healingResult.patch?.actionScript ?? "switchProviderFallbackCascade('groq', 'gemini')"}
-                  </div>
-                </div>
-                <div className="text-[11px] text-emerald-400 font-bold">
-                  STATUS: Deployed & Verified Live Without Regression
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-8 rounded-xl bg-black/30 border border-cyan-500/20 flex flex-col items-center justify-center text-center text-cyan-500/60 min-h-[260px]">
-              <Wrench size={32} className="mb-2 opacity-50 text-amber-400" />
-              <p className="text-xs">Click "Simulate Fault & Auto-Heal" to test autonomous failure detection, root cause diagnosis, and sandbox patch verification.</p>
-            </div>
-          )}
-        </div>
-      )}
+      {activeTab === 'self_healing' && <SelfHealingPanel />}
     </div>
   );
 }

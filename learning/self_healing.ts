@@ -10,6 +10,7 @@ import { generateRepairPatch, RepairPatch } from "./repair_engine";
 import { verifyPatchInSandbox, SandboxTestResult } from "./verification";
 
 export interface HealingRunReport {
+  mode: 'diagnostic_only';
   tenantId: string;
   runId: string;
   fault: FaultSignal;
@@ -42,6 +43,7 @@ export class SelfHealingPipeline {
     const verifiedLive = false;
 
     const report: HealingRunReport = {
+      mode: 'diagnostic_only',
       tenantId,
       runId: `heal_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       fault,
