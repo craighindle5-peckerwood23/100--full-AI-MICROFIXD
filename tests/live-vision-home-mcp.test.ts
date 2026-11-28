@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import {once} from 'node:events';
 import express from 'express';
 import { WebSocket } from 'ws';
 import {
@@ -29,6 +30,14 @@ import {
 } from '../server/plugins/pluginRegistry';
 import { rbacMiddleware } from '../server/security/rbac';
 import { trigger as triggerHitl, getPending as getPendingHitl } from '../server/hitl/hitlManager';
+
+async function waitFor(check:()=>boolean, label:string) {
+  const until=Date.now()+10000;
+  while(!check()) {
+    if(Date.now()>=until)throw new Error('Timed out waiting for '+label);
+    await new Promise(resolve=>setTimeout(resolve,10));
+  }
+}
 
 test('speechFeedbackCoordinator condenses verbose outputs and filters proactive alerts', () => {
   const uuid = '123e4567-e89b-12d3-a456-426614174000';
@@ -89,7 +98,7 @@ test('liveVisionVoiceBridge enforces RBAC auth, fails closed without API key, an
 
   // 1. Fail-closed check when GEMINI_API_KEY missing and no test hook
   const server1 = http.createServer();
-  attachLiveVisionVoiceBridge(server1);
+  const bridge1=attachLiveVisionVoiceBridge(server1);
   await new Promise<void>((resolve) => server1.listen(0, '127.0.0.1', resolve));
   const addr1 = server1.address() as { port: number };
   const baseWs1 = `ws://127.0.0.1:${addr1.port}/ws/live`;
@@ -97,30 +106,25 @@ test('liveVisionVoiceBridge enforces RBAC auth, fails closed without API key, an
   try {
     // Unauthenticated token rejected with 1008
     const wsBad = new WebSocket(baseWs1);
-    await new Promise<void>((resolve) => wsBad.once('open', resolve));
+    await once(wsBad,'open',{signal:AbortSignal.timeout(10000)});
     wsBad.send(JSON.stringify({ type: 'authenticate', payload: { token: 'invalid-token' } }));
-    const closeInfo = await new Promise<{ code: number }>((resolve) =>
-      wsBad.once('close', (code) => resolve({ code })),
-    );
-    assert.equal(closeInfo.code, 1008);
+    const [closeCode]=await once(wsBad,'close',{signal:AbortSignal.timeout(10000)});
+    assert.equal(closeCode,1008);
 
     // Valid operator receives GEMINI_API_KEY_NOT_CONFIGURED on session.start
     const wsOp = new WebSocket(baseWs1);
-    await new Promise<void>((resolve) => wsOp.once('open', resolve));
+    await once(wsOp,'open',{signal:AbortSignal.timeout(10000)});
     wsOp.send(JSON.stringify({ type: 'authenticate', payload: { token: 'live-test-operator' } }));
-    const authMsg = await new Promise<any>((resolve) =>
-      wsOp.once('message', (d) => resolve(JSON.parse(d.toString()))),
-    );
+    const authMsg=JSON.parse(String((await once(wsOp,'message',{signal:AbortSignal.timeout(10000)}))[0]));
     assert.equal(authMsg.type, 'authenticated');
 
     wsOp.send(JSON.stringify({ type: 'session.start', model: 'gemini-3.8-live', voiceName: 'Zephyr' }));
-    const errMsg = await new Promise<any>((resolve) =>
-      wsOp.once('message', (d) => resolve(JSON.parse(d.toString()))),
-    );
+    const errMsg=JSON.parse(String((await once(wsOp,'message',{signal:AbortSignal.timeout(10000)}))[0]));
     assert.equal(errMsg.type, 'error');
     assert.equal(errMsg.code, 'GEMINI_API_KEY_NOT_CONFIGURED');
     wsOp.close();
   } finally {
+    bridge1.clients.forEach(client=>client.terminate());
     await new Promise<void>((resolve) => server1.close(() => resolve()));
   }
 
@@ -146,7 +150,7 @@ test('liveVisionVoiceBridge enforces RBAC auth, fails closed without API key, an
   };
 
   const server2 = http.createServer();
-  attachLiveVisionVoiceBridge(server2, { liveConnect: fakeConnect });
+  const bridge2=attachLiveVisionVoiceBridge(server2, { liveConnect: fakeConnect });
   await new Promise<void>((resolve) => server2.listen(0, '127.0.0.1', resolve));
   const addr2 = server2.address() as { port: number };
   const baseWs2 = `ws://127.0.0.1:${addr2.port}/ws/live`;
@@ -155,14 +159,14 @@ test('liveVisionVoiceBridge enforces RBAC auth, fails closed without API key, an
     const ws = new WebSocket(baseWs2);
     const messages: any[] = [];
     ws.on('message', (d) => messages.push(JSON.parse(d.toString())));
-    await new Promise<void>((resolve) => ws.once('open', resolve));
+    await once(ws,'open',{signal:AbortSignal.timeout(10000)});
 
     ws.send(JSON.stringify({ type: 'authenticate', payload: { token: 'live-test-admin' } }));
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(()=>messages.some(m=>m.type==='authenticated'),'authentication');
     assert.equal(messages.some((m) => m.type === 'authenticated'), true);
 
     ws.send(JSON.stringify({ type: 'session.start', model: 'gemini-3.8-live-extended-thinking', voiceName: 'Kore' }));
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(()=>messages.some(m=>m.type==='live.ready'&&m.voiceName==='Kore'),'live session readiness');
     assert.equal(messages.some((m) => m.type === 'live.ready' && m.voiceName === 'Kore'), true);
 
     // Send 16kHz PCM audio & 1 FPS video frame (second burst frame throttled)
@@ -170,7 +174,7 @@ test('liveVisionVoiceBridge enforces RBAC auth, fails closed without API key, an
     ws.send(JSON.stringify({ type: 'video.frame', data: Buffer.from('jpeg-frame-1').toString('base64') }));
     ws.send(JSON.stringify({ type: 'video.frame', data: Buffer.from('jpeg-frame-2-dropped').toString('base64') }));
     ws.send(JSON.stringify({ type: 'text.turn', text: 'Summarize active health.' }));
-    await new Promise((r) => setTimeout(r, 40));
+    await waitFor(()=>sentInputs.length>=3,'audio video and text delivery');
 
     assert.equal(sentInputs.filter((i) => i.audio?.mimeType === 'audio/pcm;rate=16000').length, 1);
     assert.equal(sentInputs.filter((i) => i.video?.mimeType === 'image/jpeg').length, 1);
@@ -187,7 +191,7 @@ test('liveVisionVoiceBridge enforces RBAC auth, fails closed without API key, an
         functionCalls: [{ id: 'call-1', name: 'get_system_status', args: {} }],
       },
     });
-    await new Promise((r) => setTimeout(r, 60));
+    await waitFor(()=>messages.some(m=>m.type==='tool.result')&&toolResponses.length===1,'tool result and response');
 
     assert.equal(messages.some((m) => m.type === 'transcript.output' && m.text.includes('nominal')), true);
     assert.equal(messages.some((m) => m.type === 'audio.chunk' && m.data === 'AQID'), true);
@@ -197,9 +201,10 @@ test('liveVisionVoiceBridge enforces RBAC auth, fails closed without API key, an
     assert.equal(toolResponses[0].functionResponses[0].name, 'get_system_status');
 
     ws.close();
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(()=>sessionClosed,'upstream session cleanup');
     assert.equal(sessionClosed, true);
   } finally {
+    bridge2.clients.forEach(client=>client.terminate());
     await new Promise<void>((resolve) => server2.close(() => resolve()));
     if (prevAdmin === undefined) delete process.env.ADMIN_TOKEN; else process.env.ADMIN_TOKEN = prevAdmin;
     if (prevOp === undefined) delete process.env.OPERATOR_TOKEN; else process.env.OPERATOR_TOKEN = prevOp;
