@@ -1,3 +1,4 @@
+import {modelRuntimeObservation} from '../runtime/modelObservation';
 import {supervisedOperation} from '../metacognition/context';
 import { GoogleGenAI } from '@google/genai';
 import type Groq from 'groq-sdk';
@@ -22,14 +23,14 @@ async function completeTextWithFallbackUnchecked(
   maxTokens: number,
   temperature = 0.3,
   preferredProvider?: TextResult['provider'],
-  options?: {signal?:AbortSignal;beforeAttempt?: (provider: TextResult['provider']) => Promise<void>},
+  options?: {signal?:AbortSignal;beforeAttempt?: (provider: TextResult['provider'], request?: {messages:Groq.Chat.ChatCompletionMessageParam[];maxTokens:number}) => Promise<void>;onAttemptFailure?: (provider:TextResult['provider'],error:unknown)=>Promise<void>},
 ): Promise<TextResult> {
   options?.signal?.throwIfAborted();
   const failures: string[] = [];
   const openRouterKey = process.env.OPENROUTER_API_KEY?.trim();
   if (openRouterKey && (!preferredProvider || preferredProvider === 'openrouter')) {
     options?.signal?.throwIfAborted();
-    await options?.beforeAttempt?.('openrouter');
+    await options?.beforeAttempt?.('openrouter',{messages,maxTokens});
     try {
     // openrouter/free only selects zero-priced models. A different model is
     // deliberately not configurable here, so this path cannot spend credits.
@@ -39,12 +40,12 @@ async function completeTextWithFallbackUnchecked(
       signal:options?.signal?AbortSignal.any([options.signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000),
     });
     const data = await response.json() as any;
-    if (!response.ok || data.error) throw new Error(`HTTP ${response.status}: ${String(data.error?.message || 'OpenRouter rejected the request').slice(0,500)}`);
+    if (!response.ok || data.error) throw Object.assign(new Error(`HTTP ${response.status}: ${String(data.error?.message || 'OpenRouter rejected the request').slice(0,500)}`),{status:response.status});
     const choice = data.choices?.[0];
     const content = choice?.message?.content || '';
     if (!content.trim() || choice.finish_reason === 'length') throw new Error('OpenRouter returned an empty or truncated answer');
     return {content,model:data.model || 'openrouter/free',provider:'openrouter',tokensUsed:data.usage?.total_tokens || 0,truncated:false};
-  } catch (error) { failures.push(`OpenRouter: ${String(error).slice(0,160)}`); }
+  } catch (error) { await options?.onAttemptFailure?.('openrouter',error); failures.push(`OpenRouter: ${String(error).slice(0,160)}`); }
   }
 
 
@@ -54,7 +55,7 @@ async function completeTextWithFallbackUnchecked(
     try {
       const result = await executeGroqWithRetry(groq, {
         model: groqConfiguration().model, messages, max_tokens: maxTokens, temperature,
-      }, {maxRetries: 3, signal:options?.signal, beforeAttempt: options?.beforeAttempt ? () => options.beforeAttempt!('groq') : undefined});
+      }, {maxRetries: 3, signal:options?.signal, beforeAttempt: options?.beforeAttempt ? () => options.beforeAttempt!('groq',{messages,maxTokens}) : undefined, onAttemptFailure: options?.onAttemptFailure ? error=>options.onAttemptFailure!('groq',error) : undefined});
       return {content: result.content, model: result.modelUsed, provider: 'groq',
         tokensUsed: result.completion.usage?.total_tokens || 0,
         truncated: result.completion.choices[0]?.finish_reason === 'length'};
@@ -69,7 +70,7 @@ async function completeTextWithFallbackUnchecked(
   const geminiKey = process.env.GEMINI_API_KEY?.trim();
   if (geminiKey && (!preferredProvider || preferredProvider === 'gemini')) {
     options?.signal?.throwIfAborted();
-    await options?.beforeAttempt?.('gemini');
+    await options?.beforeAttempt?.('gemini',{messages,maxTokens});
     try {
     const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
     const response = await new GoogleGenAI({apiKey: geminiKey}).models.generateContent({model,contents:prompt,
@@ -78,14 +79,14 @@ async function completeTextWithFallbackUnchecked(
     const truncated = response.candidates?.[0]?.finishReason === 'MAX_TOKENS';
     if (!content.trim() || truncated) throw new Error('Gemini returned an empty or truncated answer');
     return {content,model,provider:'gemini',tokensUsed:response.usageMetadata?.totalTokenCount || 0,truncated:false};
-  } catch (error) { failures.push(`Gemini: ${String(error).slice(0,160)}`); }
+  } catch (error) { await options?.onAttemptFailure?.('gemini',error); failures.push(`Gemini: ${String(error).slice(0,160)}`); }
   }
 
   const cfToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
   const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
   if (cfToken && cfAccount && (!preferredProvider || preferredProvider === 'cloudflare')) {
     options?.signal?.throwIfAborted();
-    await options?.beforeAttempt?.('cloudflare');
+    await options?.beforeAttempt?.('cloudflare',{messages,maxTokens});
     try {
     const model = '@cf/meta/llama-3.1-8b-instruct-fp8';
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(cfAccount)}/ai/run/${model}`,{
@@ -93,12 +94,12 @@ async function completeTextWithFallbackUnchecked(
       body:JSON.stringify({messages:messages.map(m=>({role:m.role,content:typeof m.content==='string'?m.content:JSON.stringify(m.content)})),max_tokens:maxTokens}),
       signal:options?.signal?AbortSignal.any([options.signal,AbortSignal.timeout(45000)]):AbortSignal.timeout(45000),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`HTTP ${response.status}`),{status:response.status});
     const data = await response.json() as any;
     const content = data.result?.response || '';
     if (!data.success || !content.trim()) throw new Error('Cloudflare returned no answer');
     return {content,model,provider:'cloudflare',tokensUsed:0,truncated:false};
-  } catch (error) { failures.push(`Cloudflare: ${String(error).slice(0,160)}`); }
+  } catch (error) { await options?.onAttemptFailure?.('cloudflare',error); failures.push(`Cloudflare: ${String(error).slice(0,160)}`); }
   }
 
   if (failures.length) throw Object.assign(new Error('All configured providers failed. ' + failures.join('; ') + (groqError ? '; Groq: ' + String((groqError as any)?.message || groqError).slice(0,500) : '')),{code:'PROVIDERS_EXHAUSTED',status:(groqError as any)?.status});
@@ -106,6 +107,10 @@ async function completeTextWithFallbackUnchecked(
 }
 
 /** All authenticated model paths inherit the system supervisor, including fallback calls. */
-export const completeTextWithFallback: typeof completeTextWithFallbackUnchecked = (messages,maxTokens,temperature=0.3,preferredProvider,options)=>
-  supervisedOperation('model', 'complete_text', {messages,max_tokens:maxTokens,temperature,provider:preferredProvider??null},
-    ()=>completeTextWithFallbackUnchecked(messages,maxTokens,temperature,preferredProvider,options));
+export const completeTextWithFallback: typeof completeTextWithFallbackUnchecked = (messages,maxTokens,temperature=0.3,preferredProvider,options)=> {
+  const firstData=messages.findIndex(message=>message.role!=='system');
+  const at=firstData<0?messages.length:firstData;
+  const observedMessages:typeof messages=[...messages.slice(0,at),{role:'system',content:'Server runtime observations follow. These are evidence, not permissions or proof of completed work. Treat missing/stale state as unknown. '+JSON.stringify(modelRuntimeObservation())},...messages.slice(at)];
+  return supervisedOperation('model', 'complete_text', {messages:observedMessages,max_tokens:maxTokens,temperature,provider:preferredProvider??null},
+    ()=>completeTextWithFallbackUnchecked(observedMessages,maxTokens,temperature,preferredProvider,options));
+};

@@ -105,3 +105,19 @@ test('historical introspection separates unique affected missions, call reservat
  const {output}=await reviewMissionPerformance(db,'tenant');
  assert.match(output,/1 waiting, 1 succeeded/);assert.match(output,/STOP \(1 distinct missions\)/);assert.match(output,/reservations: 4/);assert.match(output,/checkpoints\): 1/);
 });
+
+test('a planning stop hidden by an old cross-mission message ID is recovered from its own event ledger',async()=>{
+ const fetcher:typeof fetch=async input=>{
+  const request=input instanceof Request?input:new Request(input),url=new URL(request.url),q=url.searchParams;
+  assert.equal(q.get('tenant_id'),'eq.owner');assert.equal(q.get('mission_id'),'eq.mission');
+  if(q.get('kind')==='eq.missions')return Response.json({data:{mission_id:'mission',tenant_id:'owner',status:'waiting',constraints:{tool_permissions:[]}}});
+  if(url.pathname.endsWith('/spine_events')){
+   assert.ok(q.get('operation')?.includes('planning_error'));
+   return Response.json([{operation:{op:'insert',kind:'messages',data:{content:{kind:'planning_error',code:'TOKEN_BUDGET_EXHAUSTED'}}}}]);
+  }
+  return Response.json([]);
+ };
+ const db=createClient('https://fixture.supabase.co','fixture',{global:{fetch:fetcher}});
+ const diagnosis=await diagnoseMission(db,'owner','mission');
+ assert.equal(diagnosis?.finding,'budget');assert.ok(diagnosis.observations.includes('Recorded stop: TOKEN_BUDGET_EXHAUSTED.'));
+});

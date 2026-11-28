@@ -79,6 +79,15 @@ export async function diagnoseMission(db:SupabaseClient,tenant:string,id:string,
       const message=await scoped('spine_rows','data').eq('kind','messages').eq('data->content->>kind','planning_error').order('sequence',{ascending:false}).limit(1);
       if(message.error)throw message.error;
       code=String((message.data[0] as unknown as {data:{content:{code:string}}}|undefined)?.data.content.code??'');
+      if(!code){
+        // Older message IDs omitted the mission and could collide at insertion.
+        // Recover the stop from this mission's immutable event, never another
+        // mission's row sharing that ID.
+        const event=await scoped('spine_events','operation').contains('operation',{op:'insert',kind:'messages',data:{content:{kind:'planning_error'}}}).order('id',{ascending:false}).limit(1);
+        if(event.error)throw event.error;
+        const value=(event.data?.[0] as any)?.operation?.data?.content?.code;
+        if(typeof value==='string'&&/^[A-Z][A-Z0-9_]{1,79}$/.test(value))code=value;
+      }
     }
   }
   const result=await inspectBlocker(mission.status,code,Boolean(sub?.tool_request),async probe=>{
