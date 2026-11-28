@@ -14,7 +14,7 @@ const app=express();app.use(express.json());
 app.get('/api/learning/self-healing/status',(req,res)=>{
  assert.equal(req.headers.authorization,'Bearer browser-fixture');
  if(!available)return res.status(503).json({code:'HEALING_STORAGE_UNAVAILABLE'});
- res.json({configured:true,automatic_enabled:true,can_request_repair:true,source:'supabase_controller_ledger',repairs:[]});
+ res.json({configured:true,automatic_enabled:true,can_request_repair:true,source:'supabase_controller_ledger',architecture:{repository:'craighindle5-peckerwood23/100--full-AI-MICROFIXD',production_revision:'a'.repeat(40)},repairs:[]});
 });
 app.post('/api/learning/self-healing/repair',(req,res)=>{
  assert.equal(req.headers.authorization,'Bearer browser-fixture');keys.push(req.headers['idempotency-key']);submissions++;
@@ -32,6 +32,8 @@ try{
  assert.equal(await page.getByRole('button',{name:'Submit governed repair'}).isDisabled(),true);
  assert.ok(!(await page.locator('body').innerText()).includes('Deployed & Verified'));
  available=true;await page.reload();await page.waitForFunction(()=>!document.querySelector('button[type="submit"]')?.disabled&&document.body.textContent.includes('configured'));
+ await page.getByText('Self-healing runs under Microfixd AI.',{exact:false}).waitFor();
+ assert.ok((await page.locator('body').innerText()).includes('Production revision: '+'a'.repeat(40)));
  await page.getByLabel('Repair objective').fill('Repair the observed fixture\nRegression case: tests/source-repair.test.ts#fixture');
  await page.getByLabel('Repair source paths').fill('server/automotive/example.ts');
  await page.getByRole('button',{name:'Submit governed repair'}).click();

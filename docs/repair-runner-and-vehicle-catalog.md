@@ -4,6 +4,31 @@ Canonical repository: `craighindle5-peckerwood23/100--full-AI-MICROFIXD`.
 
 ## Source repair
 
+### One Microfixd source and deployment architecture
+
+The controller, incident detection, restart recovery, API, UI, tests and isolated
+verification component all belong to the canonical repository above. There is
+no second repair repository to merge. `repair/candidate` is a temporary candidate
+branch in this repository, not an independent Microfixd application.
+
+The root `render.yaml` declares both components and connects the main service's
+`MICROFIXD_REPAIR_RUNNER_URL` to the verification component's public URL. The
+existing service names are retained. Before syncing into an existing workspace,
+check that those names identify the intended services, that the candidate branch
+exists, and that the verifier has no production secrets, groups or disks. Do not
+create replacement services when adopting the existing deployment. Existing
+automatic-detection configuration is preserved; new installations must explicitly
+set it along with the owner credentials. Blueprint changes require a remote
+commit and Render sync; a local edit alone does not change deployment.
+
+Microfixd owns diagnosis, reasoning, mission authorization, durable repair state,
+promotion and recovery. The sandbox executes the candidate's gates and returns
+evidence. Candidate and production revisions normally differ while a repair is
+being evaluated; only the exact promoted revision can establish live recovery.
+The authenticated self-healing status and panel identify the source repository
+and the serving production revision. This architecture metadata is configuration,
+not proof that the sandbox is reachable or that a repair succeeded.
+
 The protected `repair_source_code` durable tool accepts `objective` and `paths_json`
 (a JSON array of up to eight exact existing source files). Only an owner tenant
 administrator's preauthorized mission can run it. Other tenants, manual missions,

@@ -3,6 +3,7 @@ import {api} from '../../lib/serverApi';
 
 interface HealingStatus {
  configured:boolean;automatic_enabled:boolean;can_request_repair:boolean;source:string;
+ architecture?:{repository:string;production_revision:string|null};
  repairs:{mission_id:string;mission_status:string;phase:string;healed:boolean;rolled_back:boolean;last_stop:string|null;status_url:string}[];
 }
 export function SelfHealingPanel(){
@@ -28,6 +29,11 @@ export function SelfHealingPanel(){
    <h2 className="text-white font-bold">Governed self healing</h2>
    <p>Observed fault → bounded source patch → isolated regression comparison → release → verified recovery.</p>
    {status?<p>Repair dependencies: {status.configured?'configured':'unavailable'}. Automatic eligible-fault detection: {status.automatic_enabled?'enabled':'disabled'}.</p>:<p>Status unavailable. Recovery has not been established.</p>}
+   {status?.architecture&&<div className="space-y-1">
+    <p>Self-healing runs under Microfixd AI. Its sandbox tests candidate code in isolation; it is part of the same source repository.</p>
+    <p className="break-all">Source: {status.architecture.repository}</p>
+    <p className="break-all">Production revision: {status.architecture.production_revision??'unavailable'}. Candidate verification and production recovery are separate recorded stages.</p>
+   </div>}
    <p className="text-cyan-200/70">Protected architecture, credentials, billing and approval failures require their existing operator workflows.</p>
   </div>
   {error&&<p role="alert" className="text-amber-300">{error}</p>}

@@ -7,6 +7,10 @@ export function healingConfiguration() {
   return {configured:Boolean(process.env.GITHUB_TOKEN?.trim()&&runnerValid),
     automatic_enabled:process.env.MICROFIXD_AUTOMATIC_SOURCE_REPAIR==='1',
     policy:'bounded-source-repair-v1',limits:{per_hour:2,per_day:6},
+    architecture:{repository:'craighindle5-peckerwood23/100--full-AI-MICROFIXD',
+      controller:'main_application',sandbox:'isolated_verification_component',
+      candidate_branch:'repair/candidate',separate_repository_required:false,
+      production_revision:/^[a-f0-9]{40}$/.test(process.env.RENDER_GIT_COMMIT??'')?process.env.RENDER_GIT_COMMIT:null},
     protects_architecture:true,requires_owner_preauthorization:true};
 }
 
