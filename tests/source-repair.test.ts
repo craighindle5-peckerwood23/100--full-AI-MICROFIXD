@@ -7,7 +7,7 @@ import {sourceIncident,enqueueSourceIncident} from '../server/engineering/repair
 import {readCompletedRepair} from '../server/engineering/repairRecovery';
 
 test('repair validation protects isolation, governance, tests, dependencies and unrelated source',()=>{
- for(const path of ['../a.ts','scripts/engineering-loop.mjs','infrastructure/repair-runner/server.mjs','tests/example.ts','server/engineering/sourceRepair.ts','server/security/rbac.ts','server/planner/governedTools.ts','package.json','server/index.ts','server/tools/toolRegistry.ts'])assert.throws(()=>repairPath(path));
+ for(const path of ['../a.ts','scripts/engineering-loop.mjs','infrastructure/repair-runner/server.mjs','tests/example.ts','server/engineering/sourceRepair.ts','server/security/rbac.ts','server/planner/governedTools.ts','server/routes/learningRoutes.ts','package.json','server/index.ts','server/tools/toolRegistry.ts'])assert.throws(()=>repairPath(path));
  assert.equal(repairPath('server/automotive/example.ts'),'server/automotive/example.ts');
  for(const url of ['http://runner.onrender.com','https://runner.onrender.com.evil.test','https://key@runner.onrender.com','https://runner.onrender.com/path'])assert.throws(()=>repairURL(url));
  const sources=new Map([['server/automotive/example.ts','old']]);
