@@ -9,6 +9,9 @@ import { evaluationMemory } from "../../microfixd/organs/evaluation/evaluation_m
 import { realLearningPipeline } from "../../microfixd/learning/learning_loop";
 import { selfHealingPipeline } from "../../learning/self_healing";
 import { experienceMemory } from "../../microfixd/memory/experiences/patterns";
+import {healingConfiguration,healingMissionRequest,readHealingStatus} from '../engineering/healingStatus';
+import {plannerClient} from '../planner/supabaseRuntime';
+import {submitMission} from '../planner/plannerRouter';
 
 export const learningRouter = Router();
 
@@ -69,6 +72,20 @@ learningRouter.post("/cycle", async (req, res) => {
 });
 
 // 4. Self-Healing Pipeline
+learningRouter.get('/self-healing/status',async(req,res)=>{
+  const tenant=(req as any).microfixdTenantId;
+  if(!tenant)return res.status(403).json({code:'AUTH_REQUIRED'});
+  try{res.set('Cache-Control','no-store');const status=await readHealingStatus(plannerClient(),tenant);
+    res.json({...status,can_request_repair:status.can_request_repair&&(req as any).microfixdRole==='admin'});
+  }catch{res.status(503).json({code:'HEALING_STORAGE_UNAVAILABLE'});}
+});
+learningRouter.post('/self-healing/repair',async(req,res,next)=>{
+  if((req as any).microfixdRole!=='admin'||(req as any).microfixdTenantId!==(process.env.MICROFIXD_REPAIR_OWNER_TENANT||'default'))return res.status(403).json({code:'REPAIR_OWNER_ADMIN_REQUIRED'});
+  if(!req.header('Idempotency-Key'))return res.status(400).json({code:'IDEMPOTENCY_KEY_REQUIRED'});
+  if(!healingConfiguration().configured)return res.status(503).json({code:'REPAIR_RUNNER_UNCONFIGURED'});
+  try{req.body=healingMissionRequest(req.body);}catch{return res.status(400).json({code:'INVALID_REPAIR_REQUEST',error:'Provide allowed source paths and an objective ending in Regression case: tests/file.test.ts#exact test name.'});}
+  return submitMission(req,res,next);
+});
 learningRouter.post("/self-healing", async (req, res) => {
   const { source = "api_request", error = "Simulated fault test" } = req.body || {};
   try {

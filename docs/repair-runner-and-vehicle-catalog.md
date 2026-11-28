@@ -38,7 +38,7 @@ waits for the same commit at production `/api/health`. Controller checkpoints pe
 mission-scoped memory copies provide context, not authority for recovery; the ordinary tool
 ledger prevents replay after an uncertain external effect. No local state file
 is used by this path. Reconciliation is required after uncertain operations.
-There is no automatic rollback. Full source repair can take up to 35 minutes;
+A candidate observed degraded on its exact revision three consecutive times can be restored with a forward-only baseline commit when that baseline was previously healthy. See docs/self-healing.md for rollback conditions and reconciliation limits. Source repair verification and rollout can take up to 35 minutes, with up to 10 more minutes for restoration;
 use a mission deadline that permits verification and deployment.
 
 After a deployment restart, recovery observes the saved candidate, current GitHub

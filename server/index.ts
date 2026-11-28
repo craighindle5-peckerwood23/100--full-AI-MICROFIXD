@@ -145,12 +145,14 @@ app.get("/health", (_, res) => res.redirect(307, "/api/health"));
 
 app.get("/readyz", async (_, res) => {
   const { configured, systemHealth } = await configuredRuntimeState();
+  const {healingConfiguration}=await import('./engineering/healingStatus');
   const ready = configured.admin && configured.supabase && systemHealth !== "critical";
 
   res.status(ready ? 200 : 503).json({
     status: ready ? "ok" : "degraded",
     commit: process.env.RENDER_GIT_COMMIT ?? "local",
     systemHealth,
+    self_healing:healingConfiguration(),
     storage: {
       durable: configured.supabase,
       engine: configured.supabase ? "supabase-postgres" : "unconfigured",

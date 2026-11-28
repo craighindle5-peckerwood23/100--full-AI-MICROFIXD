@@ -121,7 +121,10 @@ test('Self-Healing Pipeline executes Monitor -> Detect -> Locate -> Fix -> Sandb
   const report = await selfHealingPipeline.runHealingCycle("test_worker", "Simulated database connection timeout");
   assert.equal(report.fault.errorType, "TIMEOUT");
   assert.ok(report.diagnosis.underlyingMechanism);
-  assert.equal(report.sandboxTest.safeToDeploy, true);
+  assert.equal(report.mode, 'diagnostic_only');
+  assert.equal(report.sandboxTest.mode, 'static_analysis_only');
+  assert.equal(report.sandboxTest.verified, false);
+  assert.equal(report.sandboxTest.safeToDeploy, false);
   assert.equal(report.deployed, false);
   assert.equal(report.verifiedLive, false);
 });

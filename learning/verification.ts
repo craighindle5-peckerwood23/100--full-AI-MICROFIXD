@@ -6,6 +6,7 @@
 import { RepairPatch } from "./repair_engine";
 
 export interface SandboxTestResult {
+  mode: 'static_analysis_only';
   verified: boolean;
   safeToDeploy: boolean;
   testTimeMs: number;
@@ -32,11 +33,13 @@ export function verifyPatchInSandbox(patch: RepairPatch): SandboxTestResult {
     checksPassed.push("Autonomous application permitted.");
   }
 
-  const safeToDeploy = blockers.length === 0;
+  // Inspecting a proposed script is not sandbox execution or release evidence.
+  blockers.push('Execution and deployment require the governed source repair runner.');
 
   return {
-    verified: safeToDeploy,
-    safeToDeploy,
+    mode: 'static_analysis_only',
+    verified: false,
+    safeToDeploy: false,
     testTimeMs: Date.now() - start,
     checksPassed,
     blockers,

@@ -7,11 +7,12 @@ const REPO='craighindle5-peckerwood23/100--full-AI-MICROFIXD';
 const BRANCH='repair/candidate';
 type Model=(messages:{role:'system'|'user';content:string}[],tokens:number,temperature:number)=>Promise<{content:string;truncated?:boolean}>;
 type Scope={tenant:string;mission:string;subtask:string};
+type GitAPI=(path:string,method?:string,body?:unknown,missing?:boolean)=>Promise<any>;
 const hash=(content:string)=>createHash('sha256').update(content).digest('hex');
 export function repairPath(path:string) {
   safePath('/source',path);
   // A repair cannot alter its verifier, tests, dependencies, authorizers, or release policy.
-  if(!/^(server|src|microfixd)\//.test(path)||['server/engineering/','server/tools/','server/sandbox/','server/organs/','server/index.ts'].some(prefix=>path.startsWith(prefix)))throw new Error('REPAIR_PROTECTED_PATH');
+  if(!/^(server|src|microfixd)\//.test(path)||['server/engineering/','server/tools/','server/sandbox/','server/organs/','server/routes/learningRoutes.ts','server/index.ts'].some(prefix=>path.startsWith(prefix)))throw new Error('REPAIR_PROTECTED_PATH');
   return path;
 }
 export function experimentVerified(receipt:any,base:string,candidate:string){
@@ -27,6 +28,30 @@ export function repairURL(value:string) {
   const url=new URL(value);
   if(url.protocol!=='https:'||!url.hostname.endsWith('.onrender.com')||url.port||url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw new Error('INVALID_REPAIR_RUNNER_URL');
   return url.origin;
+}
+/** A rollback is a new forward commit of the known baseline tree. Never reset
+ * main, revert a competing release, or reverse database/external effects. */
+export async function rollbackRepair(base:string,candidate:string,tree:string,api:GitAPI,authorize:()=>Promise<void>,record:(phase:string,evidence:unknown)=>Promise<unknown>,readiness:()=>Promise<any>,sleep:(ms:number)=>Promise<void>) {
+  if(![base,candidate,tree].every(value=>/^[a-f0-9]{40}$/.test(value)))throw new Error('INVALID_ROLLBACK_PROVENANCE');
+  await authorize();
+  if((await api('git/ref/heads/main')).object.sha!==candidate)throw new Error('REPAIR_ROLLBACK_CONFLICT');
+  const rollback=await api('git/commits','POST',{message:`Restore baseline ${base} after unhealthy repair ${candidate}`,tree,parents:[candidate]});
+  if(!/^[a-f0-9]{40}$/.test(rollback.sha))throw new Error('INVALID_ROLLBACK_COMMIT');
+  await record('rollback_created',{base,candidate,rollback:rollback.sha});
+  await authorize();
+  if((await api('git/ref/heads/main')).object.sha!==candidate)throw new Error('REPAIR_ROLLBACK_CONFLICT');
+  await api('git/refs/heads/main','PATCH',{sha:rollback.sha,force:false});
+  await record('rollback_promoted',{base,candidate,rollback:rollback.sha});
+  const until=Date.now()+10*60_000;
+  while(Date.now()<until){
+    await authorize();
+    const health=await readiness();
+    if(repairIsReady(health,rollback.sha)){
+      await record('rollback_verified',{base,candidate,rollback:rollback.sha,health});return rollback.sha;
+    }
+    await sleep(15000);
+  }
+  throw new Error('REPAIR_ROLLBACK_NOT_PROVEN');
 }
 export function validateRepairPatch(value:unknown,sources:Map<string,string>) {
   const body=value as {files?:{path:string;content:string}[];edits?:{path:string;old_text:string;new_text:string}[]};
@@ -104,6 +129,12 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
   await authorize();
   const base=(await api('git/ref/heads/main')).object.sha;
   const parent=await api(`git/commits/${base}`);
+  const readiness=async()=>{
+    try{const response=await fetcher('https://microfixd-full-ai.onrender.com/readyz',{redirect:'error',signal:AbortSignal.timeout(20000),cache:'no-store'});
+      if(response.ok||response.status===503)return await response.json();
+    }catch{}return null;
+  };
+  const baselineReady=repairIsReady(await readiness(),base);
   const sources=new Map<string,string>();let contextBytes=0;
   for(const path of paths){
     const data=await api(`contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${base}`);
@@ -117,7 +148,7 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
   const previous=await api(`git/ref/heads/${BRANCH}`,'GET',undefined,true);
   const tree=await api('git/trees','POST',{base_tree:parent.tree.sha,tree:files.map(file=>({path:file.path,mode:'100644',type:'blob',content:file.content}))});
   const candidate=await api('git/commits','POST',{message:`Governed repair: ${objective.slice(0,120)}\n\n${JSON.stringify(experiment)}`,tree:tree.sha,parents:[...new Set([base,...(previous?[previous.object.sha]:[])])]});
-  await record('candidate_created',{base,candidate:candidate.sha,files:files.map(file=>({path:file.path,before:hash(sources.get(file.path)!),after:hash(file.content)}))});
+  await record('candidate_created',{base,candidate:candidate.sha,baseline_ready:baselineReady,files:files.map(file=>({path:file.path,before:hash(sources.get(file.path)!),after:hash(file.content)}))});
   await authorize();
   if(previous)await api(`git/refs/heads/${BRANCH}`,'PATCH',{sha:candidate.sha,force:false});
   else await api('git/refs','POST',{ref:`refs/heads/${BRANCH}`,sha:candidate.sha});
@@ -135,10 +166,18 @@ export async function repairSource(db:SupabaseClient,scope:Scope,objective:strin
   // Fast-forward only: a competing release makes GitHub reject this update.
   await api('git/refs/heads/main','PATCH',{sha:candidate.sha,force:false});
   await record('promoted',{candidate:candidate.sha});
-  const liveUntil=Date.now()+15*60_000;
+  const liveUntil=Date.now()+15*60_000;let unhealthy=0;
   while(Date.now()<liveUntil){
     await authorize();
-    try{const response=await fetcher('https://microfixd-full-ai.onrender.com/readyz',{redirect:'error',signal:AbortSignal.timeout(20000),cache:'no-store'});if(response.ok){const health=await response.json();if(repairIsReady(health,candidate.sha)){await record('live_verified',{candidate:candidate.sha,health});return {status:'live_verified',commit:candidate.sha,files:files.map(file=>file.path),sandbox:receipt};}}}catch{}
+    const health=await readiness();
+    if(repairIsReady(health,candidate.sha)){await record('live_verified',{candidate:candidate.sha,health});return {status:'live_verified',commit:candidate.sha,files:files.map(file=>file.path),sandbox:receipt};}
+    // Timeouts, stale revisions and an unhealthy original baseline are not
+    // evidence that reverting this candidate will restore service.
+    unhealthy=health?.commit===candidate.sha&&health.status==='degraded'?unhealthy+1:0;
+    if(baselineReady&&unhealthy>=3){
+      await rollbackRepair(base,candidate.sha,parent.tree.sha,api,authorize,record,readiness,sleep);
+      throw new Error('REPAIR_ROLLED_BACK');
+    }
     await sleep(15000);
   }
   throw new Error('REPAIR_DEPLOYMENT_NOT_PROVEN');
