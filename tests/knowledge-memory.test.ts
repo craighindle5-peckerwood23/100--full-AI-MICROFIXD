@@ -4,11 +4,12 @@ import {createClient} from '@supabase/supabase-js';
 import {rememberKnowledge, recallKnowledge, rememberProcedure, recallProcedures} from '../server/memory/knowledgeMemory';
 import {packMemoryContext} from '../server/memory/contextWindow';
 import {contentHash} from '../server/planner/executionSpine';
+import {readProcedureConsolidation,recoverProcedureConsolidation} from '../server/memory/procedureConsolidation';
 
 /** PostgREST transport fixture exercises the real Supabase query builder. */
 function storage() {
   const records = new Map<string, any>(), missions = new Map<string, any>();
-  let fail = false, sequence = 0;
+  let fail = false, failWrites = false, sequence = 0;
   const fetcher = async (input: any, init?: any) => {
     const request = input instanceof Request ? input : new Request(input, init), url = new URL(request.url);
     const params = url.searchParams;
@@ -16,25 +17,28 @@ function storage() {
     if(url.pathname.endsWith('/automotive_source_records'))return Response.json([]);
     assert.match(url.pathname, /rest\/v1\/(microfixd_memory_records|spine_rows)$/);
     if (request.method === 'POST') {
+      if(failWrites)return Response.json({code:'503',message:'write unavailable'},{status:503});
       const value = await request.json();
       if (!records.has(value.id)) records.set(value.id, {...value,created_at:new Date(1700000000000 + ++sequence).toISOString()});
       return Response.json(params.has('select') ? {id:value.id} : null);
     }
     let data = url.pathname.endsWith('/spine_rows') ? [...missions.values()] : [...records.values()];
+    const field=(row:any,key:string)=>key==='data->>status'?row.data?.status:row[key];
     for (const [key, value] of params) {
-      if (value.startsWith('eq.')) data = data.filter(row => String(row[key]) === value.slice(3));
+      if (value.startsWith('eq.')) data = data.filter(row => String(field(row,key)) === value.slice(3));
+      if (value.startsWith('gt.')) data = data.filter(row => Number(field(row,key)) > Number(value.slice(3)));
       if (value.startsWith('in.')) {
         const allowed = value.slice(4, -1).split(',').map(v=>v.replace(/^"|"$/g,''));
         data = data.filter(row => allowed.includes(String(row[key])));
       }
       if (value.startsWith('cs.')) data = data.filter(row => Object.entries(JSON.parse(value.slice(3))).every(([k,v])=>row[key]?.[k]===v));
     }
-    data.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+    data.sort(params.get('order')?.startsWith('sequence') ? (a,b)=>a.sequence-b.sequence : (a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
     data = data.slice(0, Number(params.get('limit')) || data.length);
     return Response.json(request.headers.get('accept')?.includes('vnd.pgrst.object') ? data[0] ?? null : data);
   };
   const db = createClient('https://knowledge-test.supabase.co','server-test-key',{global:{fetch:fetcher},auth:{persistSession:false}});
-  return {db,records,missions,fetcher,setFail(value:boolean){fail=value;}};
+  return {db,records,missions,fetcher,setFail(value:boolean){fail=value;},setFailWrites(value:boolean){failWrites=value;}};
 }
 const who = {tenant_id:'tenant-a',session_id:'session-a'};
 
@@ -123,6 +127,83 @@ test('failed or tampered source evidence is rejected before procedure storage',a
   await assert.rejects(()=>rememberProcedure(s.db,f.mission,f.final,[{...f.source,content:{result:{actual:false}}}],[f.sub]),/INVALID_PROCEDURE_EVIDENCE/);
   await assert.rejects(()=>rememberProcedure(s.db,f.mission,f.final,[f.source],[{...f.sub,status:'failed'}]),/INVALID_PROCEDURE_EVIDENCE/);
   await assert.rejects(()=>rememberProcedure(s.db,f.mission,f.final,[{...f.source,tenant_id:'other'}],[f.sub]),/INVALID_PROCEDURE_EVIDENCE/);
+  assert.equal(s.records.size,0);
+});
+
+test('consolidation retains only completion-cited tool steps and retrieves by tool name',async()=>{
+  const s=storage(),f=evidence();
+  const discardedSub={...f.sub,subtask_id:'discarded',tool_request:{name:'read_public_page',arguments:{url:'https://discarded.example'}}};
+  const discarded={...f.source,artifact_id:'discarded-artifact',subtask_id:'discarded',evidence:{tool:'read_public_page',request_hash:contentHash(discardedSub.tool_request)}};
+  await rememberProcedure(s.db,f.mission,f.final,[f.source,discarded],[f.sub,discardedSub]);
+  const stored=JSON.parse([...s.records.values()][0].content);
+  assert.deepEqual(stored.steps.map((step:any)=>step.tool),['get_github_repo']);
+  assert.equal(stored.reflection.excluded_tool_steps,1);assert.equal(stored.reflection.measured_quality_gain,null);
+  s.missions.set('mission',{id:'mission',tenant_id:who.tenant_id,kind:'missions',data:{...f.mission,status:'succeeded',result_artifact_id:'final'}});
+  assert.equal((await recallProcedures(s.db,who,'get_github_repo')).count,1);
+  assert.equal((await recallProcedures(s.db,who,'read_public_page')).count,0);
+  assert.equal((await recallProcedures(s.db,who,'automatically')).count,0);
+});
+
+function completedMission(s:ReturnType<typeof storage>,id='mission',sequence=1,tenant=who.tenant_id) {
+  const f=evidence();f.mission={...f.mission,tenant_id:tenant,mission_id:id,status:'succeeded',result_artifact_id:`${id}:final`};
+  f.source={...f.source,tenant_id:tenant,mission_id:id,artifact_id:`${id}:source`};
+  f.final={...f.final,tenant_id:tenant,mission_id:id,artifact_id:`${id}:final`,evidence:{completion_review:{status:'complete',method:'model_review',evidence_artifact_ids:[f.source.artifact_id]}}};
+  f.sub={...f.sub,tenant_id:tenant};
+  const put=(key:string,kind:string,data:any,seq=sequence)=>s.missions.set(key,{id:key,tenant_id:tenant,mission_id:id,kind,data,sequence:seq});
+  put(id,'missions',f.mission);
+  put(`${id}:source`,'artifacts',f.source);put(`${id}:final`,'artifacts',f.final);put(`${id}:sub`,'subtasks',f.sub);
+  return f;
+}
+
+test('a cold worker recovers missed consolidation once, and a new session recalls its procedure',async()=>{
+  const s=storage();completedMission(s);
+  const cold=()=>createClient('https://knowledge-test.supabase.co','server-test-key',{global:{fetch:s.fetcher},auth:{persistSession:false}});
+  assert.equal((await readProcedureConsolidation(cold(),who.tenant_id,'mission'))?.status,'not_consolidated');
+  const first=await recoverProcedureConsolidation(cold());
+  assert.equal(first.consolidated,1);assert.equal(first.failed,0);assert.equal(s.records.size,1);
+  const second=await recoverProcedureConsolidation(cold());
+  assert.equal(second.existing,1);assert.equal(second.consolidated,0);assert.equal(s.records.size,1);
+  const status=await readProcedureConsolidation(cold(),who.tenant_id,'mission');
+  assert.equal(status?.status,'consolidated');assert.equal(status?.durable,true);
+  assert.equal(await readProcedureConsolidation(cold(),'other','mission'),null);
+  const recall=await recallProcedures(cold(),{...who,session_id:'after-restart'},'get_github_repo');
+  assert.equal(recall.count,1);assert.equal(recall.procedures[0].trust,'historical_execution');
+  assert.ok(!recall.procedures[0].content.includes('PRIVATE_CREDENTIAL'));
+  assert.equal((await recallProcedures(cold(),{...who,tenant_id:'other'},'get_github_repo')).count,0);
+});
+
+test('a failed write is retried after recovery and never creates a false learning receipt',async()=>{
+  const s=storage();completedMission(s);s.setFailWrites(true);
+  const deferred=await recoverProcedureConsolidation(s.db);
+  assert.equal(deferred.failed,1);assert.equal(deferred.consolidated,0);assert.equal(s.records.size,0);
+  s.setFailWrites(false);
+  assert.equal((await recoverProcedureConsolidation(s.db)).consolidated,1);
+  assert.equal(s.records.size,1);
+  s.setFail(true);await assert.rejects(()=>recoverProcedureConsolidation(s.db),/CONSOLIDATION_SCAN_UNAVAILABLE/);
+});
+
+test('bounded recovery moves past corrupt evidence and excludes failed or paused missions',async()=>{
+  const s=storage();const bad=completedMission(s,'bad',1);completedMission(s,'good',2);
+  s.missions.get('bad:source').data={...bad.source,content:{tampered:true}};
+  for(const [id,status] of [['failed','failed'],['paused','waiting']]){
+    completedMission(s,id,3);s.missions.get(id).data.status=status;
+    assert.equal((await readProcedureConsolidation(s.db,who.tenant_id,id))?.status,'not_eligible');
+  }
+  let cursor=0;const outcomes=[];
+  for(let i=0;i<3;i++){const report=await recoverProcedureConsolidation(s.db,cursor,1);outcomes.push(report);cursor=report.nextCursor;}
+  assert.equal(outcomes[0].failed,1);assert.equal(outcomes[0].nextCursor,1);
+  assert.equal(outcomes[1].consolidated,1);assert.equal(cursor,0);
+  assert.equal(s.records.size,1);assert.equal([...s.records.values()][0].metadata.mission_id,'good');
+  await assert.rejects(()=>rememberProcedure(s.db,{...bad.mission,status:'failed'},bad.final,[bad.source],[bad.sub]),/INVALID_PROCEDURE_EVIDENCE/);
+});
+
+test('tenant mismatch, duplicate citations and wrong final artifacts cannot become learned procedures',async()=>{
+  const s=storage(),f=completedMission(s);
+  s.missions.get('mission').data.tenant_id='other';
+  assert.equal((await recoverProcedureConsolidation(s.db)).failed,1);assert.equal(s.records.size,0);
+  await assert.rejects(()=>rememberProcedure(s.db,{...f.mission,result_artifact_id:'wrong'},f.final,[f.source],[f.sub]),/INVALID_PROCEDURE_EVIDENCE/);
+  const duplicate={...f.final,evidence:{completion_review:{...f.final.evidence.completion_review,evidence_artifact_ids:[f.source.artifact_id,f.source.artifact_id]}}};
+  await assert.rejects(()=>rememberProcedure(s.db,f.mission,duplicate,[f.source],[f.sub]),/INVALID_PROCEDURE_EVIDENCE/);
   assert.equal(s.records.size,0);
 });
 

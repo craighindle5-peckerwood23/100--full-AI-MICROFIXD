@@ -22,6 +22,8 @@ function text(value: unknown, max: number, required = false): string {
 }
 const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
 const idFor = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export const procedureMemoryId = (tenant: string, mission: string, finalArtifact: string) =>
+  `procedure:${idFor([tenant, mission, finalArtifact])}`;
 const stopwords = new Set(['the', 'and', 'for', 'what', 'how', 'does', 'this', 'that', 'with', 'from', 'have', 'please', 'can', 'you', 'about']);
 function words(value: string) {
   return [...new Set(normalize(value).match(/[\p{L}\p{N}_-]+/gu) ?? [])].filter(w => w.length > 1 && !stopwords.has(w));
@@ -102,14 +104,20 @@ export async function recallKnowledge(db: SupabaseClient, who: MemoryIdentity, q
 export async function rememberProcedure(db: SupabaseClient, mission: Mission, final: Artifact, sources: Artifact[], subtasks: Subtask[]) {
   const review = final.evidence.completion_review as any;
   if (!review || review.status !== 'complete') return;
-  const selected = sources.filter(a => a.subtask_id !== null);
-  if (final.tenant_id !== mission.tenant_id || final.mission_id !== mission.mission_id
+  if (!['running','succeeded'].includes(mission.status)
+    || (mission.status === 'succeeded' && mission.result_artifact_id !== final.artifact_id)
+    || final.tenant_id !== mission.tenant_id || final.mission_id !== mission.mission_id
     || final.type !== 'mission_result' || contentHash(final.content) !== final.hash
     || !['explicit_plan','model_review'].includes(review.method)
     || !Array.isArray(review.evidence_artifact_ids) || !review.evidence_artifact_ids.length
-    || review.evidence_artifact_ids.some(id => !selected.some(a => a.artifact_id === id))
+    || new Set(review.evidence_artifact_ids).size !== review.evidence_artifact_ids.length
+    || review.evidence_artifact_ids.some(id => typeof id !== 'string' || sources.filter(a => a.artifact_id === id && a.subtask_id !== null).length !== 1)) throw new Error('INVALID_PROCEDURE_EVIDENCE');
+  // The completion assessment selects the reusable evidence. Other successful
+  // experiments or discarded branches must not silently become a learned rule.
+  const selected = sources.filter(a => review.evidence_artifact_ids.includes(a.artifact_id));
+  if (selected.some(a => a.evidence.tool && subtasks.filter(s => s.subtask_id === a.subtask_id && s.tool_request).length !== 1)
     || selected.some(a => a.tenant_id !== mission.tenant_id || a.mission_id !== mission.mission_id || contentHash(a.content) !== a.hash)) throw new Error('INVALID_PROCEDURE_EVIDENCE');
-  const steps = subtasks.filter(sub => sub.tool_request).map(sub => {
+  const steps = subtasks.filter(sub => sub.tool_request && selected.some(a => a.subtask_id === sub.subtask_id)).map(sub => {
     const artifact = selected.find(a => a.subtask_id === sub.subtask_id);
     if (sub.tenant_id !== mission.tenant_id || sub.status !== 'succeeded' || !artifact
       || artifact.evidence.tool !== sub.tool_request!.name
@@ -121,8 +129,11 @@ export async function rememberProcedure(db: SupabaseClient, mission: Mission, fi
   if (!steps.length) return;
   // Do not copy credentials, old argument values, tool results or executable code.
   const content = JSON.stringify({objective: mission.objective, steps,
+    reflection: {method:'completion_cited_tool_evidence', retained_tool_steps:steps.length,
+      excluded_tool_steps:subtasks.filter(sub => sub.tool_request).length-steps.length,
+      evidence_scope:review.method, measured_quality_gain:null},
     instruction: 'Historical example only. Re-plan with current arguments, permissions and verification; never replay automatically.'});
-  const id = `procedure:${idFor([mission.tenant_id, mission.mission_id, final.artifact_id])}`;
+  const id = procedureMemoryId(mission.tenant_id, mission.mission_id, final.artifact_id);
   const {error} = await db.from(TABLE).upsert({id, tenant_id: mission.tenant_id, agent_id: 'procedure', kind: 'semantic', content, tags: ['learned-procedure'],
     metadata: {version: VERSION, type: 'procedure', scope: 'tenant', session_id: `${mission.tenant_id}:${mission.mission_id}`,
       mission_id: mission.mission_id, final_artifact_id: final.artifact_id, review_method: review.method, trust: 'historical_execution'}, importance: 0.5},
@@ -143,7 +154,18 @@ export async function recallProcedures(db: SupabaseClient, who: MemoryIdentity, 
     .map(row => [row.id, row.data.result_artifact_id]));
   const procedures = candidates.filter(row => completed.get(row.metadata.mission_id) === row.metadata.final_artifact_id)
     .map(row => ({id: row.id, content: row.content, mission_id: row.metadata.mission_id as string, trust: 'historical_execution',
-      score: relevance(query, row.content), created_at: row.created_at}))
+      score: relevance(query, procedureSearchText(row.content)), created_at: row.created_at}))
     .filter(row => !query.trim() || row.score > 0).sort((a, b) => b.score - a.score || (b.created_at ?? '').localeCompare(a.created_at ?? '')).slice(0, limit);
   return {procedures, count: procedures.length, source: 'supabase', durable: true};
+}
+
+/** Rank by the actual objective and tools, not JSON field names or boilerplate. */
+function procedureSearchText(content: string) {
+  try {
+    const value = JSON.parse(content);
+    if (!Array.isArray(value.steps)) return '';
+    // Legacy procedures may contain steps without an objective.
+    return [typeof value.objective === 'string' ? value.objective : '', ...value.steps.flatMap((step: any) =>
+      [typeof step.tool === 'string' ? step.tool : '', ...(Array.isArray(step.argument_names) ? step.argument_names.filter((name: unknown) => typeof name === 'string') : [])])].join(' ');
+  } catch { return ''; }
 }
