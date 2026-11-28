@@ -1,6 +1,9 @@
 services:
   - type: web
     name: microfixd-full-ai
+    repo: https://github.com/craighindle5-peckerwood23/100--full-AI-MICROFIXD
+    branch: main
+    autoDeployTrigger: commit
     runtime: node
     plan: free
     buildCommand: npm ci && npm run build
@@ -36,6 +39,30 @@ services:
         value: "10000"
       - key: GROQ_API_KEY
         sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: MICROFIXD_REPAIR_RUNNER_URL
+        fromService:
+          type: web
+          name: microfixd-repair-runner
+          envVarKey: RENDER_EXTERNAL_URL
+      # Preserve the owner's existing detection setting on subsequent syncs.
+      - key: MICROFIXD_AUTOMATIC_SOURCE_REPAIR
+        sync: false
       - key: CORS_ORIGINS
         sync: false
     healthCheckPath: /api/health
+
+  # Microfixd's isolated source-verification component, from the SAME repository.
+  # The controller owns repair/candidate; it is a branch, not another product.
+  # Keep production credentials, environment groups and disks off this component.
+  - type: web
+    name: microfixd-repair-runner
+    repo: https://github.com/craighindle5-peckerwood23/100--full-AI-MICROFIXD
+    branch: repair/candidate
+    runtime: docker
+    # Omit plan to preserve the existing verifier's compute allocation on adoption.
+    dockerContext: .
+    dockerfilePath: infrastructure/repair-runner/Dockerfile
+    autoDeployTrigger: commit
+    healthCheckPath: /health

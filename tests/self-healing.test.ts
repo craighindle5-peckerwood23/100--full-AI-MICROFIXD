@@ -3,11 +3,30 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import {rollbackRepair} from '../server/engineering/sourceRepair';
 import {repairSource} from '../server/engineering/sourceRepair';
-import {healingMissionRequest} from '../server/engineering/healingStatus';
+import {healingMissionRequest,healingConfiguration} from '../server/engineering/healingStatus';
 import {sourceIncident} from '../server/engineering/repairIncidents';
 import {learningRouter} from '../server/routes/learningRoutes';
 
 const base='a'.repeat(40),candidate='b'.repeat(40),tree='c'.repeat(40),restored='d'.repeat(40);
+test('self-healing identifies its main source and serving revision without exposing credentials or claiming recovery',()=>{
+ const keys=['GITHUB_TOKEN','MICROFIXD_REPAIR_RUNNER_URL','RENDER_GIT_COMMIT'];
+ const saved=keys.map(key=>process.env[key]);
+ try{
+  process.env.GITHUB_TOKEN='private-fixture-token';process.env.MICROFIXD_REPAIR_RUNNER_URL='https://fixture.onrender.com';process.env.RENDER_GIT_COMMIT=base;
+  const status=healingConfiguration();
+  assert.equal(status.configured,true);
+  assert.equal(status.architecture.repository,'craighindle5-peckerwood23/100--full-AI-MICROFIXD');
+  assert.equal(status.architecture.controller,'main_application');
+  assert.equal(status.architecture.separate_repository_required,false);
+  assert.equal(status.architecture.production_revision,base);
+  assert.ok(!JSON.stringify(status).includes('private-fixture-token'));
+  assert.equal('healed' in status,false);
+  process.env.RENDER_GIT_COMMIT='unknown';
+  assert.equal(healingConfiguration().architecture.production_revision,null);
+  delete process.env.MICROFIXD_REPAIR_RUNNER_URL;
+  assert.equal(healingConfiguration().configured,false);
+ }finally{keys.forEach((key,i)=>{if(saved[i]===undefined)delete process.env[key];else process.env[key]=saved[i];});}
+});
 test('rollback restores the baseline tree with a forward-only commit and records actual readiness',async()=>{
  const writes:any[]=[],phases:string[]=[];let checks=0,healthReads=0;
  const api=async(path:string,method='GET',body?:any)=>{
