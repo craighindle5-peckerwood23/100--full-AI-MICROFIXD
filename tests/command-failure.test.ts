@@ -24,7 +24,7 @@ test('OpenRouter is primary even with Groq configured and preserves the complete
  const client=getGroqClient()!;const original=client.chat.completions.create;
  let groqCalls=0;client.chat.completions.create=(async()=>{groqCalls++;throw Object.assign(new Error('input tokens per minute ITPM Limit 7000'),{status:413});}) as any;
  const messages=[{role:'user' as const,content:'complete original question'}];
- globalThis.fetch=async(url,init)=>{assert.equal(String(url),'https://openrouter.ai/api/v1/chat/completions');assert.deepEqual(JSON.parse(String(init?.body)).messages,messages);return Response.json({model:'free-model',choices:[{message:{content:'recovered'},finish_reason:'stop'}]});};
+ globalThis.fetch=async(url,init)=>{assert.equal(String(url),'https://openrouter.ai/api/v1/chat/completions');const sent=JSON.parse(String(init?.body)).messages;assert.deepEqual(sent.slice(1),messages);assert.match(sent[0].content,/Server runtime observations/);return Response.json({model:'free-model',choices:[{message:{content:'recovered'},finish_reason:'stop'}]});};
  try{const result=await completeTextWithFallback(messages,512);assert.equal(result.provider,'openrouter');assert.equal(result.content,'recovered');assert.equal(groqCalls,0);}
  finally{client.chat.completions.create=original;globalThis.fetch=oldFetch;for(const [name,value] of [['GROQ_API_KEY',oldKey],['OPENROUTER_API_KEY',oldRouter],['GEMINI_API_KEY',oldGemini]]){if(value===undefined)delete process.env[name!];else process.env[name!]=value;}}
 });

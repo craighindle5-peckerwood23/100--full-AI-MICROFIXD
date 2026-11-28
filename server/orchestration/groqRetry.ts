@@ -48,6 +48,7 @@ export interface GroqRetryOptions {
   fallbackModels?: string[];
   initialMaxTokens?: number;
   beforeAttempt?: () => Promise<void>;
+  onAttemptFailure?: (error:unknown) => Promise<void>;
 }
 
 /**
@@ -130,6 +131,7 @@ export async function executeGroqWithRetry(
         attempts: attempt,
       };
     } catch (err: any) {
+      await options.onAttemptFailure?.(err);
       if(options.signal?.aborted)throw err;
       lastError = err;
       const attemptLatency = Date.now() - attemptStart;
