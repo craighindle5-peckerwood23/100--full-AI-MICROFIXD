@@ -12,7 +12,7 @@ const hash=(content:string)=>createHash('sha256').update(content).digest('hex');
 export function repairPath(path:string) {
   safePath('/source',path);
   // A repair cannot alter its verifier, tests, dependencies, authorizers, or release policy.
-  if(!/^(server|src|microfixd)\//.test(path)||['server/engineering/','server/tools/','server/sandbox/','server/organs/','server/index.ts'].some(prefix=>path.startsWith(prefix)))throw new Error('REPAIR_PROTECTED_PATH');
+  if(!/^(server|src|microfixd)\//.test(path)||['server/engineering/','server/tools/','server/sandbox/','server/organs/','server/routes/learningRoutes.ts','server/index.ts'].some(prefix=>path.startsWith(prefix)))throw new Error('REPAIR_PROTECTED_PATH');
   return path;
 }
 export function experimentVerified(receipt:any,base:string,candidate:string){
